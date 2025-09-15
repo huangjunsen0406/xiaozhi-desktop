@@ -1,8 +1,8 @@
-import { join } from 'node:path'
 import process from 'node:process'
-import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import icon from '../../resources/icon.png?asset'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { app, BrowserWindow } from 'electron'
+import { registerIpcChannels } from './ipc'
+import { ensureMainWindow } from './windows/windowManager'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -11,80 +11,7 @@ app.commandLine.appendSwitch(
   'ChromeWideEchoCancellation,SystemLoopbackAsAecReference',
 )
 
-let mainWindow: BrowserWindow | null = null
-let miniWindow: BrowserWindow | null = null
-
-function createMainWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 300,
-    height: 400,
-    show: false,
-    frame: false,
-    ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hiddenInset' as const }
-      : {}),
-    ...(process.platform === 'win32'
-      ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 40 } as const }
-      : {}),
-    autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-    },
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/main`)
-  }
-  else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'main' })
-  }
-}
-
-function createMiniWindow(): void {
-  miniWindow = new BrowserWindow({
-    width: 72,
-    height: 72,
-    show: false,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    hasShadow: false,
-    type: process.platform === 'darwin' ? 'panel' : undefined,
-    resizable: false,
-    movable: true,
-    fullscreenable: false,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-    },
-  })
-
-  // 允许跨显示器/空间拖动（macOS 特别有用）
-  miniWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  // 保持较高置顶层级，避免被其他窗口遮挡
-  miniWindow.setAlwaysOnTop(true, 'screen-saver')
-  // 进一步确保位于 z-order 顶部
-  miniWindow.moveTop()
-
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    miniWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/mini`)
-  }
-  else {
-    miniWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'mini' })
-  }
-}
+// 窗口创建与 IPC 注册均已拆分至模块
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -100,26 +27,15 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC: 收起/展开
-  ipcMain.on('toggle-to-mini', () => {
-    if (!miniWindow)
-      createMiniWindow()
-    miniWindow?.show()
-    mainWindow?.hide()
-  })
+  registerIpcChannels()
 
-  ipcMain.on('toggle-to-main', () => {
-    mainWindow?.show()
-    miniWindow?.hide()
-  })
-
-  createMainWindow()
+  ensureMainWindow()
 
   app.on('activate', () => {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0)
-      createMainWindow()
+      ensureMainWindow()
   })
 })
 

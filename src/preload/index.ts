@@ -1,8 +1,10 @@
 import process from 'node:process'
 import { electronAPI } from '@electron-toolkit/preload'
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 // Custom APIs for renderer
-const api = {}
+const api = {
+  togglePanel: (): void => ipcRenderer.send('panel:toggle'),
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
@@ -17,8 +19,8 @@ if (process.contextIsolated) {
   }
 }
 else {
-  // @ts-ignore (define in dts)
+  // @ts-expect-error (define in dts)
   window.electron = electronAPI
-  // @ts-ignore (define in dts)
+  // @ts-expect-error (define in dts)
   window.api = api
 }
