@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/*（可选）启用 class 驱动的暗色模式：给 <html> 加 .dark 即生效 */
+@custom-variant dark (&:where(.dark, .dark *));
