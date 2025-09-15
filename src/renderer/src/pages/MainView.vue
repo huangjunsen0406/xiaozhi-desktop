@@ -1,90 +1,109 @@
 <script setup lang="ts">
-import { useDark, useToggle } from '@vueuse/core'
+import { useColorMode } from '@vueuse/core'
+import { NButton, NDropdown } from 'naive-ui'
+import { computed } from 'vue'
 
 function minimize(): void {
   window.electron?.ipcRenderer?.send('toggle-to-mini')
 }
 
-const isDark = useDark({ selector: 'html', attribute: 'class', valueDark: 'dark' })
-const toggleDark = useToggle(isDark)
+// 使用 useColorMode 支持 auto、dark、light 三种模式
+const mode = useColorMode({
+  selector: 'html',
+  attribute: 'class',
+  modes: {
+    light: 'light',
+    dark: 'dark',
+    auto: '', // auto 模式时不添加 class，由系统决定
+  },
+})
+
+// 主题选项
+const themeOptions = [
+  {
+    label: '浅色主题',
+    key: 'light',
+  },
+  {
+    label: '深色主题',
+    key: 'dark',
+  },
+  {
+    label: '跟随系统',
+    key: 'auto',
+  },
+]
+
+// 当前主题文本
+const currentThemeText = computed(() => {
+  switch (mode.value) {
+    case 'dark':
+      return '🌙 深色主题'
+    case 'light':
+      return '☀️ 浅色主题'
+    default:
+      return '💻 跟随系统'
+  }
+})
+
+// 处理主题选择
+function handleThemeSelect(key: string) {
+  mode.value = key as 'light' | 'dark' | 'auto'
+}
 </script>
 
 <template>
-  <div class="main-view">
-    <div class="titlebar">
-      <div class="drag-area" />
+  <div class="relative flex flex-col items-center justify-center w-full h-screen gap-4 p-5 overflow-hidden bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
+    <!-- 标题栏拖拽区域 -->
+    <div class="fixed top-0 left-0 right-0 h-10" style="-webkit-app-region: drag">
+      <div class="h-full" />
     </div>
-    <img src="../assets/icon.png" alt="robot" class="robot-large">
-    <div class="title">
+
+    <!-- 背景装饰 -->
+    <div class="absolute inset-0 pointer-events-none opacity-35 dark:opacity-20">
+      <div class="absolute inset-0 bg-[url('../assets/wavy-lines.svg')] bg-no-repeat bg-left bg-center" style="background-size: 80% auto; background-position: left 40% center;" />
+    </div>
+
+    <!-- 主题切换下拉菜单（右上角） -->
+    <div class="absolute top-3 right-3 z-10">
+      <NDropdown
+        trigger="click"
+        :options="themeOptions"
+        @select="handleThemeSelect"
+      >
+        <NButton quaternary>
+          {{ currentThemeText }}
+        </NButton>
+      </NDropdown>
+    </div>
+
+    <!-- Logo -->
+    <img
+      src="../assets/icon.png"
+      alt="robot"
+      class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12 shadow-2xl dark:shadow-black/50"
+    >
+
+    <!-- 标题 -->
+    <div class="text-base text-gray-700 dark:text-gray-300">
       请开始说话
     </div>
-    <n-button type="primary">
+
+    <!-- 测试按钮 -->
+    <NButton type="primary">
       Primary
-    </n-button>
-    <n-button @click="toggleDark()">
-      切换主题
-    </n-button>
+    </NButton>
+
+    <!-- Dots 组件 -->
     <Dots />
-    <n-button type="primary" @click="minimize">
+
+    <!-- 收起按钮 -->
+    <NButton type="primary" @click="minimize">
       收起
-    </n-button>
+    </NButton>
   </div>
 </template>
 
 <style scoped>
-.main-view {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 16px;
-  width: 100%;
-  height: 100svh;
-  /* padding: 56px 20px 20px; */
-  background: linear-gradient(180deg, #0b0f16 0%, #101722 100%);
-  padding: 20px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-.main-view::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: url('../assets/wavy-lines.svg') no-repeat left 40% center / 80% auto;
-  opacity: .35;
-  pointer-events: none;
-}
-
-.robot-large {
-  width: 72px;
-  height: 72px;
-  border-radius: 28px;
-  object-fit: cover;
-  /* box-shadow: 0 14px 40px rgba(0,0,0,0.35), 0 0 0 8px rgba(22, 119, 255, 0.06); */
-  margin-top: 50px;
-}
-
-.title {
-  font-size: 16px;
-  color: rgba(255,255,255,.75);
-}
-
-.titlebar {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 40px;
-  -webkit-app-region: drag;
-}
-.titlebar .drag-area { height: 100%; }
-
-.btn {
-  margin-top: 8px;
-  border: 1px solid #2a2f3a;
-  background: rgba(255,255,255,.04);
-  border-radius: 10px;
-  padding: 8px 16px;
-  cursor: pointer;
-}
-.btn:hover { background: rgba(255,255,255,.08); }
+/* 保留必要的特殊样式 */
 </style>
