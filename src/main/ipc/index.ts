@@ -30,6 +30,15 @@ export function registerIpcChannels(): void {
     BrowserWindow.fromWebContents(event.sender)?.close()
   })
 
+  // 移动当前窗口（用于自定义拖拽）
+  ipcMain.on('window:move-by', (event, dx: number, dy: number) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win)
+      return
+    const [x, y] = win.getPosition()
+    win.setPosition(x + Math.round(dx), y + Math.round(dy))
+  })
+
   // 主视图
   ipcMain.on('window:toggle-to-mini', () => {
     toggleToMini()

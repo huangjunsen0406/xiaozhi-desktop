@@ -6,6 +6,7 @@ const api = {
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
+  moveBy: (dx: number, dy: number): void => ipcRenderer.send('window:move-by', dx, dy),
   // Window controls for frameless windows (Win/Linux custom UI)
   minimize: (): void => ipcRenderer.send('window:minimize'),
   maximize: (): void => ipcRenderer.send('window:maximize'),

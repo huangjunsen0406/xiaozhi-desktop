@@ -4,6 +4,7 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
+  moveBy: (dx: number, dy: number) => void
   minimize: () => void
   maximize: () => void
   unmaximize: () => void

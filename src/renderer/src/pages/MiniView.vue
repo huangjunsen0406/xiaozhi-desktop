@@ -1,17 +1,56 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
+import { vPressDrag } from '../utils/press-drag'
+
+let rafId: number | null = null
+let accDx = 0
+let accDy = 0
+
+function flushMove(): void {
+  if (accDx !== 0 || accDy !== 0)
+    window.api.moveBy(accDx, accDy)
+  accDx = 0
+  accDy = 0
+  rafId = null
+}
+
+const pressDragHandlers = {
+  onClick: () => {
+    window.api.togglePanel()
+  },
+  onDrag: (_ev: PointerEvent, state: any) => {
+    const dx = state.current.x - state.last.x
+    const dy = state.current.y - state.last.y
+    accDx += dx
+    accDy += dy
+    if (rafId == null)
+      rafId = requestAnimationFrame(flushMove)
+  },
+  onDragEnd: () => {
+    if (rafId != null)
+      cancelAnimationFrame(rafId)
+    flushMove()
+  },
+  // 右键
+  onRightClick: () => {
+    window.api.toggleToMain()
+  },
+  preventRightClickMenu: true,
+}
 
 onMounted(() => {
   document.body.classList.add('mini-mode')
 })
 onUnmounted(() => {
   document.body.classList.remove('mini-mode')
+  if (rafId != null)
+    cancelAnimationFrame(rafId)
 })
 </script>
 
 <template>
-  <div class="mini-root">
-    <img src="../assets/icon.png" class="mini-avatar" alt="mini">
+  <div v-press-drag="pressDragHandlers" class="mini-root">
+    <img src="../assets/icon.png" class="mini-avatar" alt="mini" draggable="false" @dragstart.prevent>
   </div>
 </template>
 
@@ -24,13 +63,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  -webkit-app-region: drag;
 }
 
 .mini-avatar {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 </style>
 
