@@ -4,6 +4,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 // Custom APIs for renderer
 const api = {
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
+  toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
+  toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
+  // Window controls for frameless windows (Win/Linux custom UI)
+  minimize: (): void => ipcRenderer.send('window:minimize'),
+  maximize: (): void => ipcRenderer.send('window:maximize'),
+  unmaximize: (): void => ipcRenderer.send('window:unmaximize'),
+  toggleMaximize: (): void => ipcRenderer.send('window:toggle-maximize'),
+  close: (): void => ipcRenderer.send('window:close'),
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

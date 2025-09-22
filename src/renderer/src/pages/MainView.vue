@@ -4,11 +4,23 @@ import { NButton, NDropdown } from 'naive-ui'
 import { computed } from 'vue'
 
 function minimize(): void {
-  window.electron?.ipcRenderer?.send('toggle-to-mini')
+  window.api.toggleToMini()
 }
 
 function togglePanel(): void {
   window.api.togglePanel()
+}
+
+// Frameless 窗口控制（Linux 无原生按钮时使用）
+const platform = window.electron.process.platform
+function winMinimize(): void {
+  window.api.minimize()
+}
+function winToggleMaximize(): void {
+  window.api.toggleMaximize()
+}
+function winClose(): void {
+  window.api.close()
 }
 
 // 使用 useColorMode 支持 auto、dark、light 三种模式
@@ -50,6 +62,9 @@ const currentThemeText = computed(() => {
   }
 })
 
+// 是否通话中
+const isCalling = ref(true)
+
 // 处理主题选择
 function handleThemeSelect(key: string) {
   mode.value = key as 'light' | 'dark' | 'auto'
@@ -66,12 +81,29 @@ function handleThemeSelect(key: string) {
     </div>
 
     <!-- 主题切换下拉菜单（右上角） -->
-    <div class="absolute top-3 right-3 z-10">
+    <div class="absolute top-3 right-3 z-10" style="-webkit-app-region: no-drag">
       <NDropdown trigger="click" :options="themeOptions" @select="handleThemeSelect">
         <NButton quaternary>
           {{ currentThemeText }}
         </NButton>
       </NDropdown>
+    </div>
+
+    <!-- Linux 自定义窗口控制按钮（Win 有原生 overlay，不重复渲染） -->
+    <div
+      v-if="platform === 'linux'"
+      class="absolute top-1 right-2 z-20 flex items-center gap-1"
+      style="-webkit-app-region: no-drag"
+    >
+      <NButton quaternary circle size="small" @click="winMinimize">
+        <icon-carbon-subtract class="w-4 h-4" />
+      </NButton>
+      <NButton quaternary circle size="small" @click="winToggleMaximize">
+        <icon-carbon-maximize class="w-4 h-4" />
+      </NButton>
+      <NButton quaternary circle size="small" @click="winClose">
+        <icon-carbon-close class="w-4 h-4" />
+      </NButton>
     </div>
 
     <!-- Logo -->
@@ -86,13 +118,14 @@ function handleThemeSelect(key: string) {
     </div>
 
     <!-- Dots 组件 + 按钮组：固定相距 100px -->
-    <div class="flex flex-col items-center gap-y-[100px]">
+    <div class="flex flex-col items-center gap-y-[100px] mt-12">
       <Dots />
       <div class="flex items-center gap-2">
         <!-- <iconify-icon icon="carbon:phone" width="32" height="32" /> -->
 
         <NButton quaternary circle @click="minimize">
-          <icon-carbon-phone class="w-5 h-5 text-green-500" />
+          <icon-carbon-phone v-if="!isCalling" class="w-5 h-5 text-green-500" />
+          <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">
           <icon-carbon-send-alt class="w-5 h-5" />

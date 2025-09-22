@@ -2,6 +2,13 @@ import type { ElectronAPI } from '@electron-toolkit/preload'
 
 export interface RendererApi {
   togglePanel: () => void
+  toggleToMini: () => void
+  toggleToMain: () => void
+  minimize: () => void
+  maximize: () => void
+  unmaximize: () => void
+  toggleMaximize: () => void
+  close: () => void
 }
 
 declare global {

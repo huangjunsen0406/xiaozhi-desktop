@@ -23,7 +23,6 @@ const isDark = computed(() => {
   // auto 模式时，检查系统偏好
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 })
-
 const theme = computed(() => (isDark.value ? darkTheme : lightTheme))
 </script>
 
