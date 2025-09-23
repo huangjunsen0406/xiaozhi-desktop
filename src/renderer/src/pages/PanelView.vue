@@ -6,7 +6,7 @@ const text = ref('')
 
 <template>
   <div class="w-full h-full flex items-center justify-center bg-transparent">
-    <div class="w-[780px] rounded-[22px] p-4 backdrop-blur-md border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[rgba(20,24,32,0.68)] shadow-[0_18px_60px_rgba(0,0,0,0.18)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]" style="-webkit-app-region: drag">
+    <div class="w-[780px] rounded-[22px] p-4 backdrop-blur-md border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[rgba(20,24,32,0.68)]" style="-webkit-app-region: drag">
       <div class="grid [grid-template-columns:1fr_auto] gap-[10px] items-center" style="-webkit-app-region: no-drag">
         <NInput v-model:value="text" type="textarea" :autosize="{ minRows: 4, maxRows: 4 }" placeholder="请输入…" />
         <div class="flex items-center gap-[10px]">

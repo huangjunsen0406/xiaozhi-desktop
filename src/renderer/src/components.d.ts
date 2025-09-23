@@ -20,6 +20,7 @@ declare module 'vue' {
     IconCarbonSendAlt: typeof import('~icons/carbon/send-alt')['default']
     IconCarbonSettings: typeof import('~icons/carbon/settings')['default']
     IconCarbonSubtract: typeof import('~icons/carbon/subtract')['default']
+    MiniHoverMenu: typeof import('./components/MiniHoverMenu.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
     NInput: typeof import('naive-ui')['NInput']
     NMenu: typeof import('naive-ui')['NMenu']

@@ -16,7 +16,11 @@ function flushMove(): void {
 
 const pressDragHandlers = {
   onClick: () => {
+    window.api.hideHover()
     window.api.togglePanel()
+  },
+  onDragStart: () => {
+    window.api.hideHover()
   },
   onDrag: (_ev: PointerEvent, state: any) => {
     const dx = state.current.x - state.last.x
@@ -31,9 +35,12 @@ const pressDragHandlers = {
       cancelAnimationFrame(rafId)
     flushMove()
   },
-  // 右键
-  onRightClick: () => {
-    window.api.toggleToMain()
+  onHoverEnter: () => {
+    window.api.hoverMiniEnter()
+    window.api.repositionHover()
+  },
+  onHoverLeave: () => {
+    window.api.hoverMiniLeave()
   },
   preventRightClickMenu: true,
 }
@@ -41,6 +48,7 @@ const pressDragHandlers = {
 onMounted(() => {
   document.body.classList.add('mini-mode')
 })
+
 onUnmounted(() => {
   document.body.classList.remove('mini-mode')
   if (rafId != null)

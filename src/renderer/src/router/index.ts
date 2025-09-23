@@ -18,6 +18,10 @@ const routes: RouteRecordRaw[] = [
     path: '/panel',
     component: () => import('../pages/PanelView.vue'),
   },
+  {
+    path: '/hover',
+    component: () => import('../pages/HoverView.vue'),
+  },
 ]
 
 export const router = createRouter({
