@@ -2,18 +2,6 @@
 import { onMounted, onUnmounted } from 'vue'
 import { vPressDrag } from '../utils/press-drag'
 
-let rafId: number | null = null
-let accDx = 0
-let accDy = 0
-
-function flushMove(): void {
-  if (accDx !== 0 || accDy !== 0)
-    window.api.moveBy(accDx, accDy)
-  accDx = 0
-  accDy = 0
-  rafId = null
-}
-
 const pressDragHandlers = {
   onClick: () => {
     window.api.hideHover()
@@ -21,19 +9,13 @@ const pressDragHandlers = {
   },
   onDragStart: () => {
     window.api.hideHover()
+    window.api.dragStart()
   },
-  onDrag: (_ev: PointerEvent, state: any) => {
-    const dx = state.current.x - state.last.x
-    const dy = state.current.y - state.last.y
-    accDx += dx
-    accDy += dy
-    if (rafId == null)
-      rafId = requestAnimationFrame(flushMove)
+  onDrag: () => {
+    window.api.dragMove()
   },
   onDragEnd: () => {
-    if (rafId != null)
-      cancelAnimationFrame(rafId)
-    flushMove()
+    window.api.dragEnd()
   },
   onHoverEnter: () => {
     window.api.hoverMiniEnter()
@@ -51,8 +33,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.body.classList.remove('mini-mode')
-  if (rafId != null)
-    cancelAnimationFrame(rafId)
 })
 </script>
 

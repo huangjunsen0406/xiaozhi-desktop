@@ -6,8 +6,10 @@ const api = {
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
-  moveBy: (dx: number, dy: number): void => ipcRenderer.send('window:move-by', dx, dy),
-  resizeTo: (width: number, height?: number): void => ipcRenderer.send('window:resize-to', width, height),
+  // 原生全局坐标拖动（跨屏无偏移）
+  dragStart: (): void => ipcRenderer.send('window:drag-start'),
+  dragMove: (): void => ipcRenderer.send('window:drag-move'),
+  dragEnd: (): void => ipcRenderer.send('window:drag-end'),
   // Hover domain (all via single action channel)
   showHover: (): void => ipcRenderer.send('hover:action', { type: 'show' }),
   hideHover: (): void => ipcRenderer.send('hover:action', { type: 'hide' }),

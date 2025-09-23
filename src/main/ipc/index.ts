@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, screen } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { togglePanel, toggleToMain, toggleToMini } from '../windows/windowManager'
 
@@ -32,24 +32,33 @@ export function registerIpcChannels(): void {
     BrowserWindow.fromWebContents(event.sender)?.close()
   })
 
-  // 移动当前窗口（用于自定义拖拽）
-  ipcMain.on('window:move-by', (event, dx: number, dy: number) => {
+  // 原生全局坐标拖动（避免跨屏缩放差导致的偏移）
+  const dragState = new WeakMap<BrowserWindow, { offsetX: number, offsetY: number }>()
+  ipcMain.on('window:drag-start', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win)
       return
-    const [x, y] = win.getPosition()
-    win.setPosition(x + Math.round(dx), y + Math.round(dy))
+    const cursor = screen.getCursorScreenPoint()
+    const [wx, wy] = win.getPosition()
+    dragState.set(win, { offsetX: cursor.x - wx, offsetY: cursor.y - wy })
+  })
+  ipcMain.on('window:drag-move', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win)
+      return
+    const state = dragState.get(win)
+    if (!state)
+      return
+    const cursor = screen.getCursorScreenPoint()
+    const nextX = Math.round(cursor.x - state.offsetX)
+    const nextY = Math.round(cursor.y - state.offsetY)
+    win.setPosition(nextX, nextY)
   })
 
-  // 调整当前窗口大小（用于 mini 悬停展开菜单）
-  ipcMain.on('window:resize-to', (event, width: number, height?: number) => {
+  ipcMain.on('window:drag-end', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win)
-      return
-    const [, h] = win.getSize()
-    const nextW = Math.max(1, Math.round(width))
-    const nextH = Math.max(1, Math.round(height ?? h))
-    win.setSize(nextW, nextH)
+    if (win)
+      dragState.delete(win)
   })
 
   // 主视图

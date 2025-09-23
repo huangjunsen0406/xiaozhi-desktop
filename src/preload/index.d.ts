@@ -4,8 +4,9 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
-  moveBy: (dx: number, dy: number) => void
-  resizeTo: (width: number, height?: number) => void
+  dragStart: () => void
+  dragMove: () => void
+  dragEnd: () => void
   showHover: () => void
   hideHover: () => void
   repositionHover: () => void
