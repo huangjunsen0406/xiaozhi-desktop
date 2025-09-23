@@ -25,12 +25,10 @@ export function buildHoverWindow(): BrowserWindow {
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+  if (is.dev && process.env.ELECTRON_RENDERER_URL)
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/hover`)
-  }
-  else {
+  else
     win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'hover' })
-  }
 
   return win
 }

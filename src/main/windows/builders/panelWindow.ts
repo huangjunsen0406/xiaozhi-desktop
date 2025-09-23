@@ -24,7 +24,6 @@ export function buildPanelWindow(): BrowserWindow {
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.moveTop()
-  // 确保初始不显示，避免首次 isVisible() 误判为 true
   win.hide()
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {

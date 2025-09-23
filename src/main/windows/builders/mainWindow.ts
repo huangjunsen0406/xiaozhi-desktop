@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, shell } from 'electron'
-import icon from '../../../resources/icon.png?asset'
+import icon from '../../../../resources/icon.png?asset'
 
 export function buildMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
