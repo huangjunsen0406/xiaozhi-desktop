@@ -2,6 +2,7 @@ import process from 'node:process'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow } from 'electron'
 import { registerIpcChannels } from './ipc'
+import { registerTray } from './tray'
 import { ensureMainWindow } from './windows/windowManager'
 
 // 启用系统级回声消除特性
@@ -28,6 +29,7 @@ app.whenReady().then(() => {
   })
 
   registerIpcChannels()
+  registerTray()
 
   ensureMainWindow()
 
