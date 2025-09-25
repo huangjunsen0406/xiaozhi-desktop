@@ -6,6 +6,7 @@ const api = {
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
+  showActivation: (): void => ipcRenderer.send('activation:show'),
   // 原生全局坐标拖动（跨屏无偏移）
   dragStart: (): void => ipcRenderer.send('window:drag-start'),
   dragMove: (): void => ipcRenderer.send('window:drag-move'),
@@ -25,6 +26,7 @@ const api = {
   unmaximize: (): void => ipcRenderer.send('window:unmaximize'),
   toggleMaximize: (): void => ipcRenderer.send('window:toggle-maximize'),
   close: (): void => ipcRenderer.send('window:close'),
+  openExternal: (string: string): void => ipcRenderer.send('window:open-external', string),
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

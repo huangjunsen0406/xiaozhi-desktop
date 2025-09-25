@@ -22,6 +22,10 @@ const routes: RouteRecordRaw[] = [
     path: '/hover',
     component: () => import('../pages/HoverView.vue'),
   },
+  {
+    path: '/activation',
+    component: () => import('../pages/ActivationView.vue'),
+  },
 ]
 
 export const router = createRouter({

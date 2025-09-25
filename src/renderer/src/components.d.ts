@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ActivationModal: typeof import('./components/ActivationModal.vue')['default']
     AudioRecorder: typeof import('./components/AudioRecorder.vue')['default']
     AudioRecorderSimple: typeof import('./components/AudioRecorderSimple.vue')['default']
     AudioRecorderSystemAEC: typeof import('./components/AudioRecorderSystemAEC.vue')['default']
@@ -20,6 +21,7 @@ declare module 'vue' {
     IconCarbonSubtract: typeof import('~icons/carbon/subtract')['default']
     NButton: typeof import('naive-ui')['NButton']
     NInput: typeof import('naive-ui')['NInput']
+    NInputOtp: typeof import('naive-ui')['NInputOtp']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ToggleIcon: typeof import('./components/ToggleIcon.vue')['default']

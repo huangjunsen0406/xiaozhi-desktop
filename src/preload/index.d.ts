@@ -4,6 +4,7 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
+  showActivation: () => void
   dragStart: () => void
   dragMove: () => void
   dragEnd: () => void
@@ -19,6 +20,7 @@ export interface RendererApi {
   unmaximize: () => void
   toggleMaximize: () => void
   close: () => void
+  openExternal: (string: string) => void
 }
 
 declare global {

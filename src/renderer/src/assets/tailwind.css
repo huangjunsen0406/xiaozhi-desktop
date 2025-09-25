@@ -1,4 +1,28 @@
 @import "tailwindcss";
 
-/*（可选）启用 class 驱动的暗色模式：给 <html> 加 .dark 即生效 */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box;  }
+
+  html, body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  ul { list-style: none; padding: 0; }
+
+
+  body {
+    min-height: 100vh;
+    color: var(--color-text);
+    background: var(--color-background);
+    line-height: 1.6;
+    font-family:
+      Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 可选：class 驱动暗色 */
 @custom-variant dark (&:where(.dark, .dark *));

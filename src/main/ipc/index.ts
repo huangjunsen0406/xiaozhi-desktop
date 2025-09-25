@@ -1,6 +1,6 @@
-import { BrowserWindow, ipcMain, screen } from 'electron'
+import { BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
-import { togglePanel, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { showActivation, togglePanel, toggleToMain, toggleToMini } from '../windows/windowManager'
 
 export function registerIpcChannels(): void {
   registerHoverIpc()
@@ -30,6 +30,11 @@ export function registerIpcChannels(): void {
 
   ipcMain.on('window:close', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()
+  })
+
+  ipcMain.on('window:open-external', (_, url) => {
+    if (/^https?:\/\/.+/i.test(url))
+      void shell.openExternal(url)
   })
 
   // 原生全局坐标拖动（避免跨屏缩放差导致的偏移）
@@ -169,5 +174,10 @@ export function registerIpcChannels(): void {
   // 输入框
   ipcMain.on('panel:toggle', () => {
     togglePanel()
+  })
+
+  // 激活窗口
+  ipcMain.on('activation:show', () => {
+    showActivation()
   })
 }

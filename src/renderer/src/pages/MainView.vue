@@ -109,7 +109,7 @@ function handleThemeSelect(key: string) {
     <!-- Logo -->
     <img
       src="../assets/icon.png" alt="robot"
-      class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12 shadow-2xl dark:shadow-black/50"
+      class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12"
     >
 
     <!-- 标题 -->
