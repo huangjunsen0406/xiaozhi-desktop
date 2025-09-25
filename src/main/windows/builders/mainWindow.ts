@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, shell } from 'electron'
-import icon from '../../../../resources/icon.png?asset'
+import linuxIcon from '../../../../resources/tray/icon-32.png?asset'
+import winIcon from '../../../../resources/tray/icon.ico?asset'
 
 export function buildMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -15,7 +16,8 @@ export function buildMainWindow(): BrowserWindow {
       ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 40 } as const }
       : {}),
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform === 'linux' ? { icon: linuxIcon as unknown as string } : {}),
+    ...(process.platform === 'win32' ? { icon: winIcon as unknown as string } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

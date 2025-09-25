@@ -1,6 +1,8 @@
+import { join } from 'node:path'
 import process from 'node:process'
-import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow } from 'electron'
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { app, BrowserWindow, nativeImage } from 'electron'
+import appIconPng from '../../resources/icon.png?asset'
 import { registerIpcChannels } from './ipc'
 import { registerTray } from './tray'
 import { ensureMainWindow } from './windows/windowManager'
@@ -12,12 +14,57 @@ app.commandLine.appendSwitch(
   'ChromeWideEchoCancellation,SystemLoopbackAsAecReference',
 )
 
+function resolveAppIconPath(): string {
+  const asset = appIconPng as unknown as string
+  const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
+  const fallback = join(base, 'resources', 'icon.png')
+  return asset || fallback
+}
+
+let devDockImg: Electron.NativeImage | null = null
+function setDevDockIconOnce(): void {
+  if (process.platform !== 'darwin' || !app.dock || !is.dev)
+    return
+  if (!devDockImg) {
+    const p = resolveAppIconPath()
+    const img = nativeImage.createFromPath(p)
+    if (!img.isEmpty())
+      devDockImg = img
+  }
+  if (devDockImg)
+    app.dock.setIcon(devDockImg)
+}
+
+function ensureDockVisible(): void {
+  if (process.platform !== 'darwin') {
+    return
+  }
+  app.setName('小智')
+  ;(app as any).setActivationPolicy?.('regular')
+  if (app.dock) {
+    try {
+      if (!app.isPackaged)
+        setDevDockIconOnce()
+      app.dock.show()
+    }
+    catch {}
+  }
+}
+
+// 最早时机：ready 触发即兜底一次，确保创建任何窗口前已设定 Dock 图标（开发态）
+app.on('ready', () => {
+  setDevDockIconOnce()
+})
+
 // 窗口创建与 IPC 注册均已拆分至模块
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // 先行确保 Dock 可见，尽量减少启动闪图
+  ensureDockVisible()
+
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -25,11 +72,22 @@ app.whenReady().then(() => {
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
+    // 新窗口创建时补刀一次（仅 dev），避免瞬时回落 Electron 图标
+    setDevDockIconOnce()
     optimizer.watchWindowShortcuts(window)
+    // 任何窗口的生命周期事件，都保持 Dock 常驻
+    window.on('ready-to-show', ensureDockVisible)
+    window.on('show', ensureDockVisible)
+    window.on('minimize', ensureDockVisible)
+    window.on('hide', ensureDockVisible)
+    window.on('closed', ensureDockVisible)
   })
 
   registerIpcChannels()
   registerTray()
+
+  // macOS：二次保险
+  ensureDockVisible()
 
   ensureMainWindow()
 
@@ -38,6 +96,7 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0)
       ensureMainWindow()
+    ensureDockVisible()
   })
 })
 
