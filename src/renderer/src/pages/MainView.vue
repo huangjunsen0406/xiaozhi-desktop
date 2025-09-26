@@ -11,6 +11,10 @@ function togglePanel(): void {
   window.api.togglePanel()
 }
 
+function showActivation(): void {
+  window.api.toggleSettings()
+}
+
 // Frameless 窗口控制（Linux 无原生按钮时使用）
 const platform = window.electron.process.platform
 function winMinimize(): void {
@@ -129,6 +133,9 @@ function handleThemeSelect(key: string) {
         </NButton>
         <NButton quaternary circle @click="togglePanel">
           <icon-carbon-send-alt class="w-5 h-5" />
+        </NButton>
+        <NButton tertiary size="small" @click="showActivation">
+          激活
         </NButton>
       </div>
     </div>

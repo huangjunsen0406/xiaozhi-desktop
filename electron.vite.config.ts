@@ -14,7 +14,12 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(
+      {
+        // 关键：这行把依赖从 external 名单里排除，转而 bundle 进去
+        exclude: ['@electron-toolkit/preload'],
+      },
+    )],
   },
   renderer: {
     resolve: {

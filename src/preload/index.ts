@@ -1,4 +1,4 @@
-import process from 'node:process'
+// import process from 'node:process'
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge, ipcRenderer } from 'electron'
 // Custom APIs for renderer
@@ -7,6 +7,7 @@ const api = {
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
   showActivation: (): void => ipcRenderer.send('activation:show'),
+  toggleSettings: (): void => ipcRenderer.send('window:toggle-settings'),
   // 原生全局坐标拖动（跨屏无偏移）
   dragStart: (): void => ipcRenderer.send('window:drag-start'),
   dragMove: (): void => ipcRenderer.send('window:drag-move'),
@@ -32,6 +33,7 @@ const api = {
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
+// eslint-disable-next-line node/prefer-global/process
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)

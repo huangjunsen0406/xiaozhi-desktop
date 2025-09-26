@@ -10,7 +10,7 @@ export function buildMainWindow(): BrowserWindow {
     width: 300,
     height: 400,
     show: false,
-    frame: false,
+    frame: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     ...(process.platform === 'win32'
       ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 40 } as const }
@@ -20,7 +20,10 @@ export function buildMainWindow(): BrowserWindow {
     ...(process.platform === 'win32' ? { icon: winIcon as unknown as string } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
     },
   })
 
@@ -29,10 +32,9 @@ export function buildMainWindow(): BrowserWindow {
   })
 
   // 保持主窗口置顶，并在所有工作区/全屏中可见
-  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setAlwaysOnTop(true, 'pop-up-menu')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.moveTop()
-
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }

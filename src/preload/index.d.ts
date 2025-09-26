@@ -5,6 +5,7 @@ export interface RendererApi {
   toggleToMini: () => void
   toggleToMain: () => void
   showActivation: () => void
+  toggleSettings: () => void
   dragStart: () => void
   dragMove: () => void
   dragEnd: () => void

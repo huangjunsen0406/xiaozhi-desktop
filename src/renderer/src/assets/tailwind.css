@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+@theme {
+  --color-custom-dark: rgb(24, 24, 28);
+}
+
 @layer base {
   *, *::before, *::after { box-sizing: border-box;  }
 

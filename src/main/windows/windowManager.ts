@@ -1,10 +1,11 @@
 import type { BrowserWindow } from 'electron'
-import { buildActivationWindow, buildMainWindow, buildMiniWindow, buildPanelWindow } from './builders'
+import { buildActivationWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
 let mainWindow: BrowserWindow | null = null
 let miniWindow: BrowserWindow | null = null
 let panelWindow: BrowserWindow | null = null
 let activationWindow: BrowserWindow | null = null
+let settingsWindow: BrowserWindow | null = null
 
 export function ensureMainWindow(): BrowserWindow {
   if (mainWindow == null) {
@@ -50,6 +51,17 @@ export function ensureActivationWindow(): BrowserWindow {
   return activationWindow as BrowserWindow
 }
 
+export function ensureSettingsWindow(): BrowserWindow {
+  if (settingsWindow == null) {
+    const win = buildSettingsWindow()
+    settingsWindow = win
+    win.on('closed', () => {
+      settingsWindow = null
+    })
+  }
+  return settingsWindow as BrowserWindow
+}
+
 export function toggleToMini(): void {
   const mini = ensureMiniWindow()
   const main = ensureMainWindow()
@@ -81,4 +93,12 @@ export function showActivation(): void {
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow
+}
+
+export function toggleSettings(): void {
+  const win = ensureSettingsWindow()
+  if (win.isVisible())
+    win.hide()
+  else
+    win.show()
 }

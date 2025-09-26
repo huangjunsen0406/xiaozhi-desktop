@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
-import { showActivation, togglePanel, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { showActivation, togglePanel, toggleSettings, toggleToMain, toggleToMini } from '../windows/windowManager'
 
 export function registerIpcChannels(): void {
   registerHoverIpc()
@@ -179,5 +179,10 @@ export function registerIpcChannels(): void {
   // 激活窗口
   ipcMain.on('activation:show', () => {
     showActivation()
+  })
+
+  // 设置窗口
+  ipcMain.on('window:toggle-settings', () => {
+    toggleSettings()
   })
 }

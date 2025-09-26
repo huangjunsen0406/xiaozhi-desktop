@@ -23,8 +23,10 @@ export function buildMiniWindow(): BrowserWindow {
     },
   })
 
+  // 允许跨工作区显示（如果你想让悬浮球“全局悬浮”，保留；否则可以关）
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  win.setAlwaysOnTop(true, 'screen-saver')
+  // 悬浮球用较低层级即可（不要 screen-saver）
+  win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'status' : 'normal')
   win.moveTop()
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {

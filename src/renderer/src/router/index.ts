@@ -26,6 +26,10 @@ const routes: RouteRecordRaw[] = [
     path: '/activation',
     component: () => import('../pages/ActivationView.vue'),
   },
+  {
+    path: '/settings',
+    component: () => import('../pages/SettingsView.vue'),
+  },
 ]
 
 export const router = createRouter({
