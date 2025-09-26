@@ -9,6 +9,8 @@ export function buildActivationWindow(): BrowserWindow {
     height: 310,
     show: false,
     frame: false,
+    skipTaskbar: true,
+    hiddenInMissionControl: true,
     // 透明背景，页面里渲染圆角卡片达到“无边框窗口”效果
     transparent: true,
     backgroundColor: '#00000000',
@@ -33,5 +35,6 @@ export function buildActivationWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'activation' })
   }
 
+  win.excludedFromShownWindowsMenu = true
   return win
 }

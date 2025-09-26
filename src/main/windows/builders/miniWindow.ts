@@ -17,6 +17,7 @@ export function buildMiniWindow(): BrowserWindow {
     movable: true,
     fullscreenable: false,
     skipTaskbar: true,
+    hiddenInMissionControl: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -28,6 +29,7 @@ export function buildMiniWindow(): BrowserWindow {
   // 悬浮球用较低层级即可（不要 screen-saver）
   win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'status' : 'normal')
   win.moveTop()
+  win.excludedFromShownWindowsMenu = true
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/mini`)

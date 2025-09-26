@@ -11,6 +11,8 @@ export function buildSettingsWindow(): BrowserWindow {
     height: 600,
     show: false,
     frame: true,
+    skipTaskbar: true,
+    hiddenInMissionControl: true,
     resizable: false,
     movable: true,
     transparent: true,
@@ -29,7 +31,7 @@ export function buildSettingsWindow(): BrowserWindow {
   })
 
   win.hide()
-  // 外部链接统一走系统默认浏览器
+  win.excludedFromShownWindowsMenu = true // 外部链接统一走系统默认浏览器
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }

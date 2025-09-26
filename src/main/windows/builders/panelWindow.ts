@@ -15,15 +15,17 @@ export function buildPanelWindow(): BrowserWindow {
     resizable: false,
     movable: true,
     skipTaskbar: true,
+    hiddenInMissionControl: true,
+    type: process.platform === 'darwin' ? 'panel' : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
     },
   })
 
-  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setAlwaysOnTop(true, 'status')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  win.moveTop()
+  win.excludedFromShownWindowsMenu = true
   win.hide()
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {

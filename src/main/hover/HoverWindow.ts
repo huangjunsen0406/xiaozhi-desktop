@@ -15,16 +15,18 @@ export function buildHoverWindow(): BrowserWindow {
     resizable: false,
     movable: false,
     fullscreenable: false,
+    hiddenInMissionControl: true,
     skipTaskbar: true,
+    type: process.platform === 'darwin' ? 'panel' : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
     },
   })
 
-  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setAlwaysOnTop(true, 'status')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
+  win.excludedFromShownWindowsMenu = true
   if (is.dev && process.env.ELECTRON_RENDERER_URL)
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/hover`)
   else
