@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { NButton, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpace, NSwitch } from 'naive-ui'
+import { NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui'
 import { ref } from 'vue'
 
+const message = useMessage()
 const enableWakeWord = ref(true)
 const wakeWord = ref('小智')
 const sensitivity = ref(0.5)
@@ -14,20 +15,23 @@ const languageOptions = [
   { label: '日本語', value: 'ja-JP' },
 ]
 
-function handleSave() {
-  // TODO: 实现保存逻辑
+async function handleSave() {
   console.log('保存唤醒词设置', {
     enableWakeWord: enableWakeWord.value,
     wakeWord: wakeWord.value,
     sensitivity: sensitivity.value,
     language: language.value,
   })
+  message.success('保存唤醒词设置')
 }
 
-function handleTest() {
-  // TODO: 实现测试唤醒词功能
+async function handleCustomButton() {
+  // 自定义：测试唤醒词
   console.log('测试唤醒词')
+  message.success('测试唤醒词')
 }
+
+defineExpose({ handleSave, handleCustomButton })
 </script>
 
 <template>
@@ -54,19 +58,5 @@ function handleTest() {
         :disabled="!enableWakeWord"
       />
     </NFormItem>
-    <NSpace justify="end">
-      <NButton secondary :disabled="!enableWakeWord" @click="handleTest">
-        <template #icon>
-          <icon-carbon-send-alt class="w-4 h-4" />
-        </template>
-        测试
-      </NButton>
-      <NButton type="primary" @click="handleSave">
-        <template #icon>
-          <icon-carbon-save class="w-4 h-4" />
-        </template>
-        保存
-      </NButton>
-    </NSpace>
   </NForm>
 </template>

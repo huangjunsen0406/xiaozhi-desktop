@@ -39,7 +39,7 @@ const isActivated = ref(true)
           状态不一致(需重新激活)
         </div>
         <!-- 关闭 -->
-        <icon-carbon-close class="w-4 h-4 cursor-pointer" @click="closeWindow" />
+        <icon-carbon-close class="w-4 h-4 text-gray-700 dark:text-white cursor-pointer" @click="closeWindow" />
       </div>
     </div>
     <!-- 设备信息 -->

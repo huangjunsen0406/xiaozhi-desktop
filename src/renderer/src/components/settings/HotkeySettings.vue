@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NCard, NForm, NFormItem, NSpace, NSwitch, NTag } from 'naive-ui'
+import { NButton, NCard, NForm, NFormItem, NSwitch, NTag } from 'naive-ui'
 import { ref } from 'vue'
 
 const enableGlobalHotkeys = ref(true)
@@ -33,8 +33,7 @@ const hotkeys = ref([
 const isRecording = ref(false)
 const recordingTarget = ref('')
 
-function handleSave() {
-  // TODO: 实现保存逻辑
+async function handleSave() {
   console.log('保存快捷键设置', {
     enableGlobalHotkeys: enableGlobalHotkeys.value,
     hotkeys: hotkeys.value,
@@ -84,6 +83,13 @@ function resetAllHotkeys() {
     },
   ]
 }
+
+async function handleCustomButton() {
+  // 自定义：重置所有
+  resetAllHotkeys()
+}
+
+defineExpose({ handleSave, handleCustomButton })
 </script>
 
 <template>
@@ -145,20 +151,5 @@ function resetAllHotkeys() {
         </NCard>
       </div>
     </NFormItem>
-
-    <NSpace justify="end">
-      <NButton secondary @click="resetAllHotkeys">
-        <template #icon>
-          <icon-carbon-reset class="w-4 h-4" />
-        </template>
-        重置所有
-      </NButton>
-      <NButton type="primary" @click="handleSave">
-        <template #icon>
-          <icon-carbon-save class="w-4 h-4" />
-        </template>
-        保存
-      </NButton>
-    </NSpace>
   </NForm>
 </template>

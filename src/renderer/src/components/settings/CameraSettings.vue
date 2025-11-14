@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NForm, NFormItem, NSelect, NSpace, NSwitch } from 'naive-ui'
+import { NForm, NFormItem, NSelect, NSwitch } from 'naive-ui'
 import { ref } from 'vue'
 
 const enableCamera = ref(true)
@@ -29,8 +29,7 @@ const frameRateOptions = [
   { label: '60 FPS', value: 60 },
 ]
 
-function handleSave() {
-  // TODO: 实现保存逻辑
+async function handleSave() {
   console.log('保存摄像头设置', {
     enableCamera: enableCamera.value,
     cameraDevice: cameraDevice.value,
@@ -40,15 +39,12 @@ function handleSave() {
   })
 }
 
-function handleTest() {
-  // TODO: 实现测试摄像头功能
+async function handleCustomButton() {
+  // 自定义：测试摄像头
   console.log('测试摄像头')
 }
 
-function refreshDevices() {
-  // TODO: 实现刷新设备列表
-  console.log('刷新摄像头设备列表')
-}
+defineExpose({ handleSave, handleCustomButton })
 </script>
 
 <template>
@@ -57,21 +53,13 @@ function refreshDevices() {
       <NSwitch v-model:value="enableCamera" />
     </NFormItem>
     <NFormItem label="摄像头设备" :disabled="!enableCamera">
-      <NSpace>
-        <NSelect
-          v-model:value="cameraDevice"
-          :options="cameraDevices"
-          placeholder="请选择摄像头设备"
-          :disabled="!enableCamera"
-          style="width: 200px"
-        />
-        <NButton size="small" :disabled="!enableCamera" @click="refreshDevices">
-          <template #icon>
-            <!-- <icon-carbon-refresh class="w-4 h-4" /> -->
-          </template>
-          刷新
-        </NButton>
-      </NSpace>
+      <NSelect
+        v-model:value="cameraDevice"
+        :options="cameraDevices"
+        placeholder="请选择摄像头设备"
+        :disabled="!enableCamera"
+        style="width: 200px"
+      />
     </NFormItem>
     <NFormItem label="分辨率" :disabled="!enableCamera">
       <NSelect
@@ -90,19 +78,5 @@ function refreshDevices() {
     <NFormItem label="镜像视频">
       <NSwitch v-model:value="mirrorVideo" :disabled="!enableCamera" />
     </NFormItem>
-    <NSpace justify="end">
-      <NButton secondary :disabled="!enableCamera" @click="handleTest">
-        <template #icon>
-          <icon-carbon-send-alt class="w-4 h-4" />
-        </template>
-        测试
-      </NButton>
-      <NButton type="primary" @click="handleSave">
-        <template #icon>
-          <icon-carbon-save class="w-4 h-4" />
-        </template>
-        保存
-      </NButton>
-    </NSpace>
   </NForm>
 </template>

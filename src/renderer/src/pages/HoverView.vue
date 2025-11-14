@@ -16,9 +16,14 @@ function handleLeave() {
   window.api.hoverWindowLeave()
 }
 
-function handleVoiceCall() {
+function handleMain() {
   window.api.hideHover()
   window.api.toggleToMain()
+}
+
+function handleSettings() {
+  window.api.hideHover()
+  window.api.toggleSettings()
 }
 
 onUnmounted(() => {
@@ -33,10 +38,10 @@ onUnmounted(() => {
       :class="open ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-90'"
     >
       <div class="flex flex-col divide-y divide-black/5 dark:divide-white/10">
-        <button class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5" @click="handleVoiceCall">
-          语音通话
+        <button class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5" @click="handleMain">
+          主界面
         </button>
-        <button class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5">
+        <button class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5" @click="handleSettings">
           设置
         </button>
       </div>

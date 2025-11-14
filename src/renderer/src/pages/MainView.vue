@@ -3,17 +3,17 @@ import { useColorMode } from '@vueuse/core'
 import { NButton, NDropdown } from 'naive-ui'
 import { computed } from 'vue'
 
-function minimize(): void {
-  window.api.toggleToMini()
-}
+// function minimize(): void {
+//   window.api.toggleToMini()
+// }
 
 function togglePanel(): void {
   window.api.togglePanel()
 }
 
-function showActivation(): void {
-  window.api.toggleSettings()
-}
+// function showActivation(): void {
+//   window.api.showActivation()
+// }
 
 // Frameless 窗口控制（Linux 无原生按钮时使用）
 const platform = window.electron.process.platform
@@ -67,7 +67,7 @@ const currentThemeText = computed(() => {
 })
 
 // 是否通话中
-const isCalling = ref(true)
+const isCalling = ref(false)
 
 // 处理主题选择
 function handleThemeSelect(key: string) {
@@ -127,16 +127,16 @@ function handleThemeSelect(key: string) {
       <div class="flex items-center gap-2">
         <!-- <iconify-icon icon="carbon:phone" width="32" height="32" /> -->
 
-        <NButton quaternary circle @click="minimize">
+        <NButton quaternary circle>
           <icon-carbon-phone v-if="!isCalling" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">
           <icon-carbon-send-alt class="w-5 h-5" />
         </NButton>
-        <NButton tertiary size="small" @click="showActivation">
+        <!-- <NButton tertiary size="small" @click="showActivation">
           激活
-        </NButton>
+        </NButton> -->
       </div>
     </div>
   </div>
