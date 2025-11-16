@@ -1,25 +1,112 @@
 <script setup lang="ts">
-// 示例数据：后续可通过 IPC 注入
-const serialNumber = 'SN-AEE4B617-7ee956a48610'
-const macAddress = '7e:e9:56:a4:86:10'
-const code = '686071'
+import { onMounted, ref, computed } from 'vue'
 
-async function copyCode() {
-  await navigator.clipboard.writeText(code)
+// 设备信息
+const serialNumber = ref('--')
+const macAddress = ref('--')
+const activationCode = ref('')
+const activationStatus = ref('检查中...')
+const statusColor = ref('#6c757d')
+const isActivating = ref(false)
+
+// 激活数据
+let activationData: any = null
+
+// 初始化
+onMounted(async () => {
+  try {
+    // 获取设备信息
+    const deviceInfo = await window.api.activationGetDeviceInfo()
+    if (deviceInfo) {
+      serialNumber.value = deviceInfo.serialNumber || '--'
+      macAddress.value = deviceInfo.macAddress || '--'
+
+      // 更新激活状态显示
+      if (deviceInfo.activationStatus) {
+        activationStatus.value = '已激活'
+        statusColor.value = '#28a745'
+      } else {
+        activationStatus.value = '未激活'
+        statusColor.value = '#dc3545'
+      }
+    }
+
+    // 获取激活数据
+    activationData = await window.api.activationGetActivationData()
+    if (activationData && activationData.code) {
+      activationCode.value = activationData.code
+      // 自动开始激活流程
+      startActivation()
+    }
+  } catch (error) {
+    console.error('初始化失败:', error)
+  }
+})
+
+// 开始激活
+async function startActivation() {
+  if (!activationData || isActivating.value) {
+    return
+  }
+
+  try {
+    isActivating.value = true
+    activationStatus.value = '激活中...'
+    statusColor.value = '#ff9900'
+
+    const result = await window.api.activationStart(activationData)
+
+    if (result.success) {
+      activationStatus.value = '已激活'
+      statusColor.value = '#28a745'
+      console.log('激活成功')
+
+      // 激活成功后延迟关闭窗口
+      setTimeout(() => {
+        closeWindow()
+      }, 1500)
+    } else {
+      activationStatus.value = '激活失败'
+      statusColor.value = '#dc3545'
+      console.error('激活失败:', result.error)
+    }
+  } catch (error) {
+    console.error('激活过程出错:', error)
+    activationStatus.value = '激活失败'
+    statusColor.value = '#dc3545'
+  } finally {
+    isActivating.value = false
+  }
 }
 
+// 复制验证码
+async function copyCode() {
+  await navigator.clipboard.writeText(activationCode.value)
+  console.log('验证码已复制')
+}
+
+// 跳转激活页面
 function jump() {
-  // 这里保留空实现，后续可改为 openExternal 到你的激活页
   window.api.openExternal('https://xiaozhi.me/')
 }
 
+// 关闭窗口
 function closeWindow() {
-  console.log('closeWindow')
+  // 取消激活流程
+  window.api.activationCancel()
   window.api.close()
 }
 
-// 激活（#28a745）未激活（#dc3545）
-const isActivated = ref(true)
+// 状态文本
+const statusText = computed(() => activationStatus.value)
+
+// 验证码数组（用于 OTP 输入框）
+const codeArray = computed(() => {
+  if (activationCode.value && activationCode.value.length === 6) {
+    return activationCode.value.split('')
+  }
+  return []
+})
 </script>
 
 <template>
@@ -35,8 +122,8 @@ const isActivated = ref(true)
       <div class="flex items-center gap-2">
         <!-- 小圆点 -->
         <div class="flex items-center gap-2 text-[11px] text-base text-gray-700 dark:text-gray-300">
-          <div class="w-2 h-2 rounded-full" :class="isActivated ? 'bg-[#28a745]' : 'bg-[#dc3545]'" />
-          状态不一致(需重新激活)
+          <div class="w-2 h-2 rounded-full" :style="{ backgroundColor: statusColor }" />
+          {{ statusText }}
         </div>
         <!-- 关闭 -->
         <icon-carbon-close class="w-4 h-4 text-gray-700 dark:text-white cursor-pointer" @click="closeWindow" />
@@ -67,7 +154,10 @@ const isActivated = ref(true)
       <div class="text-gray-700 dark:text-gray-300 font-bold text-[12px]">
         激活验证码
       </div>
-      <n-input-otp :default-value="code.split('')" readonly />
+      <n-input-otp v-if="codeArray.length > 0" :default-value="codeArray" readonly />
+      <div v-else class="text-gray-400 text-[12px]">
+        等待验证码...
+      </div>
       <div class=" bg-[#165dff] dark:bg-[#1d2129] py-[10px] px-[30px] box-border rounded-lg text-white text-center cursor-pointer" @click="copyCode">
         复制
       </div>

@@ -28,6 +28,13 @@ const api = {
   toggleMaximize: (): void => ipcRenderer.send('window:toggle-maximize'),
   close: (): void => ipcRenderer.send('window:close'),
   openExternal: (string: string): void => ipcRenderer.send('window:open-external', string),
+  // Activation APIs
+  activationInitialize: (): Promise<any> => ipcRenderer.invoke('activation:initialize'),
+  activationGetDeviceInfo: (): Promise<any> => ipcRenderer.invoke('activation:get-device-info'),
+  activationGetActivationData: (): Promise<any> => ipcRenderer.invoke('activation:get-activation-data'),
+  activationStart: (data: any): Promise<any> => ipcRenderer.invoke('activation:start', data),
+  activationCancel: (): Promise<any> => ipcRenderer.invoke('activation:cancel'),
+  activationCheckStatus: (): Promise<any> => ipcRenderer.invoke('activation:check-status'),
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

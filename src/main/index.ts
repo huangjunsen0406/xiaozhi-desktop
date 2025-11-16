@@ -6,6 +6,7 @@ import appIconPng from '../../resources/icon.png?asset'
 import { registerIpcChannels } from './ipc'
 import { registerTray } from './tray'
 import { ensureMainWindow } from './windows/windowManager'
+import { handleActivationOnStartup } from './services/activationHandler'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -89,7 +90,21 @@ app.whenReady().then(() => {
   // macOS：二次保险
   ensureDockVisible()
 
-  ensureMainWindow()
+  // 启动时检测激活状态
+  handleActivationOnStartup().then((canContinue) => {
+    if (canContinue) {
+      // 激活检测通过，创建主窗口
+      ensureMainWindow()
+    } else {
+      // 激活检测失败，退出应用
+      console.error('激活检测失败，应用退出')
+      app.quit()
+    }
+  }).catch((error) => {
+    console.error('激活检测出错:', error)
+    // 出错也允许继续，避免阻塞用户
+    ensureMainWindow()
+  })
 
   app.on('activate', () => {
     // On macOS it's common to re-create a window in the app when the

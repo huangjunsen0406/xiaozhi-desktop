@@ -22,6 +22,13 @@ export interface RendererApi {
   toggleMaximize: () => void
   close: () => void
   openExternal: (string: string) => void
+  // Activation APIs
+  activationInitialize: () => Promise<any>
+  activationGetDeviceInfo: () => Promise<any>
+  activationGetActivationData: () => Promise<any>
+  activationStart: (data: any) => Promise<any>
+  activationCancel: () => Promise<any>
+  activationCheckStatus: () => Promise<any>
 }
 
 declare global {

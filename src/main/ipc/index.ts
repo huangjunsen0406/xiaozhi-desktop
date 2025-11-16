@@ -1,9 +1,13 @@
 import { BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { showActivation, togglePanel, toggleSettings, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { registerActivationIpc } from './activationIpc'
+import { registerConfigIpc } from './configIpc'
 
 export function registerIpcChannels(): void {
   registerHoverIpc()
+  registerActivationIpc()
+  registerConfigIpc()
   // 窗口控制
   ipcMain.on('window:minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()
