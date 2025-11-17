@@ -39,22 +39,32 @@ const menuOptions = [
   { label: '快捷键', key: 'hotkey', icon: withIcon(IconCarbonKeyboard) },
 ] satisfies { label: string, key: Key, icon: () => any }[]
 
-/** 右侧面板映射 */
-const Panels: Record<Key, any> = {
-  system: SystemSettings,
-  appearance: AppearanceSettings,
-  wake: WakeWordSettings,
-  camera: CameraSettings,
-  audio: AudioSettings,
-  hotkey: HotkeySettings,
-}
 type MaybePromise<T> = T | Promise<T>
 export interface PanelExposed {
   handleSave: () => MaybePromise<void>
   handleCustomButton?: () => MaybePromise<void>
 }
 
-const panelRef = ref<PanelExposed | null>(null)
+// 使用字典存储每个面板的引用
+const panelRefs = ref<Record<Key, PanelExposed | null>>({
+  system: null,
+  appearance: null,
+  wake: null,
+  camera: null,
+  audio: null,
+  hotkey: null,
+})
+
+// 设置面板引用的辅助函数
+function setPanelRef(key: Key) {
+  return (el: any) => {
+    panelRefs.value[key] = el
+  }
+}
+
+// 获取当前选中面板的引用
+const currentPanelRef = computed(() => panelRefs.value[selected.value])
+
 const message = useMessage()
 
 const customButtonTextByKey: Record<Key, string | undefined> = {
@@ -71,11 +81,11 @@ const saveLoading = ref(false)
 const customLoading = ref(false)
 
 async function onSaveClick() {
-  if (!panelRef.value?.handleSave)
+  if (!currentPanelRef.value?.handleSave)
     return
   saveLoading.value = true
   try {
-    await panelRef.value.handleSave()
+    await currentPanelRef.value.handleSave()
   }
   catch (e: any) {
     message.error(e?.message || '保存失败')
@@ -86,11 +96,11 @@ async function onSaveClick() {
 }
 
 async function onCustomClick() {
-  if (!panelRef.value?.handleCustomButton)
+  if (!currentPanelRef.value?.handleCustomButton)
     return
   customLoading.value = true
   try {
-    await panelRef.value.handleCustomButton()
+    await currentPanelRef.value.handleCustomButton()
   }
   catch (e: any) {
     message.error(e?.message || '操作失败')
@@ -133,7 +143,13 @@ async function onCustomClick() {
             <div class="h-full min-h-0 overflow-auto">
               <!-- 也可换成 <n-scrollbar class="h-full" trigger="none" :size="0"> ... </n-scrollbar> -->
               <n-scrollbar class="h-full pr-[20px] box-border">
-                <component :is="Panels[selected]" ref="panelRef" :key="selected" />
+                <!-- 使用 v-show 保持组件实例，避免每次切换都重新挂载 -->
+                <SystemSettings v-show="selected === 'system'" :ref="setPanelRef('system')" />
+                <AppearanceSettings v-show="selected === 'appearance'" :ref="setPanelRef('appearance')" />
+                <WakeWordSettings v-show="selected === 'wake'" :ref="setPanelRef('wake')" />
+                <CameraSettings v-show="selected === 'camera'" :ref="setPanelRef('camera')" />
+                <AudioSettings v-show="selected === 'audio'" :ref="setPanelRef('audio')" />
+                <HotkeySettings v-show="selected === 'hotkey'" :ref="setPanelRef('hotkey')" />
               </n-scrollbar>
             </div>
           </div>

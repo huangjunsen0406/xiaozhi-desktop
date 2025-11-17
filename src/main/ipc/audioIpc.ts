@@ -51,11 +51,11 @@ export function registerAudioIpc(): void {
     try {
       const dbUpdates: any = {}
 
-      if ('inputDeviceId' in config) {
-        dbUpdates.input_device_id = config.inputDeviceId || null
+      if ('inputDeviceName' in config) {
+        dbUpdates.input_device_name = config.inputDeviceName || null
       }
-      if ('outputDeviceId' in config) {
-        dbUpdates.output_device_id = config.outputDeviceId || null
+      if ('outputDeviceName' in config) {
+        dbUpdates.output_device_name = config.outputDeviceName || null
       }
       if ('enableNoiseReduction' in config) {
         dbUpdates.enable_noise_reduction = config.enableNoiseReduction
@@ -76,20 +76,20 @@ export function registerAudioIpc(): void {
     }
   })
 
-  // 获取默认设备ID (渲染进程会使用 enumerateDevices 获取实际设备列表)
+  // 获取默认设备名称 (渲染进程会使用 enumerateDevices 获取实际设备列表并匹配)
   ipcMain.handle('audio:get-default-device-id', async (_, kind: 'input' | 'output') => {
     try {
       const config = db.getFormattedAudioConfig()
 
       if (kind === 'input') {
-        return config.inputDeviceId || null
+        return config.inputDeviceName || null
       }
       else {
-        return config.outputDeviceId || null
+        return config.outputDeviceName || null
       }
     }
     catch (error) {
-      console.error('[Audio IPC] 获取默认设备ID失败:', error)
+      console.error('[Audio IPC] 获取默认设备名称失败:', error)
       return null
     }
   })
@@ -159,11 +159,11 @@ export function setAudioConfig(config: Partial<AudioConfig>): void {
   try {
     const dbUpdates: any = {}
 
-    if ('inputDeviceId' in config) {
-      dbUpdates.input_device_id = config.inputDeviceId || null
+    if ('inputDeviceName' in config) {
+      dbUpdates.input_device_name = config.inputDeviceName || null
     }
-    if ('outputDeviceId' in config) {
-      dbUpdates.output_device_id = config.outputDeviceId || null
+    if ('outputDeviceName' in config) {
+      dbUpdates.output_device_name = config.outputDeviceName || null
     }
     if ('enableNoiseReduction' in config) {
       dbUpdates.enable_noise_reduction = config.enableNoiseReduction

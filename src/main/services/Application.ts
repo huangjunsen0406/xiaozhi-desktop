@@ -1,6 +1,7 @@
 import type { Buffer } from 'node:buffer'
 import type { Protocol } from '../protocols/Protocol'
 import { DeviceState } from '../constants/DeviceState'
+import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { PluginManager } from '../plugins/PluginManager'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
@@ -226,6 +227,9 @@ export class Application {
 
   /**
    * 开始自动对话
+   * 根据用户配置选择监听模式：
+   * - conversationMode = 'realtime' -> REALTIME 模式（实时对话，全双工）
+   * - conversationMode = 'auto' -> AUTO_STOP 模式（回合制对话）
    */
   async startAutoConversation(): Promise<void> {
     try {
@@ -234,8 +238,17 @@ export class Application {
         return
       }
 
-      // 使用 REALTIME 模式（实时对话，可随时打断）
-      const mode = ListeningMode.REALTIME
+      // 读取用户配置的对话模式
+      const audioConfig = getAudioConfig()
+      const conversationMode = audioConfig.conversationMode || 'auto'
+
+      // 根据配置选择监听模式
+      const mode = conversationMode === 'realtime'
+        ? ListeningMode.REALTIME  // 实时对话（全双工，可随时打断）
+        : ListeningMode.AUTO_STOP  // 回合制对话（半双工）
+
+      console.log(`[Application] 启动自动对话，模式: ${conversationMode} (${mode})`)
+
       this.listeningMode = mode
       this.keepListening = true
 
@@ -461,6 +474,33 @@ export class Application {
   isAudioChannelOpened(): boolean {
     try {
       return this.protocol?.isAudioChannelOpened() || false
+    }
+    catch {
+      return false
+    }
+  }
+
+  /**
+   * 判断是否应该采集麦克风音频
+   *
+   * 采集规则：
+   * 1. LISTENING 状态：始终采集（未被中止时）
+   * 2. SPEAKING 状态：仅在实时模式下采集
+   *    - 需要同时满足：keepListening = true 且 listeningMode = REALTIME
+   */
+  shouldCaptureAudio(): boolean {
+    try {
+      // LISTENING 状态：始终采集（未被中止时）
+      if (this.deviceState === DeviceState.LISTENING && !this.aborted) {
+        return true
+      }
+
+      // SPEAKING 状态：仅在实时模式下采集（全双工）
+      return (
+        this.deviceState === DeviceState.SPEAKING
+        && this.keepListening
+        && this.listeningMode === ListeningMode.REALTIME
+      )
     }
     catch {
       return false

@@ -128,7 +128,7 @@ export class AudioPlugin extends Plugin {
   private handlePCMFromRenderer(pcmData: Int16Array): void {
     try {
       // 检查是否应该采集音频
-      if (!this.app || !this.app.isListening()) {
+      if (!this.app || !this.app.shouldCaptureAudio()) {
         return
       }
 

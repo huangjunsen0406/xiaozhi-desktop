@@ -4,6 +4,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import Dots from '../components/Dots.vue'
 import { AudioCapture } from '../utils/audio/AudioCapture'
 import { AudioPlayback } from '../utils/audio/AudioPlayback'
+import { getDeviceIdsFromConfig } from '../utils/audio/deviceUtils'
 
 function togglePanel(): void {
   window.api.togglePanel()
@@ -35,19 +36,20 @@ let playbackInitialized = false
 async function initAudio() {
   try {
     console.log('[MainView] 初始化音频系统...')
+    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
 
     // 初始化采集
     if (!captureInitialized) {
-      console.log('[MainView] 初始化采集器...')
-      await capture.initialize()
+      console.log('[MainView] 初始化采集器...', inputDeviceId ? `设备: ${inputDeviceId}` : '使用默认设备')
+      await capture.initialize(inputDeviceId)
       captureInitialized = true
       console.log('[MainView] ✓ 采集器初始化成功')
     }
 
     // 初始化播放
     if (!playbackInitialized) {
-      console.log('[MainView] 初始化播放器...')
-      await playback.initialize()
+      console.log('[MainView] 初始化播放器...', outputDeviceId ? `设备: ${outputDeviceId}` : '使用默认设备')
+      await playback.initialize(outputDeviceId)
       playbackInitialized = true
       console.log('[MainView] ✓ 播放器初始化成功')
     }
@@ -59,6 +61,10 @@ async function initAudio() {
     throw err
   }
 }
+
+// 当前使用的设备ID
+let currentInputDeviceId: string | undefined
+let currentOutputDeviceId: string | undefined
 
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
@@ -79,9 +85,34 @@ async function toggleCall() {
     // 拨打电话 - 开始自动对话
     console.log('[MainView] 拨打电话')
 
-    // 初始化音频系统
+    // 每次拨打前,检查设备配置是否变化
+    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
+
+    // 首次初始化或设备未变化
     if (!captureInitialized) {
       await initAudio()
+      currentInputDeviceId = inputDeviceId
+      currentOutputDeviceId = outputDeviceId
+    }
+    // 设备发生变化,需要切换
+    else if (inputDeviceId !== currentInputDeviceId || outputDeviceId !== currentOutputDeviceId) {
+      console.log('[MainView] 检测到设备变化,切换设备...')
+      console.log('  输入设备:', currentInputDeviceId, '→', inputDeviceId)
+      console.log('  输出设备:', currentOutputDeviceId, '→', outputDeviceId)
+
+      // 切换输入设备
+      if (inputDeviceId !== currentInputDeviceId && inputDeviceId) {
+        await capture.switchDevice(inputDeviceId)
+        currentInputDeviceId = inputDeviceId
+      }
+
+      // 切换输出设备
+      if (outputDeviceId !== currentOutputDeviceId && outputDeviceId) {
+        await playback.switchDevice(outputDeviceId)
+        currentOutputDeviceId = outputDeviceId
+      }
+
+      console.log('[MainView] ✓ 设备切换完成')
     }
 
     // 开始采集

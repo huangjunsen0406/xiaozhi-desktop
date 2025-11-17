@@ -97,9 +97,9 @@ export class DatabaseManager {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS audio_config (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        -- 设备选择
-        input_device_id TEXT,
-        output_device_id TEXT,
+        -- 设备选择（通过名称匹配设备）
+        input_device_name TEXT,
+        output_device_name TEXT,
         -- 音频处理
         enable_noise_reduction INTEGER DEFAULT 1,
         enable_echo_cancellation INTEGER DEFAULT 1,
@@ -333,8 +333,8 @@ export class DatabaseManager {
    * 更新音频配置（批量）
    */
   updateAudioConfig(updates: {
-    input_device_id?: string | null
-    output_device_id?: string | null
+    input_device_name?: string | null
+    output_device_name?: string | null
     enable_noise_reduction?: boolean
     enable_echo_cancellation?: boolean
     conversation_mode?: string
@@ -376,8 +376,8 @@ export class DatabaseManager {
    * 获取格式化的音频配置（转换为应用使用的格式）
    */
   getFormattedAudioConfig(): {
-    inputDeviceId?: string
-    outputDeviceId?: string
+    inputDeviceName?: string
+    outputDeviceName?: string
     enableNoiseReduction: boolean
     enableEchoCancellation: boolean
     conversationMode: 'realtime' | 'auto'
@@ -385,8 +385,8 @@ export class DatabaseManager {
     const config = this.getOrCreateAudioConfig()
 
     return {
-      inputDeviceId: config.input_device_id || undefined,
-      outputDeviceId: config.output_device_id || undefined,
+      inputDeviceName: config.input_device_name || undefined,
+      outputDeviceName: config.output_device_name || undefined,
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
       enableEchoCancellation: Boolean(config.enable_echo_cancellation),
       conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',

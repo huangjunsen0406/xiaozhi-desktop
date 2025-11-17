@@ -12,10 +12,10 @@ export interface AudioDeviceInfo {
  * 音频配置接口
  */
 export interface AudioConfig {
-  // 输入设备
-  inputDeviceId?: string
-  // 输出设备
-  outputDeviceId?: string
+  // 输入设备名称（通过名称匹配设备ID）
+  inputDeviceName?: string
+  // 输出设备名称（通过名称匹配设备ID）
+  outputDeviceName?: string
   // 麦克风音量 (0-100)
   microphoneVolume: number
   // 扬声器音量 (0-100)
