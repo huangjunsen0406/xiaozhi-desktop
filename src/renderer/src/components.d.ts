@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppearanceSettings: typeof import('./components/settings/AppearanceSettings.vue')['default']
     AudioRecorder: typeof import('./components/AudioRecorder.vue')['default']
     AudioRecorderSimple: typeof import('./components/AudioRecorderSimple.vue')['default']
     AudioRecorderSystemAEC: typeof import('./components/AudioRecorderSystemAEC.vue')['default']
@@ -15,7 +16,9 @@ declare module 'vue' {
     CameraSettings: typeof import('./components/settings/CameraSettings.vue')['default']
     Dots: typeof import('./components/Dots.vue')['default']
     HotkeySettings: typeof import('./components/settings/HotkeySettings.vue')['default']
+    IconCarbonApplication: typeof import('~icons/carbon/application')['default']
     IconCarbonClose: typeof import('~icons/carbon/close')['default']
+    IconCarbonDotMark: typeof import('~icons/carbon/dot-mark')['default']
     IconCarbonMaximize: typeof import('~icons/carbon/maximize')['default']
     IconCarbonPhone: typeof import('~icons/carbon/phone')['default']
     IconCarbonPhoneBlockFilled: typeof import('~icons/carbon/phone-block-filled')['default']
@@ -26,7 +29,10 @@ declare module 'vue' {
     NButton: typeof import('naive-ui')['NButton']
     NInput: typeof import('naive-ui')['NInput']
     NInputOtp: typeof import('naive-ui')['NInputOtp']
+    NRadio: typeof import('naive-ui')['NRadio']
+    NRadioGroup: typeof import('naive-ui')['NRadioGroup']
     NScrollbar: typeof import('naive-ui')['NScrollbar']
+    NSpace: typeof import('naive-ui')['NSpace']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SystemSettings: typeof import('./components/settings/SystemSettings.vue')['default']

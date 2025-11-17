@@ -1,3 +1,4 @@
+import type { Buffer } from 'node:buffer'
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge, ipcRenderer } from 'electron'
 // Custom APIs for renderer
@@ -5,6 +6,7 @@ const api = {
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
+  switchDisplayMode: (mode: 'main' | 'mini'): Promise<void> => ipcRenderer.invoke('window:switch-display-mode', mode),
   showActivation: (): void => ipcRenderer.send('activation:show'),
   toggleSettings: (): void => ipcRenderer.send('window:toggle-settings'),
   // 原生全局坐标拖动（跨屏无偏移）

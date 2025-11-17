@@ -193,4 +193,14 @@ export function registerIpcChannels(): void {
   ipcMain.on('window:toggle-settings', () => {
     toggleSettings()
   })
+
+  // 显示模式切换
+  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini') => {
+    if (mode === 'mini') {
+      toggleToMini()
+    }
+    else {
+      toggleToMain()
+    }
+  })
 }

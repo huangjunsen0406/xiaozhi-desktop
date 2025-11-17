@@ -5,6 +5,7 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
+  switchDisplayMode: (mode: 'main' | 'mini') => Promise<void>
   showActivation: () => void
   toggleSettings: () => void
   dragStart: () => void

@@ -1,19 +1,13 @@
 <script setup lang="ts">
-import { useColorMode } from '@vueuse/core'
-import { NButton, NDropdown } from 'naive-ui'
-import { computed } from 'vue'
-
-// function minimize(): void {
-//   window.api.toggleToMini()
-// }
+import { NButton } from 'naive-ui'
+import { onMounted, onUnmounted, ref } from 'vue'
+import Dots from '../components/Dots.vue'
+import { AudioCapture } from '../utils/audio/AudioCapture'
+import { AudioPlayback } from '../utils/audio/AudioPlayback'
 
 function togglePanel(): void {
   window.api.togglePanel()
 }
-
-// function showActivation(): void {
-//   window.api.showActivation()
-// }
 
 // Frameless 窗口控制（Linux 无原生按钮时使用）
 const platform = window.electron.process.platform
@@ -27,52 +21,120 @@ function winClose(): void {
   window.api.close()
 }
 
-// 使用 useColorMode 支持 auto、dark、light 三种模式
-const mode = useColorMode({
-  selector: 'html',
-  attribute: 'class',
-  modes: {
-    light: 'light',
-    dark: 'dark',
-    auto: '', // auto 模式时不添加 class，由系统决定
-  },
-})
-
-// 主题选项
-const themeOptions = [
-  {
-    label: '浅色主题',
-    key: 'light',
-  },
-  {
-    label: '深色主题',
-    key: 'dark',
-  },
-  {
-    label: '跟随系统',
-    key: 'auto',
-  },
-]
-
-// 当前主题文本
-const currentThemeText = computed(() => {
-  switch (mode.value) {
-    case 'dark':
-      return '🌙 '
-    case 'light':
-      return '☀️ '
-    default:
-      return '💻 '
-  }
-})
-
 // 是否通话中
 const isCalling = ref(false)
+const deviceState = ref('idle')
 
-// 处理主题选择
-function handleThemeSelect(key: string) {
-  mode.value = key as 'light' | 'dark' | 'auto'
+// 音频系统
+const capture = new AudioCapture()
+const playback = new AudioPlayback()
+let captureInitialized = false
+let playbackInitialized = false
+
+// 初始化音频系统
+async function initAudio() {
+  try {
+    console.log('[MainView] 初始化音频系统...')
+
+    // 初始化采集
+    if (!captureInitialized) {
+      console.log('[MainView] 初始化采集器...')
+      await capture.initialize()
+      captureInitialized = true
+      console.log('[MainView] ✓ 采集器初始化成功')
+    }
+
+    // 初始化播放
+    if (!playbackInitialized) {
+      console.log('[MainView] 初始化播放器...')
+      await playback.initialize()
+      playbackInitialized = true
+      console.log('[MainView] ✓ 播放器初始化成功')
+    }
+
+    console.log('[MainView] ✓ 音频系统初始化完成')
+  }
+  catch (err: any) {
+    console.error('[MainView] 初始化失败:', err)
+    throw err
+  }
 }
+
+// 切换通话状态（拨打/挂断）
+async function toggleCall() {
+  if (isCalling.value) {
+    // 挂断电话 - 停止自动对话
+    console.log('[MainView] 挂断电话')
+
+    // 停止音频采集
+    capture.stop()
+
+    // 停止自动对话
+    await window.api.appStopAutoConversation()
+
+    // 更新状态为未通话
+    isCalling.value = false
+  }
+  else {
+    // 拨打电话 - 开始自动对话
+    console.log('[MainView] 拨打电话')
+
+    // 初始化音频系统
+    if (!captureInitialized) {
+      await initAudio()
+    }
+
+    // 开始采集
+    await capture.start()
+
+    // 开始自动对话
+    await window.api.appStartAutoConversation()
+
+    // 更新状态为通话中
+    isCalling.value = true
+  }
+}
+
+// 清理资源
+async function cleanup() {
+  console.log('[MainView] 清理资源...')
+
+  try {
+    if (isCalling.value) {
+      await window.api.appStopAutoConversation()
+      isCalling.value = false
+    }
+    await capture.dispose()
+    await playback.dispose()
+    captureInitialized = false
+    playbackInitialized = false
+  }
+  catch (err) {
+    console.error('[MainView] 清理失败:', err)
+  }
+}
+
+onMounted(() => {
+  console.log('[MainView] 组件已挂载')
+
+  // 监听应用状态变化
+  window.api.appOnStateChanged((state) => {
+    deviceState.value = state.deviceState || 'idle'
+
+    // 根据设备状态同步通话状态
+    // 如果设备状态是 idle 且音频通道关闭，则认为通话已结束
+    if (state.deviceState === 'idle' && !state.channelOpen) {
+      isCalling.value = false
+    }
+
+    console.log('[MainView] 状态更新:', state)
+  })
+})
+
+onUnmounted(async () => {
+  await cleanup()
+  console.log('[MainView] 组件已卸载')
+})
 </script>
 
 <template>
@@ -82,15 +144,6 @@ function handleThemeSelect(key: string) {
     <!-- 标题栏拖拽区域 -->
     <div class="fixed top-0 left-0 right-0 h-10" style="-webkit-app-region: drag">
       <div class="h-full" />
-    </div>
-
-    <!-- 主题切换下拉菜单（右上角） -->
-    <div class="absolute top-3 right-3 z-10" style="-webkit-app-region: no-drag">
-      <NDropdown trigger="click" :options="themeOptions" @select="handleThemeSelect">
-        <NButton quaternary>
-          {{ currentThemeText }}
-        </NButton>
-      </NDropdown>
     </div>
 
     <!-- Linux 自定义窗口控制按钮（Win 有原生 overlay，不重复渲染） -->
@@ -117,26 +170,22 @@ function handleThemeSelect(key: string) {
     >
 
     <!-- 标题 -->
-    <div class="text-base text-gray-700 dark:text-gray-300">
+    <div class="text-base text-gray-700 dark:text-gray-300" :class="[isCalling ? 'visible' : 'collapse']">
       请开始说话
     </div>
 
     <!-- Dots 组件 + 按钮组：固定相距 100px -->
     <div class="flex flex-col items-center gap-y-[100px] mt-12">
-      <Dots />
+      <Dots :is-show="isCalling" />
       <div class="flex items-center gap-2">
-        <!-- <iconify-icon icon="carbon:phone" width="32" height="32" /> -->
-
-        <NButton quaternary circle>
+        <!-- 电话按钮：点击拨打/挂断 -->
+        <NButton quaternary circle @click="toggleCall">
           <icon-carbon-phone v-if="!isCalling" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">
           <icon-carbon-send-alt class="w-5 h-5" />
         </NButton>
-        <!-- <NButton tertiary size="small" @click="showActivation">
-          激活
-        </NButton> -->
       </div>
     </div>
   </div>

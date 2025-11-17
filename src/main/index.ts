@@ -1,13 +1,13 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerIpcChannels } from './ipc'
 import { handleActivationOnStartup } from './services/activationHandler'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
-import { ensureMainWindow } from './windows/windowManager'
+import { ensureMainWindow, toggleSettings } from './windows/windowManager'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -87,6 +87,28 @@ app.whenReady().then(() => {
 
   registerIpcChannels()
   registerTray()
+
+  // macOS Dock 菜单
+  if (process.platform === 'darwin' && app.dock) {
+    const dockMenu = Menu.buildFromTemplate([
+      {
+        label: '显示主窗口',
+        click: () => {
+          const win = ensureMainWindow()
+          win.show()
+          win.focus()
+        },
+      },
+      { type: 'separator' },
+      {
+        label: '设置',
+        click: () => {
+          toggleSettings()
+        },
+      },
+    ])
+    app.dock.setMenu(dockMenu)
+  }
 
   // macOS：二次保险
   ensureDockVisible()
