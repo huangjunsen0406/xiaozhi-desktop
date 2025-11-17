@@ -8,6 +8,7 @@ export class AudioCapture {
   private workletNode: AudioWorkletNode | null = null
   private stream: MediaStream | null = null
   private source: MediaStreamAudioSourceNode | null = null
+  private deviceId: string | undefined = undefined
 
   // 配置常量
   private readonly SAMPLE_RATE = 16000 // 16kHz
@@ -15,10 +16,13 @@ export class AudioCapture {
 
   /**
    * 初始化音频采集
+   * @param deviceId 可选的设备ID，用于指定麦克风设备
    */
-  async initialize(): Promise<void> {
+  async initialize(deviceId?: string): Promise<void> {
     try {
-      console.log('初始化 AudioCapture...')
+      console.log('初始化 AudioCapture...', deviceId ? `设备ID: ${deviceId}` : '使用默认设备')
+
+      this.deviceId = deviceId
 
       // 创建 16kHz 音频上下文
       this.audioContext = new AudioContext({
@@ -51,24 +55,41 @@ export class AudioCapture {
 
   /**
    * 开始采集音频
+   * @param deviceId 可选的设备ID，如果提供则覆盖初始化时的设备ID
    */
-  async start(): Promise<void> {
+  async start(deviceId?: string): Promise<void> {
     if (!this.audioContext || !this.workletNode) {
       throw new Error('AudioCapture 未初始化')
     }
 
+    // 如果提供了新的设备ID，更新当前设备ID
+    if (deviceId !== undefined) {
+      this.deviceId = deviceId
+    }
+
     try {
-      console.log('请求麦克风权限...')
+      console.log('请求麦克风权限...', this.deviceId ? `设备ID: ${this.deviceId}` : '使用默认设备')
+
+      // 获取音频配置
+      const audioConfig = await window.api.audioGetConfig()
+
+      // 构建音频约束
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: audioConfig.enableEchoCancellation,
+        noiseSuppression: audioConfig.enableNoiseReduction,
+        autoGainControl: true,
+        sampleRate: this.SAMPLE_RATE,
+        channelCount: this.CHANNELS,
+      }
+
+      // 如果指定了设备ID且不是 'default'，添加设备约束
+      if (this.deviceId && this.deviceId !== 'default') {
+        audioConstraints.deviceId = { exact: this.deviceId }
+      }
 
       // 获取麦克风流
       this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true, // 启用回声消除
-          noiseSuppression: true, // 启用噪声抑制
-          autoGainControl: true, // 启用自动增益
-          sampleRate: this.SAMPLE_RATE,
-          channelCount: this.CHANNELS,
-        },
+        audio: audioConstraints,
       })
 
       console.log('麦克风权限已获取')
@@ -88,28 +109,69 @@ export class AudioCapture {
   }
 
   /**
+   * 切换输入设备
+   * @param deviceId 新的设备ID
+   */
+  async switchDevice(deviceId: string): Promise<void> {
+    console.log('切换输入设备:', deviceId)
+
+    // 停止当前采集
+    this.stop()
+
+    // 使用新设备重新启动
+    await this.start(deviceId)
+  }
+
+  /**
    * 停止采集音频
    */
   stop(): void {
     console.log('停止音频采集...')
 
-    // 断开连接
-    if (this.source) {
-      this.source.disconnect()
-      this.source = null
-    }
+    try {
+      // 断开连接
+      if (this.source) {
+        try {
+          this.source.disconnect()
+        }
+        catch (e) {
+          // 忽略断开连接错误
+          console.log(e)
+        }
+        this.source = null
+      }
 
-    if (this.workletNode) {
-      this.workletNode.disconnect()
-    }
+      if (this.workletNode) {
+        try {
+          this.workletNode.disconnect()
+        }
+        catch (e) {
+          console.log(e)
+          // 忽略断开连接错误
+        }
+      }
 
-    // 停止媒体流
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop())
-      this.stream = null
-    }
+      // 停止媒体流
+      if (this.stream) {
+        this.stream.getTracks().forEach((track) => {
+          try {
+            if (track.readyState !== 'ended') {
+              track.stop()
+            }
+          }
+          catch (e) {
+            // 忽略停止错误
+            console.log(e)
+          }
+        })
+        this.stream = null
+      }
 
-    console.log('音频采集已停止')
+      console.log('音频采集已停止')
+    }
+    catch (error) {
+      console.warn('停止音频采集时发生错误（已忽略）:', error)
+    }
   }
 
   /**

@@ -93,6 +93,27 @@ export class DatabaseManager {
       )
     `)
 
+    // 音频配置表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS audio_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        -- 设备选择
+        input_device_id TEXT,
+        output_device_id TEXT,
+        -- 音量设置
+        microphone_volume INTEGER DEFAULT 80,
+        speaker_volume INTEGER DEFAULT 70,
+        -- 音频处理
+        enable_noise_reduction INTEGER DEFAULT 1,
+        enable_echo_cancellation INTEGER DEFAULT 1,
+        -- 对话模式: 'auto' 或 'realtime'
+        conversation_mode TEXT DEFAULT 'auto',
+        -- 时间戳
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `)
+
     console.log('[Database] 数据库表检查完成')
   }
 
@@ -279,6 +300,105 @@ export class DatabaseManager {
       mqtt_password: config.mqtt_password,
       mqtt_publish_topic: config.mqtt_publish_topic,
       mqtt_subscribe_topic: config.mqtt_subscribe_topic,
+    }
+  }
+
+  /* ==================== 音频配置相关 ==================== */
+
+  /**
+   * 获取或创建音频配置
+   */
+  getOrCreateAudioConfig(): any {
+    // 先尝试查找
+    const existing = this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get()
+
+    if (existing) {
+      return existing
+    }
+
+    // 插入默认配置
+    const result = this.db.prepare(`
+      INSERT INTO audio_config (microphone_volume, speaker_volume, enable_noise_reduction, enable_echo_cancellation, conversation_mode)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(80, 70, 1, 1, 'auto')
+
+    return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid)
+  }
+
+  /**
+   * 获取音频配置
+   */
+  getAudioConfig(): any {
+    return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get()
+  }
+
+  /**
+   * 更新音频配置（批量）
+   */
+  updateAudioConfig(updates: {
+    input_device_id?: string | null
+    output_device_id?: string | null
+    microphone_volume?: number
+    speaker_volume?: number
+    enable_noise_reduction?: boolean
+    enable_echo_cancellation?: boolean
+    conversation_mode?: string
+  }): void {
+    // 确保配置记录存在
+    let config = this.getAudioConfig()
+    if (!config) {
+      config = this.getOrCreateAudioConfig()
+    }
+
+    // 转换布尔值为整数
+    const dbUpdates: Record<string, any> = {}
+    for (const [key, value] of Object.entries(updates)) {
+      if (typeof value === 'boolean') {
+        dbUpdates[key] = value ? 1 : 0
+      }
+      else if (value !== undefined) {
+        dbUpdates[key] = value
+      }
+    }
+
+    // 构建更新语句
+    const fields = Object.keys(dbUpdates)
+    if (fields.length === 0) {
+      return
+    }
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ')
+    const values = fields.map(f => dbUpdates[f])
+
+    this.db.prepare(`
+      UPDATE audio_config
+      SET ${setClause}, updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `).run(...values, config.id)
+  }
+
+  /**
+   * 获取格式化的音频配置（转换为应用使用的格式）
+   */
+  getFormattedAudioConfig(): {
+    inputDeviceId?: string
+    outputDeviceId?: string
+    microphoneVolume: number
+    speakerVolume: number
+    enableNoiseReduction: boolean
+    enableEchoCancellation: boolean
+    conversationMode: string
+  } {
+    const config = this.getOrCreateAudioConfig()
+
+    return {
+      inputDeviceId: config.input_device_id || undefined,
+      outputDeviceId: config.output_device_id || undefined,
+      microphoneVolume: config.microphone_volume,
+      speakerVolume: config.speaker_volume,
+      enableNoiseReduction: Boolean(config.enable_noise_reduction),
+      enableEchoCancellation: Boolean(config.enable_echo_cancellation),
+      conversationMode: config.conversation_mode,
     }
   }
 

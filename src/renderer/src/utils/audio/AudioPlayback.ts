@@ -7,6 +7,7 @@ import type { Buffer } from 'node:buffer'
 export class AudioPlayback {
   private audioContext: AudioContext | null = null
   private nextStartTime = 0 // 下一帧开始时间(用于无缝播放)
+  private deviceId: string | undefined = undefined
   // 配置常量
   private readonly SAMPLE_RATE = 24000 // 24kHz
   private readonly CHANNELS = 1 // 单声道
@@ -14,10 +15,13 @@ export class AudioPlayback {
 
   /**
    * 初始化音频播放
+   * @param deviceId 可选的设备ID，用于指定输出设备
    */
-  async initialize(): Promise<void> {
+  async initialize(deviceId?: string): Promise<void> {
     try {
-      console.log('初始化 AudioPlayback...')
+      console.log('初始化 AudioPlayback...', deviceId ? `设备ID: ${deviceId}` : '使用默认设备')
+
+      this.deviceId = deviceId
 
       // 创建 24kHz 音频上下文
       this.audioContext = new AudioContext({
@@ -25,6 +29,18 @@ export class AudioPlayback {
       })
 
       console.log(`AudioContext 创建成功: ${this.audioContext.sampleRate}Hz`)
+
+      // 如果指定了输出设备且不是 'default'，设置输出目标
+      if (this.deviceId && this.deviceId !== 'default' && 'setSinkId' in this.audioContext) {
+        try {
+          // @ts-expect-error setSinkId 是实验性 API，TypeScript 可能没有类型定义
+          await this.audioContext.setSinkId(this.deviceId)
+          console.log('输出设备已设置:', this.deviceId)
+        }
+        catch (error) {
+          console.warn('设置输出设备失败，使用默认设备:', error)
+        }
+      }
 
       // 监听主进程发送的解码后音频
       window.api.audioOnOpusDecoded((pcmBuffer: Buffer) => {
@@ -36,6 +52,36 @@ export class AudioPlayback {
     catch (error) {
       console.error('AudioPlayback 初始化失败:', error)
       throw error
+    }
+  }
+
+  /**
+   * 切换输出设备
+   * @param deviceId 新的设备ID
+   */
+  async switchDevice(deviceId: string): Promise<void> {
+    if (!this.audioContext) {
+      throw new Error('AudioContext 未初始化')
+    }
+
+    console.log('切换输出设备:', deviceId)
+
+    this.deviceId = deviceId
+
+    // 使用 setSinkId 切换输出设备
+    if ('setSinkId' in this.audioContext) {
+      try {
+        // @ts-expect-error setSinkId 是实验性 API
+        await this.audioContext.setSinkId(deviceId)
+        console.log('输出设备已切换:', deviceId)
+      }
+      catch (error) {
+        console.error('切换输出设备失败:', error)
+        throw error
+      }
+    }
+    else {
+      console.warn('当前浏览器不支持 setSinkId API')
     }
   }
 

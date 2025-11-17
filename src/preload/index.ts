@@ -44,6 +44,11 @@ const api = {
   audioRemoveOpusDecodedListener: (): void => {
     ipcRenderer.removeAllListeners('audio:opus-decoded')
   },
+  // Audio Device APIs
+  audioGetConfig: (): Promise<any> => ipcRenderer.invoke('audio:get-config'),
+  audioUpdateConfig: (config: any): Promise<void> => ipcRenderer.invoke('audio:update-config', config),
+  audioGetDefaultDeviceId: (kind: 'input' | 'output'): Promise<string | null> =>
+    ipcRenderer.invoke('audio:get-default-device-id', kind),
   // Application 控制 APIs
   appStartListeningManual: (): Promise<void> => ipcRenderer.invoke('app:start-listening-manual'),
   appStopListeningManual: (): Promise<void> => ipcRenderer.invoke('app:stop-listening-manual'),

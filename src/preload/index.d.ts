@@ -35,6 +35,10 @@ export interface RendererApi {
   audioSendPCM: (pcm: Int16Array) => void
   audioOnOpusDecoded: (callback: (pcm: Buffer) => void) => void
   audioRemoveOpusDecodedListener: () => void
+  // Audio Device APIs
+  audioGetConfig: () => Promise<any>
+  audioUpdateConfig: (config: any) => Promise<void>
+  audioGetDefaultDeviceId: (kind: 'input' | 'output') => Promise<string | null>
   // Application 控制 APIs
   appStartListeningManual: () => Promise<void>
   appStopListeningManual: () => Promise<void>
