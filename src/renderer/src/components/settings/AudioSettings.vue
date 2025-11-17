@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NForm, NFormItem, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 // 获取 message 实例
 const message = useMessage()
@@ -10,11 +10,13 @@ const enableMicrophone = ref(true)
 const microphoneDevice = ref<string>('')
 const enableSpeaker = ref(true)
 const speakerDevice = ref<string>('')
-const microphoneVolume = ref(80)
 const speakerVolume = ref(70)
 const enableNoiseReduction = ref(true)
 const enableEchoCancellation = ref(true)
 const enableRealtimeConversation = ref(false) // 实时对话模式开关
+
+// 系统音量控制支持标志
+const systemVolumeSupported = ref(false)
 
 // 设备列表
 const microphoneDevices = ref<Array<{ label: string, value: string }>>([])
@@ -85,11 +87,13 @@ async function enumerateDevices(): Promise<void> {
  */
 async function loadConfig(): Promise<void> {
   try {
+    // 检查系统音量控制是否支持
+    systemVolumeSupported.value = await window.api.audioSystemVolumeSupported()
+    console.log('系统音量控制支持:', systemVolumeSupported.value)
+
     const config = await window.api.audioGetConfig()
 
     // 加载配置
-    microphoneVolume.value = config.microphoneVolume || 80
-    speakerVolume.value = config.speakerVolume || 70
     enableNoiseReduction.value = config.enableNoiseReduction !== false
     enableEchoCancellation.value = config.enableEchoCancellation !== false
     enableRealtimeConversation.value = config.conversationMode === 'realtime'
@@ -100,6 +104,18 @@ async function loadConfig(): Promise<void> {
     }
     if (config.outputDeviceId) {
       speakerDevice.value = config.outputDeviceId
+    }
+
+    if (systemVolumeSupported.value) {
+      try {
+        const systemVolume = await window.api.audioSystemGetVolume()
+        speakerVolume.value = systemVolume
+        console.log('从系统读取扬声器音量:', systemVolume)
+      }
+      catch (error) {
+        console.warn('读取系统音量失败:', error)
+        speakerVolume.value = 70
+      }
     }
 
     console.log('音频配置已加载:', config)
@@ -114,16 +130,12 @@ async function loadConfig(): Promise<void> {
  */
 async function handleSave(): Promise<void> {
   try {
-    // 构建配置对象，只包含有效的设备ID
     const config: any = {
-      microphoneVolume: microphoneVolume.value,
-      speakerVolume: speakerVolume.value,
       enableNoiseReduction: enableNoiseReduction.value,
       enableEchoCancellation: enableEchoCancellation.value,
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',
     }
 
-    // 只在设备ID有效时才添加到配置中
     if (microphoneDevice.value && microphoneDevice.value !== 'default') {
       config.inputDeviceId = microphoneDevice.value
     }
@@ -150,6 +162,19 @@ async function handleCustomButton(): Promise<void> {
   message.success('设备列表已刷新')
 }
 
+// 监听扬声器音量变化，实时设置系统音量
+watch(speakerVolume, async (newVolume) => {
+  if (systemVolumeSupported.value) {
+    try {
+      await window.api.audioSystemSetVolume(newVolume)
+      console.log(`实时设置系统音量: ${newVolume}%`)
+    }
+    catch (error) {
+      console.warn('实时设置系统音量失败:', error)
+    }
+  }
+})
+
 // 组件挂载时初始化
 onMounted(async () => {
   await enumerateDevices()
@@ -175,16 +200,6 @@ defineExpose({ handleSave, handleCustomButton })
         style="width: 300px"
       />
     </NFormItem>
-    <NFormItem label="麦克风音量" :disabled="!enableMicrophone">
-      <NSlider
-        v-model:value="microphoneVolume"
-        :min="0"
-        :max="100"
-        :step="1"
-        :disabled="!enableMicrophone"
-        style="width: 200px"
-      />
-    </NFormItem>
 
     <!-- 扬声器设置 -->
     <NFormItem label="启用扬声器">
@@ -200,14 +215,18 @@ defineExpose({ handleSave, handleCustomButton })
       />
     </NFormItem>
     <NFormItem label="扬声器音量" :disabled="!enableSpeaker">
-      <NSlider
-        v-model:value="speakerVolume"
-        :min="0"
-        :max="100"
-        :step="1"
-        :disabled="!enableSpeaker"
-        style="width: 200px"
-      />
+      <div style="display: flex; flex-direction: column; gap: 4px; width: 300px">
+        <NSlider
+          v-model:value="speakerVolume"
+          :min="0"
+          :max="100"
+          :step="1"
+          :disabled="!enableSpeaker"
+        />
+        <span style="color: #999; font-size: 12px">
+          当前系统音量: {{ speakerVolume }}% (实时跟随系统)
+        </span>
+      </div>
     </NFormItem>
 
     <!-- 音频处理设置 -->

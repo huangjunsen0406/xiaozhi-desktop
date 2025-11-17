@@ -100,9 +100,6 @@ export class DatabaseManager {
         -- 设备选择
         input_device_id TEXT,
         output_device_id TEXT,
-        -- 音量设置
-        microphone_volume INTEGER DEFAULT 80,
-        speaker_volume INTEGER DEFAULT 70,
         -- 音频处理
         enable_noise_reduction INTEGER DEFAULT 1,
         enable_echo_cancellation INTEGER DEFAULT 1,
@@ -316,11 +313,11 @@ export class DatabaseManager {
       return existing
     }
 
-    // 插入默认配置
+    // 插入默认配置（不包含音量）
     const result = this.db.prepare(`
-      INSERT INTO audio_config (microphone_volume, speaker_volume, enable_noise_reduction, enable_echo_cancellation, conversation_mode)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(80, 70, 1, 1, 'auto')
+      INSERT INTO audio_config (enable_noise_reduction, enable_echo_cancellation, conversation_mode)
+      VALUES (?, ?, ?)
+    `).run(1, 1, 'auto')
 
     return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid)
   }
@@ -338,8 +335,6 @@ export class DatabaseManager {
   updateAudioConfig(updates: {
     input_device_id?: string | null
     output_device_id?: string | null
-    microphone_volume?: number
-    speaker_volume?: number
     enable_noise_reduction?: boolean
     enable_echo_cancellation?: boolean
     conversation_mode?: string
@@ -383,22 +378,18 @@ export class DatabaseManager {
   getFormattedAudioConfig(): {
     inputDeviceId?: string
     outputDeviceId?: string
-    microphoneVolume: number
-    speakerVolume: number
     enableNoiseReduction: boolean
     enableEchoCancellation: boolean
-    conversationMode: string
+    conversationMode: 'realtime' | 'auto'
   } {
     const config = this.getOrCreateAudioConfig()
 
     return {
       inputDeviceId: config.input_device_id || undefined,
       outputDeviceId: config.output_device_id || undefined,
-      microphoneVolume: config.microphone_volume,
-      speakerVolume: config.speaker_volume,
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
       enableEchoCancellation: Boolean(config.enable_echo_cancellation),
-      conversationMode: config.conversation_mode,
+      conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',
     }
   }
 

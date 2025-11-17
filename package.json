@@ -27,6 +27,7 @@
     "@vueuse/core": "^13.9.0",
     "axios": "^1.13.2",
     "better-sqlite3": "^12.4.1",
+    "easy-volume": "^1.2.0",
     "electron-updater": "^6.3.9",
     "getmac": "^6.6.0",
     "lamejs": "^1.2.1",

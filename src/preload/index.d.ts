@@ -39,6 +39,10 @@ export interface RendererApi {
   audioGetConfig: () => Promise<any>
   audioUpdateConfig: (config: any) => Promise<void>
   audioGetDefaultDeviceId: (kind: 'input' | 'output') => Promise<string | null>
+  // System Volume Control APIs
+  audioSystemGetVolume: () => Promise<number>
+  audioSystemSetVolume: (volume: number) => Promise<void>
+  audioSystemVolumeSupported: () => Promise<boolean>
   // Application 控制 APIs
   appStartListeningManual: () => Promise<void>
   appStopListeningManual: () => Promise<void>

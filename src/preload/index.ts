@@ -49,6 +49,10 @@ const api = {
   audioUpdateConfig: (config: any): Promise<void> => ipcRenderer.invoke('audio:update-config', config),
   audioGetDefaultDeviceId: (kind: 'input' | 'output'): Promise<string | null> =>
     ipcRenderer.invoke('audio:get-default-device-id', kind),
+  // System Volume Control APIs
+  audioSystemGetVolume: (): Promise<number> => ipcRenderer.invoke('audio:system-get-volume'),
+  audioSystemSetVolume: (volume: number): Promise<void> => ipcRenderer.invoke('audio:system-set-volume', volume),
+  audioSystemVolumeSupported: (): Promise<boolean> => ipcRenderer.invoke('audio:system-volume-supported'),
   // Application 控制 APIs
   appStartListeningManual: (): Promise<void> => ipcRenderer.invoke('app:start-listening-manual'),
   appStopListeningManual: (): Promise<void> => ipcRenderer.invoke('app:stop-listening-manual'),
