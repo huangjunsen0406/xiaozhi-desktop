@@ -1,4 +1,5 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
+import type { Buffer } from 'node:buffer'
 
 export interface RendererApi {
   togglePanel: () => void
@@ -29,6 +30,17 @@ export interface RendererApi {
   activationStart: (data: any) => Promise<any>
   activationCancel: () => Promise<any>
   activationCheckStatus: () => Promise<any>
+  // Audio APIs
+  audioSendPCM: (pcm: Int16Array) => void
+  audioOnOpusDecoded: (callback: (pcm: Buffer) => void) => void
+  audioRemoveOpusDecodedListener: () => void
+  // Application 控制 APIs
+  appStartListeningManual: () => Promise<void>
+  appStopListeningManual: () => Promise<void>
+  appStartAutoConversation: () => Promise<void>
+  appStopAutoConversation: () => Promise<void>
+  appGetState: () => Promise<any>
+  appOnStateChanged: (callback: (state: any) => void) => void
 }
 
 declare global {

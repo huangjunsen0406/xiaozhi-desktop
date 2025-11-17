@@ -4,9 +4,10 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerIpcChannels } from './ipc'
+import { handleActivationOnStartup } from './services/activationHandler'
+import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { ensureMainWindow } from './windows/windowManager'
-import { handleActivationOnStartup } from './services/activationHandler'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -91,11 +92,23 @@ app.whenReady().then(() => {
   ensureDockVisible()
 
   // 启动时检测激活状态
-  handleActivationOnStartup().then((canContinue) => {
+  handleActivationOnStartup().then(async (canContinue) => {
     if (canContinue) {
-      // 激活检测通过，创建主窗口
-      ensureMainWindow()
-    } else {
+      // 激活检测通过，初始化 Application
+      const application = getApplication()
+      await application.initialize('websocket')
+      await application.start()
+
+      // 创建主窗口
+      const mainWindow = ensureMainWindow()
+
+      // 设置 AudioPlugin 的主窗口引用
+      const audioPlugin = application.getAudioPlugin()
+      if (audioPlugin && mainWindow) {
+        audioPlugin.setMainWindow(mainWindow)
+      }
+    }
+    else {
       // 激活检测失败，退出应用
       console.error('激活检测失败，应用退出')
       app.quit()

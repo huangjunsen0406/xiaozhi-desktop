@@ -1,9 +1,10 @@
-import { DeviceState } from '../constants/DeviceState'
-import { AbortReason, ListeningMode } from '../protocols/Protocol'
+import type { Buffer } from 'node:buffer'
 import type { Protocol } from '../protocols/Protocol'
-import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
+import { DeviceState } from '../constants/DeviceState'
+import { AudioPlugin } from '../plugins/AudioPlugin'
 import { PluginManager } from '../plugins/PluginManager'
-
+import { AbortReason, ListeningMode } from '../protocols/Protocol'
+import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 /**
  * 应用核心类 (单例模式)
  * 负责协调协议通信、插件管理和设备状态
@@ -25,6 +26,7 @@ export class Application {
 
   // 插件系统
   private plugins = new PluginManager()
+  private audioPlugin: AudioPlugin | null = null
 
   // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
@@ -61,7 +63,11 @@ export class Application {
     // 设置协议回调
     this.setupProtocolCallbacks()
 
-    // 初始化插件（暂时不注册插件，等后续实现）
+    // 注册插件
+    this.audioPlugin = new AudioPlugin()
+    this.plugins.register(this.audioPlugin)
+
+    // 初始化插件
     await this.plugins.setupAll(this)
 
     console.log('[Application] 初始化完成')
@@ -228,8 +234,8 @@ export class Application {
         return
       }
 
-      // 默认使用 AUTO_STOP 模式（桌面版不开启回声消除）
-      const mode = ListeningMode.AUTO_STOP
+      // 使用 REALTIME 模式（实时对话，可随时打断）
+      const mode = ListeningMode.REALTIME
       this.listeningMode = mode
       this.keepListening = true
 
@@ -238,6 +244,34 @@ export class Application {
     }
     catch (error) {
       console.error('[Application] 开始自动对话失败:', error)
+    }
+  }
+
+  /**
+   * 停止自动对话（断开连接）
+   */
+  async stopAutoConversation(): Promise<void> {
+    try {
+      console.log('[Application] 停止自动对话')
+      this.keepListening = false
+
+      // 如果正在说话，发送打断
+      if (this.deviceState === DeviceState.SPEAKING) {
+        await this.protocol?.sendAbortSpeaking(AbortReason.USER_INTERRUPTED)
+      }
+
+      // 停止监听
+      await this.protocol?.sendStopListening()
+
+      // 关闭音频通道
+      if (this.protocol) {
+        await this.protocol.closeAudioChannel()
+      }
+
+      await this.setDeviceState(DeviceState.IDLE)
+    }
+    catch (error) {
+      console.error('[Application] 停止自动对话失败:', error)
     }
   }
 
@@ -252,15 +286,14 @@ export class Application {
     console.log(`[Application] 设备状态变更: ${this.deviceState} -> ${state}`)
     this.deviceState = state
 
+    // 如果进入监听状态，立即重置中止标志（在广播之前）
+    if (state === DeviceState.LISTENING) {
+      this.aborted = false
+    }
+
     // 广播状态变化
     try {
       await this.plugins.notifyDeviceStateChanged(state)
-
-      // 如果进入监听状态，重置中止标志
-      if (state === DeviceState.LISTENING) {
-        await new Promise(resolve => setTimeout(resolve, 500))
-        this.aborted = false
-      }
     }
     catch (error) {
       console.error('[Application] 广播状态变化失败:', error)
@@ -288,6 +321,10 @@ export class Application {
   private handleNetworkError(error: string): void {
     console.error('[Application] 网络错误:', error)
     this.keepListening = false
+    // 通知插件
+    this.plugins.notifyNetworkError(error).catch((err) => {
+      console.error('[Application] 通知插件网络错误失败:', err)
+    })
   }
 
   /**
@@ -349,6 +386,7 @@ export class Application {
    */
   private async handleAudioChannelOpened(): Promise<void> {
     console.log('[Application] 音频通道已打开')
+    await this.plugins.notifyAudioChannelOpened()
     await this.setDeviceState(DeviceState.LISTENING)
   }
 
@@ -357,6 +395,7 @@ export class Application {
    */
   private async handleAudioChannelClosed(): Promise<void> {
     console.log('[Application] 音频通道已关闭')
+    await this.plugins.notifyAudioChannelClosed()
     await this.setDeviceState(DeviceState.IDLE)
   }
 
@@ -450,6 +489,13 @@ export class Application {
    */
   getPluginManager(): PluginManager {
     return this.plugins
+  }
+
+  /**
+   * 获取 AudioPlugin 实例
+   */
+  getAudioPlugin(): AudioPlugin | null {
+    return this.audioPlugin
   }
 
   /**

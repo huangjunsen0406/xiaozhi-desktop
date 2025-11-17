@@ -1,11 +1,11 @@
-import Database from 'better-sqlite3'
-import { join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import process from 'node:process'
+import Database from 'better-sqlite3'
 import { app } from 'electron'
 
 /**
  * 数据库管理器 - 单例模式
- * 重构版：使用横向表设计，每个选项卡对应一张表
  */
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null

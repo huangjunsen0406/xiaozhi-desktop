@@ -2,6 +2,7 @@
  * Protocol 抽象基类
  * 定义所有通信协议的通用接口
  */
+import type { Buffer } from 'node:buffer'
 
 export enum AbortReason {
   WAKE_WORD_DETECTED = 'wake_word_detected',

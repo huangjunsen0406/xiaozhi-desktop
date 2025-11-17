@@ -1,6 +1,7 @@
-import axios, { AxiosError } from 'axios'
-import { DeviceFingerprintManager } from './deviceFingerprintDB'
+import type { AxiosError } from 'axios'
+import axios from 'axios'
 import { getConfigManager } from './configManagerDB'
+import { DeviceFingerprintManager } from './deviceFingerprintDB'
 
 interface ActivationData {
   challenge: string

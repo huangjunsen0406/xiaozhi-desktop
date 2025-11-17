@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto'
-import { networkInterfaces } from 'node:os'
+import { hostname, networkInterfaces } from 'node:os'
+import process from 'node:process'
 import { machineId } from 'node-machine-id'
 import { DatabaseManager } from './database'
 
@@ -58,7 +59,7 @@ export class DeviceFingerprintManager {
    * 获取设备主机名
    */
   private getHostname(): string {
-    return require('node:os').hostname()
+    return hostname()
   }
 
   /**
@@ -69,7 +70,7 @@ export class DeviceFingerprintManager {
       return mac
 
     // 移除所有非字母数字字符
-    const cleanMac = mac.replace(/[^a-fA-F0-9]/g, '')
+    const cleanMac = mac.replace(/[^a-f0-9]/gi, '')
 
     // 确保长度为 12
     if (cleanMac.length !== 12) {

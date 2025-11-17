@@ -18,7 +18,6 @@ Notes
 """
 
 import argparse
-import os
 from pathlib import Path
 from typing import Iterable, Tuple
 

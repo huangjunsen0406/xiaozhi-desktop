@@ -1,7 +1,7 @@
 import axios from 'axios'
-import { DeviceFingerprintManager } from './deviceFingerprintDB'
 import { ActivationManager } from './activationManager'
 import { getConfigManager } from './configManagerDB'
+import { DeviceFingerprintManager } from './deviceFingerprintDB'
 
 interface ActivationStatus {
   local_activated: boolean
@@ -52,7 +52,8 @@ export class SystemInitializer {
       this.deviceFingerprint = await DeviceFingerprintManager.getInstanceAsync()
       this.initialized = true
       console.log('[SystemInitializer] 设备指纹初始化完成')
-    } else {
+    }
+    else {
       console.log('[SystemInitializer] 设备指纹已经初始化过了')
     }
   }

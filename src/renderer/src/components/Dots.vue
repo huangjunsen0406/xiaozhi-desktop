@@ -1,8 +1,13 @@
 <script setup lang="ts">
+withDefaults(defineProps<{
+  isShow?: boolean
+}>(), {
+  isShow: false,
+})
 </script>
 
 <template>
-  <div class="dots">
+  <div class="dots" :class="[isShow ? 'visible' : 'collapse']">
     <span />
     <span />
     <span />

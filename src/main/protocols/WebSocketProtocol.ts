@@ -1,8 +1,8 @@
+import type { ConnectionInfo, HelloMessage } from './Protocol'
+import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
 import { getConfigManager } from '../services/configManagerDB'
-import type { ConnectionInfo, HelloMessage } from './Protocol'
 import { Protocol } from './Protocol'
-
 /**
  * WebSocket 协议实现
  */

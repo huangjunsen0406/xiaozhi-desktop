@@ -1,4 +1,3 @@
-// import process from 'node:process'
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge, ipcRenderer } from 'electron'
 // Custom APIs for renderer
@@ -35,6 +34,23 @@ const api = {
   activationStart: (data: any): Promise<any> => ipcRenderer.invoke('activation:start', data),
   activationCancel: (): Promise<any> => ipcRenderer.invoke('activation:cancel'),
   activationCheckStatus: (): Promise<any> => ipcRenderer.invoke('activation:check-status'),
+  // Audio APIs
+  audioSendPCM: (pcm: Int16Array): void => ipcRenderer.send('audio:pcm', pcm),
+  audioOnOpusDecoded: (callback: (pcm: Buffer) => void): void => {
+    ipcRenderer.on('audio:opus-decoded', (_, pcm) => callback(pcm))
+  },
+  audioRemoveOpusDecodedListener: (): void => {
+    ipcRenderer.removeAllListeners('audio:opus-decoded')
+  },
+  // Application 控制 APIs
+  appStartListeningManual: (): Promise<void> => ipcRenderer.invoke('app:start-listening-manual'),
+  appStopListeningManual: (): Promise<void> => ipcRenderer.invoke('app:stop-listening-manual'),
+  appStartAutoConversation: (): Promise<void> => ipcRenderer.invoke('app:start-auto-conversation'),
+  appStopAutoConversation: (): Promise<void> => ipcRenderer.invoke('app:stop-auto-conversation'),
+  appGetState: (): Promise<any> => ipcRenderer.invoke('app:get-state'),
+  appOnStateChanged: (callback: (state: any) => void): void => {
+    ipcRenderer.on('app:state-changed', (_, state) => callback(state))
+  },
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
