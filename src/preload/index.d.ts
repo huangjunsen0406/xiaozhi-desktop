@@ -48,6 +48,7 @@ export interface RendererApi {
   appStopListeningManual: () => Promise<void>
   appStartAutoConversation: () => Promise<void>
   appStopAutoConversation: () => Promise<void>
+  appSendText: (text: string) => Promise<void>
   appGetState: () => Promise<any>
   appOnStateChanged: (callback: (state: any) => void) => void
   // Background Audio Window APIs

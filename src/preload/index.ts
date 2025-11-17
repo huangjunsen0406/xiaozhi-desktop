@@ -58,6 +58,7 @@ const api = {
   appStopListeningManual: (): Promise<void> => ipcRenderer.invoke('app:stop-listening-manual'),
   appStartAutoConversation: (): Promise<void> => ipcRenderer.invoke('app:start-auto-conversation'),
   appStopAutoConversation: (): Promise<void> => ipcRenderer.invoke('app:stop-auto-conversation'),
+  appSendText: (text: string): Promise<void> => ipcRenderer.invoke('app:send-text', text),
   appGetState: (): Promise<any> => ipcRenderer.invoke('app:get-state'),
   appOnStateChanged: (callback: (state: any) => void): void => {
     ipcRenderer.on('app:state-changed', (_, state) => callback(state))

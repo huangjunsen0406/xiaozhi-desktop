@@ -37,5 +37,11 @@ export function registerAppIpc(): void {
     return app.getStateSnapshot()
   })
 
+  // 发送文本消息
+  ipcMain.handle('app:send-text', async (_event, text: string) => {
+    const app = getApplication()
+    await app.sendText(text)
+  })
+
   console.log('[App IPC] Application 控制 IPC 通道已注册')
 }

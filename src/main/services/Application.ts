@@ -329,6 +329,37 @@ export class Application {
   }
 
   /**
+   * 发送文本消息
+   * 如果正在说话中，先中止语音输出
+   * 然后发送文本作为唤醒词检测消息
+   */
+  async sendText(text: string): Promise<void> {
+    try {
+      console.log(`[Application] 发送文本消息: ${text}`)
+
+      // 如果正在说话，先中止
+      if (this.deviceState === DeviceState.SPEAKING) {
+        console.log('[Application] 说话中，先中止语音输出')
+        await this.abortSpeaking(AbortReason.USER_INTERRUPTED)
+      }
+
+      // 确保协议已连接
+      const ok = await this.connectProtocol()
+      if (!ok) {
+        console.error('[Application] 协议未连接，无法发送文本')
+        return
+      }
+
+      // 发送唤醒词检测消息（服务端会将文本作为用户输入处理）
+      await this.protocol!.sendWakeWordDetected(text)
+      console.log('[Application] 文本消息已发送')
+    }
+    catch (error) {
+      console.error('[Application] 发送文本消息失败:', error)
+    }
+  }
+
+  /**
    * 处理网络错误
    */
   private handleNetworkError(error: string): void {

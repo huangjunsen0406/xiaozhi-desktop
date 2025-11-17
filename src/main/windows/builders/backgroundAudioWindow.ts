@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
 
