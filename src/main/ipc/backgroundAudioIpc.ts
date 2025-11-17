@@ -12,7 +12,13 @@ export function registerBackgroundAudioIpc(): void {
   function sendAudioCommand(command: string, data?: any): void {
     const audioWindow = getBackgroundAudioWindow()
     if (audioWindow && !audioWindow.isDestroyed()) {
-      audioWindow.webContents.send('audio:command', command, data)
+      // 只在 data 有值时才传递第三个参数，避免传递 undefined 导致 IPC 序列化错误
+      if (data !== undefined) {
+        audioWindow.webContents.send('audio:command', command, data)
+      }
+      else {
+        audioWindow.webContents.send('audio:command', command)
+      }
     }
     else {
       console.warn('[BackgroundAudioIpc] 后台音频窗口不存在或已销毁')
