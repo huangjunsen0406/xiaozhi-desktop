@@ -50,6 +50,9 @@ export interface RendererApi {
   appStopAutoConversation: () => Promise<void>
   appGetState: () => Promise<any>
   appOnStateChanged: (callback: (state: any) => void) => void
+  // Background Audio Window APIs
+  onAudioCommand: (callback: (command: string, data?: any) => void) => void
+  sendAudioState: (state: any) => void
 }
 
 declare global {

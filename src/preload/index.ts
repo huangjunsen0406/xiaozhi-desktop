@@ -62,6 +62,11 @@ const api = {
   appOnStateChanged: (callback: (state: any) => void): void => {
     ipcRenderer.on('app:state-changed', (_, state) => callback(state))
   },
+  // Background Audio Window APIs (用于后台音频窗口)
+  onAudioCommand: (callback: (command: string, data?: any) => void): void => {
+    ipcRenderer.on('audio:command', (_, command, data) => callback(command, data))
+  },
+  sendAudioState: (state: any): void => ipcRenderer.send('audio:state', state),
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

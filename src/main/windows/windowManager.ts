@@ -1,11 +1,12 @@
 import type { BrowserWindow } from 'electron'
-import { buildActivationWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
+import { buildActivationWindow, buildBackgroundAudioWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
 let mainWindow: BrowserWindow | null = null
 let miniWindow: BrowserWindow | null = null
 let panelWindow: BrowserWindow | null = null
 let activationWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
+let backgroundAudioWindow: BrowserWindow | null = null
 
 export function ensureMainWindow(): BrowserWindow {
   if (mainWindow == null) {
@@ -101,4 +102,19 @@ export function toggleSettings(): void {
     win.hide()
   else
     win.show()
+}
+
+export function ensureBackgroundAudioWindow(): BrowserWindow {
+  if (backgroundAudioWindow == null) {
+    const win = buildBackgroundAudioWindow()
+    backgroundAudioWindow = win
+    win.on('closed', () => {
+      backgroundAudioWindow = null
+    })
+  }
+  return backgroundAudioWindow as BrowserWindow
+}
+
+export function getBackgroundAudioWindow(): BrowserWindow | null {
+  return backgroundAudioWindow
 }

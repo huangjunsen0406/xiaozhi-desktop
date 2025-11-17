@@ -32,6 +32,7 @@ export class AudioPlugin extends Plugin {
 
   private protocol: Protocol | null = null
   private mainWindow: BrowserWindow | null = null
+  private backgroundAudioWindow: BrowserWindow | null = null
 
   /**
    * 插件初始化
@@ -47,7 +48,7 @@ export class AudioPlugin extends Plugin {
       initOpusCodec()
       console.log('[AudioPlugin] ✓ OpusCodec 已初始化')
 
-      // 监听来自渲染进程的 PCM 数据
+      // 监听来自后台音频窗口的 PCM 数据
       ipcMain.on('audio:pcm', (_event, pcmData: Int16Array) => {
         this.handlePCMFromRenderer(pcmData)
       })
@@ -106,7 +107,28 @@ export class AudioPlugin extends Plugin {
   async onDeviceStateChanged(state: DeviceState): Promise<void> {
     console.log(`[AudioPlugin] 设备状态变化: ${state}`)
 
-    // 通知渲染进程状态变化
+    // 根据状态控制后台音频窗口
+    if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
+      if (state === 'listening') {
+        // 开始监听前，先切换设备（如果配置有变化）
+        console.log('[AudioPlugin] 通知后台音频窗口检查设备配置')
+        this.backgroundAudioWindow.webContents.send('audio:command', 'switchDevices')
+
+        // 等待设备切换完成后再启动采集
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // 启动音频采集
+        console.log('[AudioPlugin] 通知后台音频窗口启动采集')
+        this.backgroundAudioWindow.webContents.send('audio:command', 'start')
+      }
+      else if (state === 'idle') {
+        // 停止监听 -> 停止音频采集
+        console.log('[AudioPlugin] 通知后台音频窗口停止采集')
+        this.backgroundAudioWindow.webContents.send('audio:command', 'stop')
+      }
+    }
+
+    // 通知主窗口状态变化（用于 UI 显示）
     if (this.mainWindow) {
       this.mainWindow.webContents.send('app:state-changed', {
         deviceState: state,
@@ -120,6 +142,20 @@ export class AudioPlugin extends Plugin {
    */
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window
+  }
+
+  /**
+   * 设置后台音频窗口引用
+   */
+  setBackgroundAudioWindow(window: BrowserWindow): void {
+    this.backgroundAudioWindow = window
+  }
+
+  /**
+   * 获取后台音频窗口引用
+   */
+  getBackgroundAudioWindow(): BrowserWindow | null {
+    return this.backgroundAudioWindow
   }
 
   /**
@@ -167,9 +203,12 @@ export class AudioPlugin extends Plugin {
       // 解码 Opus → PCM
       const pcmBuffer = opusCodec.decode(opusFrame)
 
-      // 发送到渲染进程播放
-      if (this.mainWindow) {
-        this.mainWindow.webContents.send('audio:opus-decoded', pcmBuffer)
+      // 发送到后台音频窗口播放
+      if (this.backgroundAudioWindow) {
+        this.backgroundAudioWindow.webContents.send('audio:opus-decoded', pcmBuffer)
+      }
+      else {
+        console.warn('[AudioPlugin] 后台音频窗口不存在，无法播放音频')
       }
     }
     catch (error) {
@@ -199,6 +238,7 @@ export class AudioPlugin extends Plugin {
     // 清理引用
     this.protocol = null
     this.mainWindow = null
+    this.backgroundAudioWindow = null
 
     // 调用父类 shutdown
     await super.shutdown()

@@ -7,7 +7,7 @@ import { registerIpcChannels } from './ipc'
 import { handleActivationOnStartup } from './services/activationHandler'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
-import { ensureMainWindow, toggleSettings } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, toggleSettings } from './windows/windowManager'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -116,7 +116,11 @@ app.whenReady().then(() => {
   // 启动时检测激活状态
   handleActivationOnStartup().then(async (canContinue) => {
     if (canContinue) {
-      // 激活检测通过，初始化 Application
+      // 激活检测通过，先创建后台音频窗口
+      console.log('[Main] 创建后台音频窗口...')
+      const backgroundAudioWindow = ensureBackgroundAudioWindow()
+
+      // 初始化 Application
       const application = getApplication()
       await application.initialize('websocket')
       await application.start()
@@ -124,10 +128,15 @@ app.whenReady().then(() => {
       // 创建主窗口
       const mainWindow = ensureMainWindow()
 
-      // 设置 AudioPlugin 的主窗口引用
+      // 设置 AudioPlugin 的窗口引用
       const audioPlugin = application.getAudioPlugin()
-      if (audioPlugin && mainWindow) {
-        audioPlugin.setMainWindow(mainWindow)
+      if (audioPlugin) {
+        if (mainWindow) {
+          audioPlugin.setMainWindow(mainWindow)
+        }
+        if (backgroundAudioWindow) {
+          audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
+        }
       }
     }
     else {
@@ -138,6 +147,7 @@ app.whenReady().then(() => {
   }).catch((error) => {
     console.error('激活检测出错:', error)
     // 出错也允许继续，避免阻塞用户
+    ensureBackgroundAudioWindow()
     ensureMainWindow()
   })
 

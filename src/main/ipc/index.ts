@@ -4,6 +4,7 @@ import { showActivation, togglePanel, toggleSettings, toggleToMain, toggleToMini
 import { registerActivationIpc } from './activationIpc'
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
+import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
 import { registerConfigIpc } from './configIpc'
 
 export function registerIpcChannels(): void {
@@ -12,6 +13,7 @@ export function registerIpcChannels(): void {
   registerConfigIpc()
   registerAudioIpc()
   registerAppIpc() // Application 控制 IPC
+  registerBackgroundAudioIpc() // 后台音频窗口控制 IPC
   // 窗口控制
   ipcMain.on('window:minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()

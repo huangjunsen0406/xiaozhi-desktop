@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { NButton } from 'naive-ui'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import Dots from '../components/Dots.vue'
-import { AudioCapture } from '../utils/audio/AudioCapture'
-import { AudioPlayback } from '../utils/audio/AudioPlayback'
-import { getDeviceIdsFromConfig } from '../utils/audio/deviceUtils'
 
 function togglePanel(): void {
   window.api.togglePanel()
@@ -26,56 +23,13 @@ function winClose(): void {
 const isCalling = ref(false)
 const deviceState = ref('idle')
 
-// 音频系统
-const capture = new AudioCapture()
-const playback = new AudioPlayback()
-let captureInitialized = false
-let playbackInitialized = false
-
-// 初始化音频系统
-async function initAudio() {
-  try {
-    console.log('[MainView] 初始化音频系统...')
-    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
-
-    // 初始化采集
-    if (!captureInitialized) {
-      console.log('[MainView] 初始化采集器...', inputDeviceId ? `设备: ${inputDeviceId}` : '使用默认设备')
-      await capture.initialize(inputDeviceId)
-      captureInitialized = true
-      console.log('[MainView] ✓ 采集器初始化成功')
-    }
-
-    // 初始化播放
-    if (!playbackInitialized) {
-      console.log('[MainView] 初始化播放器...', outputDeviceId ? `设备: ${outputDeviceId}` : '使用默认设备')
-      await playback.initialize(outputDeviceId)
-      playbackInitialized = true
-      console.log('[MainView] ✓ 播放器初始化成功')
-    }
-
-    console.log('[MainView] ✓ 音频系统初始化完成')
-  }
-  catch (err: any) {
-    console.error('[MainView] 初始化失败:', err)
-    throw err
-  }
-}
-
-// 当前使用的设备ID
-let currentInputDeviceId: string | undefined
-let currentOutputDeviceId: string | undefined
-
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
   if (isCalling.value) {
     // 挂断电话 - 停止自动对话
     console.log('[MainView] 挂断电话')
 
-    // 停止音频采集
-    capture.stop()
-
-    // 停止自动对话
+    // 停止自动对话（音频系统由后台窗口管理）
     await window.api.appStopAutoConversation()
 
     // 更新状态为未通话
@@ -85,63 +39,11 @@ async function toggleCall() {
     // 拨打电话 - 开始自动对话
     console.log('[MainView] 拨打电话')
 
-    // 每次拨打前,检查设备配置是否变化
-    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
-
-    // 首次初始化或设备未变化
-    if (!captureInitialized) {
-      await initAudio()
-      currentInputDeviceId = inputDeviceId
-      currentOutputDeviceId = outputDeviceId
-    }
-    // 设备发生变化,需要切换
-    else if (inputDeviceId !== currentInputDeviceId || outputDeviceId !== currentOutputDeviceId) {
-      console.log('[MainView] 检测到设备变化,切换设备...')
-      console.log('  输入设备:', currentInputDeviceId, '→', inputDeviceId)
-      console.log('  输出设备:', currentOutputDeviceId, '→', outputDeviceId)
-
-      // 切换输入设备
-      if (inputDeviceId !== currentInputDeviceId && inputDeviceId) {
-        await capture.switchDevice(inputDeviceId)
-        currentInputDeviceId = inputDeviceId
-      }
-
-      // 切换输出设备
-      if (outputDeviceId !== currentOutputDeviceId && outputDeviceId) {
-        await playback.switchDevice(outputDeviceId)
-        currentOutputDeviceId = outputDeviceId
-      }
-
-      console.log('[MainView] ✓ 设备切换完成')
-    }
-
-    // 开始采集
-    await capture.start()
-
-    // 开始自动对话
+    // 开始自动对话（音频系统由后台窗口管理）
     await window.api.appStartAutoConversation()
 
     // 更新状态为通话中
     isCalling.value = true
-  }
-}
-
-// 清理资源
-async function cleanup() {
-  console.log('[MainView] 清理资源...')
-
-  try {
-    if (isCalling.value) {
-      await window.api.appStopAutoConversation()
-      isCalling.value = false
-    }
-    await capture.dispose()
-    await playback.dispose()
-    captureInitialized = false
-    playbackInitialized = false
-  }
-  catch (err) {
-    console.error('[MainView] 清理失败:', err)
   }
 }
 
@@ -160,11 +62,6 @@ onMounted(() => {
 
     console.log('[MainView] 状态更新:', state)
   })
-})
-
-onUnmounted(async () => {
-  await cleanup()
-  console.log('[MainView] 组件已卸载')
 })
 </script>
 
