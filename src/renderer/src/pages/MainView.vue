@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NButton } from 'naive-ui'
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import Dots from '../components/Dots.vue'
 
 function togglePanel(): void {
@@ -25,25 +25,32 @@ const deviceState = ref('idle')
 
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
-  if (isCalling.value) {
-    // 挂断电话 - 停止自动对话
-    console.log('[MainView] 挂断电话')
+  try {
+    if (isCalling.value) {
+      // 挂断电话 - 停止自动对话
+      console.log('[MainView] 挂断电话')
 
-    // 停止自动对话（音频系统由后台窗口管理）
-    await window.api.appStopAutoConversation()
+      // 停止自动对话（音频系统由后台窗口管理）
+      await window.api.appStopAutoConversation()
 
-    // 更新状态为未通话
-    isCalling.value = false
+      // 更新状态为未通话
+      isCalling.value = false
+    }
+    else {
+      // 拨打电话 - 开始自动对话
+      console.log('[MainView] 拨打电话')
+
+      // 开始自动对话（音频系统由后台窗口管理）
+      await window.api.appStartAutoConversation()
+
+      // 更新状态为通话中
+      isCalling.value = true
+    }
   }
-  else {
-    // 拨打电话 - 开始自动对话
-    console.log('[MainView] 拨打电话')
-
-    // 开始自动对话（音频系统由后台窗口管理）
-    await window.api.appStartAutoConversation()
-
-    // 更新状态为通话中
-    isCalling.value = true
+  catch (error) {
+    console.error('[MainView] 切换通话状态失败:', error)
+    // 恢复 UI 状态，避免状态不一致
+    isCalling.value = !isCalling.value
   }
 }
 
@@ -62,6 +69,12 @@ onMounted(() => {
 
     console.log('[MainView] 状态更新:', state)
   })
+})
+
+onUnmounted(() => {
+  console.log('[MainView] 组件卸载，清理状态监听器')
+  // 清理状态变化监听器，防止内存泄漏
+  window.api.appRemoveStateChangedListener()
 })
 </script>
 

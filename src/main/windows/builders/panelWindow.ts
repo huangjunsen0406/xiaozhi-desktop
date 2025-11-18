@@ -23,7 +23,7 @@ export function buildPanelWindow(): BrowserWindow {
     },
   })
 
-  win.setAlwaysOnTop(true, 'status')
+  win.setAlwaysOnTop(true, 'floating')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.excludedFromShownWindowsMenu = true
   win.hide()

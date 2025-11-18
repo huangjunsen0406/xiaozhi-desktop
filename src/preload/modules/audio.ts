@@ -37,7 +37,13 @@ export const audioApi = {
   },
 
   // 更新音频配置
-  updateConfig: (config: Partial<AudioConfig>): Promise<void> => ipcRenderer.invoke('audio:update-config', config),
+  updateConfig: async (config: Partial<AudioConfig>): Promise<void> => {
+    const result: any = await ipcRenderer.invoke('audio:update-config', config)
+    // 解包中间件响应格式 { success: true } 或 { success: false, error: string }
+    if (!result.success) {
+      throw new Error(result.error || '更新音频配置失败')
+    }
+  },
 
   // 获取默认设备 ID
   getDefaultDeviceId: async (kind: 'input' | 'output'): Promise<string | null> => {
@@ -55,8 +61,11 @@ export const audioApi = {
 
   // 设置系统音量
   systemSetVolume: async (volume: number): Promise<void> => {
-    await ipcRenderer.invoke('audio:system-set-volume', volume)
-    // 中间件返回 { success: true }，我们不需要返回值
+    const result: any = await ipcRenderer.invoke('audio:system-set-volume', volume)
+    // 解包中间件响应格式 { success: true } 或 { success: false, error: string }
+    if (!result.success) {
+      throw new Error(result.error || '设置系统音量失败')
+    }
   },
 
   // 检查系统音量控制是否支持

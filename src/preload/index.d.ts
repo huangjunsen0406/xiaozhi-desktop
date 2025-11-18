@@ -51,6 +51,7 @@ export interface RendererApi {
   appSendText: (text: string) => Promise<void>
   appGetState: () => Promise<any>
   appOnStateChanged: (callback: (state: any) => void) => void
+  appRemoveStateChangedListener: () => void
   // System Config APIs
   systemGetConfig: () => Promise<any>
   systemUpdateConfig: (config: any) => Promise<any>

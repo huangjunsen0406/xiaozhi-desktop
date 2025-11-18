@@ -63,6 +63,7 @@ const api = {
   appSendText: appApi.sendText,
   appGetState: appApi.getState,
   appOnStateChanged: appApi.onStateChanged,
+  appRemoveStateChangedListener: appApi.removeStateChangedListener,
 
   // 系统配置 API
   systemGetConfig: systemApi.getConfig,
