@@ -2,6 +2,25 @@ import { ipcMain } from 'electron'
 import { getBackgroundAudioWindow } from '../windows/windowManager'
 
 /**
+ * 后台音频状态
+ */
+interface BackgroundAudioStatus {
+  initialized: boolean
+  capturing: boolean
+  playing: boolean
+  currentInputDeviceId?: string
+  currentOutputDeviceId?: string
+  error?: string
+}
+
+// 存储后台音频状态
+let audioStatus: BackgroundAudioStatus = {
+  initialized: false,
+  capturing: false,
+  playing: false,
+}
+
+/**
  * 注册后台音频窗口的 IPC 通道
  * 提供对后台音频窗口的控制接口
  */
@@ -61,10 +80,26 @@ export function registerBackgroundAudioIpc(): void {
   })
 
   /**
+   * 获取后台音频状态
+   */
+  ipcMain.handle('background-audio:get-status', async () => {
+    return audioStatus
+  })
+
+  /**
    * 接收来自后台音频窗口的状态更新
    */
   ipcMain.on('audio:state', (_, state) => {
     console.log('[BackgroundAudioIpc] 收到音频状态更新:', state)
+
+    // 更新存储的状态
+    audioStatus = {
+      ...audioStatus,
+      capturing: state.capturing ?? audioStatus.capturing,
+      playing: state.playing ?? audioStatus.playing,
+      error: state.error,
+    }
+
     // 可以在这里广播状态到所有窗口
     // 例如: BrowserWindow.getAllWindows().forEach(win => win.webContents.send('audio:state-changed', state))
   })

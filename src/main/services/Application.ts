@@ -245,8 +245,8 @@ export class Application {
 
       // 根据配置选择监听模式
       const mode = conversationMode === 'realtime'
-        ? ListeningMode.REALTIME  // 实时对话（全双工，可随时打断）
-        : ListeningMode.AUTO_STOP  // 回合制对话（半双工）
+        ? ListeningMode.REALTIME // 实时对话（全双工，可随时打断）
+        : ListeningMode.AUTO_STOP // 回合制对话（半双工）
 
       console.log(`[Application] 启动自动对话，模式: ${conversationMode} (${mode})`)
 
@@ -379,6 +379,14 @@ export class Application {
     try {
       const msgType = jsonData.type
       console.log(`[Application] 收到 JSON 消息: type=${msgType}`)
+
+      // 处理 Alert 消息（错误/警告）
+      if (msgType === 'alert') {
+        const message = (jsonData as { message?: string }).message || '未知错误'
+        const code = (jsonData as { code?: string }).code
+        console.warn(`[Application] 收到服务端警告: ${message}${code ? ` (code: ${code})` : ''}`)
+        console.warn('[Application] 完整 alert 消息:', JSON.stringify(jsonData, null, 2))
+      }
 
       // 处理 TTS 消息（状态管理）
       if (msgType === 'tts') {

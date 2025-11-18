@@ -12,6 +12,18 @@ export interface AudioState {
   error?: string
 }
 
+/**
+ * 后台音频详细状态
+ */
+export interface BackgroundAudioStatus {
+  initialized: boolean
+  capturing: boolean
+  playing: boolean
+  currentInputDeviceId?: string
+  currentOutputDeviceId?: string
+  error?: string
+}
+
 export const backgroundAudioApi = {
   // 监听音频命令
   onAudioCommand: (callback: (command: string, data?: unknown) => void): void => {
@@ -20,4 +32,7 @@ export const backgroundAudioApi = {
 
   // 发送音频状态
   sendAudioState: (state: AudioState): void => ipcRenderer.send('audio:state', state),
+
+  // 获取后台音频状态（仅主窗口可用）
+  getStatus: (): Promise<BackgroundAudioStatus> => ipcRenderer.invoke('background-audio:get-status'),
 }

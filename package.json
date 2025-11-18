@@ -35,6 +35,7 @@
     "opus-decoder": "^0.7.11",
     "opus-encdec": "^0.1.1",
     "opusscript": "^0.1.1",
+    "pinia": "^3.0.4",
     "uuid": "^13.0.0",
     "vue-router": "^4.5.1",
     "ws": "^8.18.3"

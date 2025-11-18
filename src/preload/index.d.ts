@@ -51,9 +51,13 @@ export interface RendererApi {
   appSendText: (text: string) => Promise<void>
   appGetState: () => Promise<any>
   appOnStateChanged: (callback: (state: any) => void) => void
+  // System Config APIs
+  systemGetConfig: () => Promise<any>
+  systemUpdateConfig: (config: any) => Promise<any>
   // Background Audio Window APIs
   onAudioCommand: (callback: (command: string, data?: any) => void) => void
   sendAudioState: (state: any) => void
+  backgroundAudioGetStatus: () => Promise<any>
 }
 
 declare global {

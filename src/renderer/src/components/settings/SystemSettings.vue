@@ -22,6 +22,8 @@ interface SystemConfig {
 /** 脏检查（父组件可用来点亮"保存"） */
 const emit = defineEmits<{ (e: 'dirty-change', dirty: boolean): void }>()
 
+const message = useMessage()
+
 /* ======================= Defaults ======================= */
 const DEFAULTS: SystemConfig = {
   client_id: '',
@@ -67,7 +69,7 @@ function validate(): string | null {
  */
 async function loadConfig() {
   try {
-    const result = await window.electron?.ipcRenderer.invoke('config:get-all')
+    const result = await window.api.systemGetConfig()
     if (result?.success && result.data) {
       console.log('从数据库加载配置:', result.data)
       const config = result.data as SystemConfig
@@ -92,7 +94,6 @@ onMounted(() => {
 })
 
 /* ======================= Exposed API ======================= */
-const message = useMessage()
 
 async function handleSave() {
   const err = validate()
@@ -101,7 +102,7 @@ async function handleSave() {
 
   try {
     // 保存到数据库
-    const result = await window.electron?.ipcRenderer.invoke('config:update-all', toRaw(form))
+    const result = await window.api.systemUpdateConfig(toRaw(form))
 
     if (result?.success) {
       // 写回存储作为新基线
@@ -137,7 +138,7 @@ defineExpose({ handleSave, handleCustomButton })
     <NForm label-placement="left" :label-width="160">
       <!-- 基本标识 -->
       <NFormItem label="客户端ID">
-        <NInput v-model:value="form.client_id" placeholder="请输入客户端ID" />
+        <NInput v-model:value="form.client_id" disabled placeholder="请输入客户端ID" />
       </NFormItem>
       <NFormItem label="设备ID">
         <NInput v-model:value="form.device_id" placeholder="请输入设备ID（如 MAC ）" />
@@ -178,9 +179,10 @@ defineExpose({ handleSave, handleCustomButton })
       <NFormItem label="激活协议版本">
         <NSelect
           v-model:value="form.activation_version"
+          disabled
           :options="[
             { label: 'v1', value: 'v1' },
-            { label: 'v2', value: 'v2' }
+            { label: 'v2', value: 'v2' },
           ]"
           placeholder="请选择激活协议版本"
         />

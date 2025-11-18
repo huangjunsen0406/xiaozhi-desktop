@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, hoverApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, hoverApi, systemApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -64,9 +64,14 @@ const api = {
   appGetState: appApi.getState,
   appOnStateChanged: appApi.onStateChanged,
 
+  // 系统配置 API
+  systemGetConfig: systemApi.getConfig,
+  systemUpdateConfig: systemApi.updateConfig,
+
   // 后台音频窗口 API
   onAudioCommand: backgroundAudioApi.onAudioCommand,
   sendAudioState: backgroundAudioApi.sendAudioState,
+  backgroundAudioGetStatus: backgroundAudioApi.getStatus,
 }
 
 // 使用 contextBridge 暴露 API

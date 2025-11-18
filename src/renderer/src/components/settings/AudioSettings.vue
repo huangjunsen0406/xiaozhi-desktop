@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import { NForm, NFormItem, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
 import { onMounted, ref, watch } from 'vue'
-import { getDeviceIdByName } from '../../utils/audio/deviceUtils'
+import { useDevices } from '../../composables/useDevices'
 
 // 获取 message 实例
 const message = useMessage()
 
+// 使用设备管理 Composable
+const {
+  inputDevices,
+  outputDevices,
+  selectedInputDevice,
+  selectedOutputDevice,
+  isEnumerating,
+  enumerateDevices,
+  autoSelectInputDevice,
+  autoSelectOutputDevice,
+  loadDevicesFromConfig,
+  getDeviceLabelById,
+} = useDevices()
+
 // 表单数据
-const microphoneDevice = ref<string>('')
-const speakerDevice = ref<string>('')
 const speakerVolume = ref(70)
 const enableNoiseReduction = ref(true)
 const enableEchoCancellation = ref(true)
@@ -17,120 +29,26 @@ const enableRealtimeConversation = ref(false) // 实时对话模式开关
 // 系统音量控制支持标志
 const systemVolumeSupported = ref(false)
 
-// 设备列表
-const microphoneDevices = ref<Array<{ label: string, value: string }>>([])
-const speakerDevices = ref<Array<{ label: string, value: string }>>([])
-
-// 刷新中状态
-const isRefreshing = ref(false)
-
 /**
- * 枚举音频设备
+ * 刷新音频设备列表
  */
-async function enumerateDevices(): Promise<void> {
+async function refreshDevices(): Promise<void> {
   try {
-    isRefreshing.value = true
-
-    // 请求麦克风权限（必须先获取权限才能看到设备标签）
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-
-    // 获取系统当前使用的设备ID（从stream中获取）
-    const audioTrack = stream.getAudioTracks()[0]
-    const currentInputDeviceId = audioTrack?.getSettings().deviceId
-
-    stream.getTracks().forEach(track => track.stop())
-
     // 枚举设备
-    const devices = await navigator.mediaDevices.enumerateDevices()
+    const result = await enumerateDevices()
 
-    // 找到 default 设备对应的实际设备
-    const defaultInputDevice = devices.find(d => d.kind === 'audioinput' && d.deviceId === 'default')
-    const defaultOutputDevice = devices.find(d => d.kind === 'audiooutput' && d.deviceId === 'default')
-
-    // 解析 default 设备的真实名称
-    // 格式: "Default - MacBook Air麦克风 (Built-in)" -> "MacBook Air麦克风 (Built-in)"
-    const parseDefaultDeviceName = (label: string | undefined): string | null => {
-      if (!label)
-        return null
-      const match = label.match(/^Default - (.+)$/)
-      return match ? match[1] : null
+    // 如果当前没有选中设备，自动选择
+    if (!selectedInputDevice.value) {
+      autoSelectInputDevice(result.defaultInputName, result.currentInputDeviceId)
     }
 
-    const defaultInputName = parseDefaultDeviceName(defaultInputDevice?.label)
-    const defaultOutputName = parseDefaultDeviceName(defaultOutputDevice?.label)
-
-    // 过滤输入设备（排除 default 设备）
-    const inputs = devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default')
-    microphoneDevices.value = inputs.map(d => ({
-      label: d.label || `麦克风 ${d.deviceId.substring(0, 8)}`,
-      value: d.deviceId,
-    }))
-
-    // 过滤输出设备（排除 default 设备）
-    const outputs = devices.filter(d => d.kind === 'audiooutput' && d.deviceId !== 'default')
-    speakerDevices.value = outputs.map(d => ({
-      label: d.label || `扬声器 ${d.deviceId.substring(0, 8)}`,
-      value: d.deviceId,
-    }))
-
-    console.log('音频设备枚举完成', {
-      inputs: microphoneDevices.value.length,
-      outputs: speakerDevices.value.length,
-      currentInputDeviceId,
-      defaultInputName,
-      defaultOutputName,
-    })
-
-    if (!microphoneDevice.value && microphoneDevices.value.length > 0) {
-      let selectedDevice = null
-
-      if (defaultInputName) {
-        selectedDevice = microphoneDevices.value.find(d => d.label === defaultInputName)
-        if (selectedDevice) {
-          console.log('✓ 通过 default 设备名称匹配到麦克风:', selectedDevice.label)
-        }
-      }
-
-      if (!selectedDevice && currentInputDeviceId) {
-        selectedDevice = microphoneDevices.value.find(d => d.value === currentInputDeviceId)
-        if (selectedDevice) {
-          console.log('✓ 通过 getUserMedia 匹配到麦克风:', selectedDevice.label)
-        }
-      }
-
-      if (!selectedDevice) {
-        selectedDevice = microphoneDevices.value[0]
-        console.log('✓ 选中第一个麦克风设备:', selectedDevice.label)
-      }
-
-      microphoneDevice.value = selectedDevice.value
-    }
-
-    if (!speakerDevice.value && speakerDevices.value.length > 0) {
-      let selectedDevice = null
-
-      if (defaultOutputName) {
-        selectedDevice = speakerDevices.value.find(d => d.label === defaultOutputName)
-        if (selectedDevice) {
-          console.log('✓ 通过 default 设备名称匹配到扬声器:', selectedDevice.label)
-        }
-      }
-
-      // 降级选择第一个设备
-      if (!selectedDevice) {
-        selectedDevice = speakerDevices.value[0]
-        console.log('✓ 选中第一个扬声器设备:', selectedDevice.label)
-      }
-
-      speakerDevice.value = selectedDevice.value
+    if (!selectedOutputDevice.value) {
+      autoSelectOutputDevice(result.defaultOutputName)
     }
   }
   catch (error) {
     console.error('枚举音频设备失败:', error)
     message.error('枚举音频设备失败，请检查权限设置')
-  }
-  finally {
-    isRefreshing.value = false
   }
 }
 
@@ -150,25 +68,14 @@ async function loadConfig(): Promise<void> {
     enableEchoCancellation.value = config.enableEchoCancellation !== false
     enableRealtimeConversation.value = config.conversationMode === 'realtime'
 
-    if (config.inputDeviceName) {
-      const deviceId = await getDeviceIdByName(config.inputDeviceName, 'audioinput')
-      if (deviceId) {
-        microphoneDevice.value = deviceId
-      }
-      else {
-        console.warn('[AudioSettings] 未找到匹配的麦克风设备:', config.inputDeviceName)
-      }
-    }
+    // 从配置加载并匹配设备（使用当前组件的 composable 实例）
+    const { inputDeviceId, outputDeviceId } = await loadDevicesFromConfig()
 
-    if (config.outputDeviceName) {
-      const deviceId = await getDeviceIdByName(config.outputDeviceName, 'audiooutput')
-      if (deviceId) {
-        speakerDevice.value = deviceId
-      }
-      else {
-        console.warn('[AudioSettings] 未找到匹配的扬声器设备:', config.outputDeviceName)
-      }
-    }
+    // 更新选中的设备（loadDevicesFromConfig 已经设置了 selectedInputDevice/selectedOutputDevice）
+    console.log('从配置加载的设备:', {
+      input: inputDeviceId,
+      output: outputDeviceId,
+    })
 
     if (systemVolumeSupported.value) {
       try {
@@ -200,19 +107,20 @@ async function handleSave(): Promise<void> {
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',
     }
 
-    if (microphoneDevice.value && microphoneDevice.value !== 'default') {
-      const selectedInput = microphoneDevices.value.find(d => d.value === microphoneDevice.value)
-      if (selectedInput) {
-        config.inputDeviceName = selectedInput.label
-        console.log('保存麦克风设备名称:', selectedInput.label)
+    // 使用 composable 提供的方法获取设备名称
+    if (selectedInputDevice.value && selectedInputDevice.value !== 'default') {
+      const label = getDeviceLabelById(selectedInputDevice.value, 'input')
+      if (label) {
+        config.inputDeviceName = label
+        console.log('保存麦克风设备名称:', label)
       }
     }
 
-    if (speakerDevice.value && speakerDevice.value !== 'default') {
-      const selectedOutput = speakerDevices.value.find(d => d.value === speakerDevice.value)
-      if (selectedOutput) {
-        config.outputDeviceName = selectedOutput.label
-        console.log('保存扬声器设备名称:', selectedOutput.label)
+    if (selectedOutputDevice.value && selectedOutputDevice.value !== 'default') {
+      const label = getDeviceLabelById(selectedOutputDevice.value, 'output')
+      if (label) {
+        config.outputDeviceName = label
+        console.log('保存扬声器设备名称:', label)
       }
     }
 
@@ -231,7 +139,7 @@ async function handleSave(): Promise<void> {
  * 刷新设备列表
  */
 async function handleCustomButton(): Promise<void> {
-  await enumerateDevices()
+  await refreshDevices()
   message.success('设备列表已刷新')
 }
 
@@ -250,7 +158,6 @@ watch(speakerVolume, async (newVolume) => {
 
 // 组件挂载时初始化
 onMounted(async () => {
-  await enumerateDevices()
   await loadConfig()
 })
 
@@ -263,9 +170,10 @@ defineExpose({ handleSave, handleCustomButton })
     <!-- 麦克风设置 -->
     <NFormItem label="麦克风设备">
       <NSelect
-        v-model:value="microphoneDevice"
-        :options="microphoneDevices"
+        v-model:value="selectedInputDevice"
+        :options="inputDevices"
         placeholder="请选择麦克风设备"
+        :loading="isEnumerating"
         style="width: 300px"
       />
     </NFormItem>
@@ -273,22 +181,23 @@ defineExpose({ handleSave, handleCustomButton })
     <!-- 扬声器设置 -->
     <NFormItem label="扬声器设备">
       <NSelect
-        v-model:value="speakerDevice"
-        :options="speakerDevices"
+        v-model:value="selectedOutputDevice"
+        :options="outputDevices"
         placeholder="请选择扬声器设备"
+        :loading="isEnumerating"
         style="width: 300px"
       />
     </NFormItem>
     <NFormItem label="扬声器音量">
       <div style="display: flex; flex-direction: column; gap: 4px; width: 300px">
         <NSlider
-          v-model:value="speakerVolume"
+          v-model:value="speakerVolume.data"
           :min="0"
           :max="100"
           :step="1"
         />
         <span style="color: #999; font-size: 12px">
-          当前系统音量: {{ speakerVolume }}% (实时跟随系统)
+          当前系统音量: {{ speakerVolume.data }}% (实时跟随系统)
         </span>
       </div>
     </NFormItem>
