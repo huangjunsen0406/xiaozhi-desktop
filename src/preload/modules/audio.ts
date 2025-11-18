@@ -30,21 +30,39 @@ export const audioApi = {
   },
 
   // 获取音频配置
-  getConfig: (): Promise<AudioConfig> => ipcRenderer.invoke('audio:get-config'),
+  getConfig: async (): Promise<AudioConfig> => {
+    const result: any = await ipcRenderer.invoke('audio:get-config')
+    // 解包中间件响应格式 { success: true, data: AudioConfig }
+    return result.data !== undefined ? result.data : result
+  },
 
   // 更新音频配置
   updateConfig: (config: Partial<AudioConfig>): Promise<void> => ipcRenderer.invoke('audio:update-config', config),
 
   // 获取默认设备 ID
-  getDefaultDeviceId: (kind: 'input' | 'output'): Promise<string | null> =>
-    ipcRenderer.invoke('audio:get-default-device-id', kind),
+  getDefaultDeviceId: async (kind: 'input' | 'output'): Promise<string | null> => {
+    const result: any = await ipcRenderer.invoke('audio:get-default-device-id', kind)
+    // 解包中间件响应格式 { success: true, data: string | null }
+    return result.data !== undefined ? result.data : result
+  },
 
   // 获取系统音量
-  systemGetVolume: (): Promise<number> => ipcRenderer.invoke('audio:system-get-volume'),
+  systemGetVolume: async (): Promise<number> => {
+    const result: any = await ipcRenderer.invoke('audio:system-get-volume')
+    // 解包中间件响应格式 { success: true, data: number }
+    return result.data !== undefined ? result.data : result
+  },
 
   // 设置系统音量
-  systemSetVolume: (volume: number): Promise<void> => ipcRenderer.invoke('audio:system-set-volume', volume),
+  systemSetVolume: async (volume: number): Promise<void> => {
+    await ipcRenderer.invoke('audio:system-set-volume', volume)
+    // 中间件返回 { success: true }，我们不需要返回值
+  },
 
   // 检查系统音量控制是否支持
-  systemVolumeSupported: (): Promise<boolean> => ipcRenderer.invoke('audio:system-volume-supported'),
+  systemVolumeSupported: async (): Promise<boolean> => {
+    const result: any = await ipcRenderer.invoke('audio:system-volume-supported')
+    // 解包中间件响应格式 { success: true, data: boolean }
+    return result.data !== undefined ? result.data : result
+  },
 }

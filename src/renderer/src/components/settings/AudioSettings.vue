@@ -143,17 +143,29 @@ async function handleCustomButton(): Promise<void> {
   message.success('设备列表已刷新')
 }
 
-// 监听扬声器音量变化，实时设置系统音量
-watch(speakerVolume, async (newVolume) => {
-  if (systemVolumeSupported.value) {
+// 音量设置防抖定时器
+let volumeDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// 监听扬声器音量变化，实时设置系统音量（带防抖）
+watch(speakerVolume, (newVolume) => {
+  if (!systemVolumeSupported.value)
+    return
+
+  // 清除之前的定时器
+  if (volumeDebounceTimer) {
+    clearTimeout(volumeDebounceTimer)
+  }
+
+  // 300ms 防抖：只在用户停止拖动后才设置系统音量
+  volumeDebounceTimer = setTimeout(async () => {
     try {
       await window.api.audioSystemSetVolume(newVolume)
-      console.log(`实时设置系统音量: ${newVolume}%`)
+      console.log(`系统音量已设置: ${newVolume}%`)
     }
     catch (error) {
-      console.warn('实时设置系统音量失败:', error)
+      console.warn('设置系统音量失败:', error)
     }
-  }
+  }, 300)
 })
 
 // 组件挂载时初始化
@@ -191,13 +203,13 @@ defineExpose({ handleSave, handleCustomButton })
     <NFormItem label="扬声器音量">
       <div style="display: flex; flex-direction: column; gap: 4px; width: 300px">
         <NSlider
-          v-model:value="speakerVolume.data"
+          v-model:value="speakerVolume"
           :min="0"
           :max="100"
           :step="1"
         />
         <span style="color: #999; font-size: 12px">
-          当前系统音量: {{ speakerVolume.data }}% (实时跟随系统)
+          当前系统音量: {{ speakerVolume }}% (实时跟随系统)
         </span>
       </div>
     </NFormItem>

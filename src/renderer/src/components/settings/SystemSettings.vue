@@ -149,30 +149,30 @@ defineExpose({ handleSave, handleCustomButton })
         <NInput v-model:value="form.ota_version_url" placeholder="https://.../ota/" />
       </NFormItem>
       <NFormItem label="WebSocket URL">
-        <NInput v-model:value="form.websocket_url" placeholder="wss://..." />
+        <NInput v-model:value="form.websocket_url" disabled placeholder="wss://..." />
       </NFormItem>
       <NFormItem label="WS 访问令牌">
-        <NInput v-model:value="form.websocket_access_token" placeholder="请输入访问令牌" />
+        <NInput v-model:value="form.websocket_access_token" disabled placeholder="请输入访问令牌" />
       </NFormItem>
 
       <!-- MQTT 配置 -->
       <NFormItem label="MQTT Endpoint">
-        <NInput v-model:value="form.mqtt_endpoint" placeholder="mqtt.example.com" />
+        <NInput v-model:value="form.mqtt_endpoint" disabled placeholder="mqtt.example.com" />
       </NFormItem>
       <NFormItem label="MQTT Client ID">
-        <NInput v-model:value="form.mqtt_client_id" placeholder="GID_xxx@@@..." />
+        <NInput v-model:value="form.mqtt_client_id" disabled placeholder="GID_xxx@@@..." />
       </NFormItem>
       <NFormItem label="MQTT Username">
-        <NInput v-model:value="form.mqtt_username" placeholder="用户名 / Token" />
+        <NInput v-model:value="form.mqtt_username" disabled placeholder="用户名 / Token" />
       </NFormItem>
       <NFormItem label="MQTT Password">
-        <NInput v-model:value="form.mqtt_password" type="password" placeholder="密码 / Secret" />
+        <NInput v-model:value="form.mqtt_password" disabled type="password" placeholder="密码 / Secret" />
       </NFormItem>
       <NFormItem label="发布 Topic">
-        <NInput v-model:value="form.mqtt_publish_topic" placeholder="device-server" />
+        <NInput v-model:value="form.mqtt_publish_topic" disabled placeholder="device-server" />
       </NFormItem>
       <NFormItem label="订阅 Topic">
-        <NInput v-model:value="form.mqtt_subscribe_topic" placeholder="device-client / null" />
+        <NInput v-model:value="form.mqtt_subscribe_topic" disabled placeholder="device-client / null" />
       </NFormItem>
 
       <!-- 其他 -->
