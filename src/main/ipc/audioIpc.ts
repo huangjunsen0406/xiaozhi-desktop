@@ -1,8 +1,8 @@
 import type { AudioConfig } from '../types/audio'
-import { ipcMain } from 'electron'
 import { OpusCodec } from '../audio/OpusCodec'
 import { DatabaseManager } from '../services/database'
 import { SystemVolumeController } from '../utils/SystemVolumeController'
+import { createIpcHandler, failure, success } from './middleware'
 
 // Opus 编解码器实例
 let opusCodec: OpusCodec | null = null
@@ -30,26 +30,24 @@ export function initOpusCodec(): OpusCodec {
 export function registerAudioIpc(): void {
   console.log('[Audio IPC] 注册音频 IPC 通道...')
 
-  // 获取音频配置（不包含音量，音量从系统实时读取）
-  ipcMain.handle('audio:get-config', async () => {
-    try {
+  // 使用中间件注册处理器
+  createIpcHandler({
+    channel: 'audio:get-config',
+    verbose: false,
+    handler: async () => {
       const config = db.getFormattedAudioConfig()
-      return config
-    }
-    catch (error) {
-      console.error('[Audio IPC] 获取音频配置失败:', error)
-      // 返回默认配置（不包含音量）
-      return {
-        enableNoiseReduction: true,
-        enableEchoCancellation: true,
-        conversationMode: 'auto',
-      }
-    }
+      return success(config)
+    },
   })
 
-  ipcMain.handle('audio:update-config', async (_, config: Partial<AudioConfig>) => {
-    try {
-      const dbUpdates: any = {}
+  createIpcHandler({
+    channel: 'audio:update-config',
+    schema: {
+      config: { type: 'object', required: true },
+    },
+    handler: async (_event, ...args) => {
+      const config = args[0] as Partial<AudioConfig>
+      const dbUpdates: Record<string, unknown> = {}
 
       if ('inputDeviceName' in config) {
         dbUpdates.input_device_name = config.inputDeviceName || null
@@ -69,58 +67,58 @@ export function registerAudioIpc(): void {
 
       db.updateAudioConfig(dbUpdates)
       console.log('[Audio IPC] 音频配置已保存到数据库:', dbUpdates)
-    }
-    catch (error) {
-      console.error('[Audio IPC] 保存音频配置失败:', error)
-      throw error
-    }
+      return success()
+    },
   })
 
-  // 获取默认设备名称 (渲染进程会使用 enumerateDevices 获取实际设备列表并匹配)
-  ipcMain.handle('audio:get-default-device-id', async (_, kind: 'input' | 'output') => {
-    try {
+  createIpcHandler({
+    channel: 'audio:get-default-device-id',
+    schema: {
+      kind: { type: 'string', required: true },
+    },
+    handler: async (_event, ...args) => {
+      const kind = args[0] as string
+      if (kind !== 'input' && kind !== 'output') {
+        return failure('kind 必须是 input 或 output')
+      }
+
       const config = db.getFormattedAudioConfig()
 
       if (kind === 'input') {
-        return config.inputDeviceName || null
+        return success(config.inputDeviceName || null)
       }
       else {
-        return config.outputDeviceName || null
+        return success(config.outputDeviceName || null)
       }
-    }
-    catch (error) {
-      console.error('[Audio IPC] 获取默认设备名称失败:', error)
-      return null
-    }
+    },
   })
 
-  // 获取系统输出音量 (扬声器)
-  ipcMain.handle('audio:system-get-volume', async () => {
-    try {
+  createIpcHandler({
+    channel: 'audio:system-get-volume',
+    handler: async () => {
       const volume = await systemVolumeController.getVolume()
-      return volume
-    }
-    catch (error) {
-      console.error('[Audio IPC] 获取系统音量失败:', error)
-      return 70
-    }
+      return success(volume)
+    },
   })
 
-  // 设置系统输出音量 (扬声器)
-  ipcMain.handle('audio:system-set-volume', async (_, volume: number) => {
-    try {
+  createIpcHandler({
+    channel: 'audio:system-set-volume',
+    schema: {
+      volume: { type: 'number', required: true, min: 0, max: 100 },
+    },
+    handler: async (_event, ...args) => {
+      const volume = args[0] as number
       await systemVolumeController.setVolume(volume)
       console.log(`[Audio IPC] 系统音量已设置为: ${volume}%`)
-    }
-    catch (error) {
-      console.error('[Audio IPC] 设置系统音量失败:', error)
-      throw error
-    }
+      return success()
+    },
   })
 
-  // 检查系统音量控制是否支持
-  ipcMain.handle('audio:system-volume-supported', async () => {
-    return systemVolumeController.isSupported()
+  createIpcHandler({
+    channel: 'audio:system-volume-supported',
+    handler: async () => {
+      return success(systemVolumeController.isSupported())
+    },
   })
 
   console.log('[Audio IPC] 音频 IPC 通道已注册')

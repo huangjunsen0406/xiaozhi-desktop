@@ -3,6 +3,7 @@
  * 定义所有通信协议的通用接口
  */
 import type { Buffer } from 'node:buffer'
+import type { IotDescriptor, JsonMessage, McpPayload } from '../types/protocol'
 
 export enum AbortReason {
   WAKE_WORD_DETECTED = 'wake_word_detected',
@@ -47,7 +48,7 @@ export abstract class Protocol {
   protected sessionId: string = ''
 
   // 回调函数
-  protected onIncomingJsonCallback?: (data: any) => void
+  protected onIncomingJsonCallback?: (data: JsonMessage) => void
   protected onIncomingAudioCallback?: (data: Buffer) => void
   protected onAudioChannelOpenedCallback?: () => void | Promise<void>
   protected onAudioChannelClosedCallback?: () => void | Promise<void>
@@ -58,7 +59,7 @@ export abstract class Protocol {
   /**
    * 设置 JSON 消息接收回调
    */
-  onIncomingJson(callback: (data: any) => void): void {
+  onIncomingJson(callback: (data: JsonMessage) => void): void {
     this.onIncomingJsonCallback = callback
   }
 
@@ -148,7 +149,7 @@ export abstract class Protocol {
    * 发送中止语音消息
    */
   async sendAbortSpeaking(reason: AbortReason): Promise<boolean> {
-    const message: any = {
+    const message: { session_id: string, type: string, reason?: string } = {
       session_id: this.sessionId,
       type: 'abort',
     }
@@ -204,10 +205,10 @@ export abstract class Protocol {
   /**
    * 发送 IoT 设备描述信息
    */
-  async sendIotDescriptors(descriptors: any[] | string): Promise<boolean> {
+  async sendIotDescriptors(descriptors: IotDescriptor[] | string): Promise<boolean> {
     try {
       // 解析描述符数据
-      let descriptorsData: any[]
+      let descriptorsData: IotDescriptor[]
       if (typeof descriptors === 'string') {
         descriptorsData = JSON.parse(descriptors)
       }
@@ -258,9 +259,9 @@ export abstract class Protocol {
   /**
    * 发送 IoT 设备状态信息
    */
-  async sendIotStates(states: any | string): Promise<boolean> {
+  async sendIotStates(states: Record<string, unknown> | string): Promise<boolean> {
     try {
-      let statesData: any
+      let statesData: Record<string, unknown>
       if (typeof states === 'string') {
         statesData = JSON.parse(states)
       }
@@ -286,9 +287,9 @@ export abstract class Protocol {
   /**
    * 发送 MCP 消息
    */
-  async sendMcpMessage(payload: any | string): Promise<boolean> {
+  async sendMcpMessage(payload: McpPayload | string): Promise<boolean> {
     try {
-      let payloadData: any
+      let payloadData: McpPayload
       if (typeof payload === 'string') {
         payloadData = JSON.parse(payload)
       }

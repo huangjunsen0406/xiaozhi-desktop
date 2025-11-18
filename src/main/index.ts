@@ -1,10 +1,12 @@
+import type { IpcContext } from './types/ipc'
 import { join } from 'node:path'
 import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerIpcChannels } from './ipc'
-import { handleActivationOnStartup } from './services/activationHandler'
+import { registerAppIpc } from './ipc/appIpc'
+import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { ensureBackgroundAudioWindow, ensureMainWindow, toggleSettings } from './windows/windowManager'
@@ -113,9 +115,10 @@ app.whenReady().then(() => {
   // macOS：二次保险
   ensureDockVisible()
 
-  // 启动时检测激活状态
-  handleActivationOnStartup().then(async (canContinue) => {
-    if (canContinue) {
+  // 启动时检测激活状态（使用统一的激活服务）
+  const activationService = getActivationService()
+  activationService.handleStartup().then(async (result) => {
+    if (result.success) {
       // 激活检测通过，先创建后台音频窗口
       console.log('[Main] 创建后台音频窗口...')
       const backgroundAudioWindow = ensureBackgroundAudioWindow()
@@ -124,6 +127,11 @@ app.whenReady().then(() => {
       const application = getApplication()
       await application.initialize('websocket')
       await application.start()
+
+      // 注册需要 Application 的 IPC 通道（依赖注入）
+      const ipcContext: IpcContext = { application }
+      registerAppIpc(ipcContext)
+      console.log('[Main] Application IPC 已注册（依赖注入模式）')
 
       // 创建主窗口
       const mainWindow = ensureMainWindow()
@@ -141,7 +149,7 @@ app.whenReady().then(() => {
     }
     else {
       // 激活检测失败，退出应用
-      console.error('激活检测失败，应用退出')
+      console.error('激活检测失败:', result.error || result.message)
       app.quit()
     }
   }).catch((error) => {

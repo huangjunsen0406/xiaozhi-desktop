@@ -1,15 +1,14 @@
 import { ipcMain } from 'electron'
-import { SystemInitializer } from '../services/systemInitializer'
-import { ActivationManager } from '../services/activationManager'
+import { getActivationService } from '../services/ActivationService'
 import { DeviceFingerprintManager } from '../services/deviceFingerprintDB'
-import { getGlobalInitializer } from '../services/activationHandler'
+import { SystemInitializer } from '../services/systemInitializer'
 
 /**
  * 注册激活相关的 IPC 通道
  */
 export function registerActivationIpc(): void {
   let systemInitializer: SystemInitializer | null = null
-  let activationManager: ActivationManager | null = null
+  const activationService = getActivationService()
 
   /**
    * 初始化系统
@@ -57,16 +56,14 @@ export function registerActivationIpc(): void {
    */
   ipcMain.handle('activation:get-activation-data', () => {
     try {
-      // 优先从全局初始化器获取
-      const globalInit = getGlobalInitializer()
-      const initializer = systemInitializer || globalInit
+      // 优先从统一激活服务获取
+      let activationData = activationService.getActivationData()
 
-      if (!initializer) {
-        console.log('IPC: 初始化器不存在，无法获取激活数据')
-        return null
+      // 如果服务中没有，尝试从本地初始化器获取
+      if (!activationData && systemInitializer) {
+        activationData = systemInitializer.getActivationData()
       }
 
-      const activationData = initializer.getActivationData()
       console.log('IPC: 获取激活数据', activationData)
       return activationData
     }
@@ -82,8 +79,7 @@ export function registerActivationIpc(): void {
   ipcMain.handle('activation:start', async (_, activationData) => {
     try {
       console.log('IPC: 开始激活流程', activationData)
-      activationManager = ActivationManager.getInstance()
-      const success = await activationManager.processActivation(activationData)
+      const success = await activationService.startActivation(activationData)
       console.log('IPC: 激活流程完成', success)
       return { success }
     }
@@ -99,9 +95,7 @@ export function registerActivationIpc(): void {
   ipcMain.handle('activation:cancel', () => {
     try {
       console.log('IPC: 取消激活流程')
-      if (activationManager) {
-        activationManager.cancelActivation()
-      }
+      activationService.cancelActivation()
       return { success: true }
     }
     catch (error) {
@@ -115,8 +109,7 @@ export function registerActivationIpc(): void {
    */
   ipcMain.handle('activation:check-status', () => {
     try {
-      const deviceFingerprint = DeviceFingerprintManager.getInstance()
-      const isActivated = deviceFingerprint.isActivated()
+      const isActivated = activationService.isActivated()
       console.log('IPC: 检查激活状态', isActivated)
       return { isActivated }
     }

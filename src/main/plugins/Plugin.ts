@@ -1,6 +1,8 @@
 import type { Buffer } from 'node:buffer'
 import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
+import type { Application } from '../services/Application'
+import type { JsonMessage } from '../types/protocol'
 
 /**
  * 插件状态
@@ -70,7 +72,7 @@ export abstract class Plugin {
   /**
    * 应用实例引用
    */
-  protected app: any = null
+  protected app: Application | null = null
 
   /**
    * 获取插件状态
@@ -119,7 +121,7 @@ export abstract class Plugin {
    * 插件初始化（在应用启动时调用一次）
    * @param _app - 应用实例
    */
-  async setup(_app: any): Promise<void> {
+  async setup(_app: Application): Promise<void> {
     this.app = _app
     this.setState(PluginState.INITIALIZED)
   }
@@ -165,7 +167,7 @@ export abstract class Plugin {
    * 接收到 JSON 消息回调
    * @param _message - JSON 消息数据
    */
-  async onIncomingJson(_message: any): Promise<void> {
+  async onIncomingJson(_message: JsonMessage): Promise<void> {
     // 子类可选实现
   }
 

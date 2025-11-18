@@ -1,5 +1,6 @@
 import type { Buffer } from 'node:buffer'
 import type { Protocol } from '../protocols/Protocol'
+import type { JsonMessage } from '../types/protocol'
 import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
@@ -374,14 +375,14 @@ export class Application {
   /**
    * 处理接收到的 JSON 消息
    */
-  private handleIncomingJson(jsonData: any): void {
+  private handleIncomingJson(jsonData: JsonMessage): void {
     try {
-      const msgType = jsonData?.type
+      const msgType = jsonData.type
       console.log(`[Application] 收到 JSON 消息: type=${msgType}`)
 
       // 处理 TTS 消息（状态管理）
       if (msgType === 'tts') {
-        const state = jsonData.state
+        const state = (jsonData as { state?: string }).state
         if (state === 'start') {
           // TTS 开始：根据是否持续监听决定状态
           if (this.keepListening && this.listeningMode === ListeningMode.REALTIME) {

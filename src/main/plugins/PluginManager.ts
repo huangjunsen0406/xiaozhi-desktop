@@ -1,6 +1,8 @@
 import type { Buffer } from 'node:buffer'
 import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
+import type { Application } from '../services/Application'
+import type { JsonMessage } from '../types/protocol'
 import type { Plugin } from './Plugin'
 import { PluginState } from './Plugin'
 
@@ -143,7 +145,7 @@ export class PluginManager {
    * 初始化所有插件
    * @param app - 应用实例
    */
-  async setupAll(app: any): Promise<PluginExecutionResult[]> {
+  async setupAll(app: Application): Promise<PluginExecutionResult[]> {
     console.log('[PluginManager] 开始初始化所有插件...')
     const results: PluginExecutionResult[] = []
 
@@ -332,7 +334,7 @@ export class PluginManager {
    * 通知所有插件：收到 JSON 消息
    * @param message - JSON 消息
    */
-  async notifyIncomingJson(message: any): Promise<void> {
+  async notifyIncomingJson(message: JsonMessage): Promise<void> {
     await this.broadcast('onIncomingJson', [message])
   }
 
