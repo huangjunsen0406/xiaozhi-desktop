@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useColorMode } from '@vueuse/core'
 import { darkTheme, lightTheme, NConfigProvider, NMessageProvider } from 'naive-ui'
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
+import { useCallStore } from './stores/call'
 import { themeOverrides } from './theme/naiveTheme'
 
 const mode = useColorMode({
@@ -24,6 +25,42 @@ const isDark = computed(() => {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 })
 const theme = computed(() => (isDark.value ? darkTheme : lightTheme))
+
+// 初始化通话状态 Store
+const callStore = useCallStore()
+
+onMounted(async () => {
+  console.log('[App] 初始化应用状态')
+
+  try {
+    // 获取初始状态
+    const state = await window.api.appGetState()
+    console.log('[App] 初始状态:', state)
+
+    // 更新 Store
+    callStore.updateState({
+      deviceState: state.device_state,
+      channelOpen: state.audio_opened,
+    })
+
+    // 监听状态变化
+    window.api.appOnStateChanged((state) => {
+      console.log('[App] 状态更新:', state)
+      callStore.updateState({
+        deviceState: state.deviceState,
+        channelOpen: state.channelOpen,
+      })
+    })
+  }
+  catch (error) {
+    console.error('[App] 初始化应用状态失败:', error)
+  }
+})
+
+onUnmounted(() => {
+  console.log('[App] 清理状态监听器')
+  window.api.appRemoveStateChangedListener()
+})
 </script>
 
 <template>

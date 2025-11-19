@@ -3,7 +3,7 @@ import type { Buffer } from 'node:buffer'
 import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
 import { Plugin } from './Plugin'
 
@@ -31,7 +31,6 @@ export class AudioPlugin extends Plugin {
   }
 
   private protocol: Protocol | null = null
-  private mainWindow: BrowserWindow | null = null
   private backgroundAudioWindow: BrowserWindow | null = null
 
   /**
@@ -84,6 +83,12 @@ export class AudioPlugin extends Plugin {
    */
   async onAudioChannelOpened(): Promise<void> {
     console.log('[AudioPlugin] 音频通道已打开')
+
+    // 强制广播状态更新（确保 channelOpen 状态同步）
+    if (this.app) {
+      const currentState = this.app.getDeviceState()
+      this.broadcastStateChanged(currentState)
+    }
   }
 
   /**
@@ -91,6 +96,12 @@ export class AudioPlugin extends Plugin {
    */
   async onAudioChannelClosed(): Promise<void> {
     console.log('[AudioPlugin] 音频通道已关闭')
+
+    // 强制广播状态更新（即使设备状态没变，channelOpen 已经变化）
+    if (this.app) {
+      const currentState = this.app.getDeviceState()
+      this.broadcastStateChanged(currentState)
+    }
   }
 
   /**
@@ -128,20 +139,42 @@ export class AudioPlugin extends Plugin {
       }
     }
 
-    // 通知主窗口状态变化（用于 UI 显示）
-    if (this.mainWindow) {
-      this.mainWindow.webContents.send('app:state-changed', {
-        deviceState: state,
-        channelOpen: this.protocol?.isAudioChannelOpened() || false,
-      })
-    }
+    // 广播状态变化到所有渲染进程窗口（用于 UI 显示）
+    this.broadcastStateChanged(state)
   }
 
   /**
-   * 设置主窗口引用
+   * 广播状态变化到所有渲染进程窗口
    */
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
+  private broadcastStateChanged(state: DeviceState): void {
+    const stateData = {
+      deviceState: state,
+      channelOpen: this.protocol?.isAudioChannelOpened() || false,
+    }
+
+    // 获取所有 webContents（排除后台音频窗口）
+    const allWebContents = webContents.getAllWebContents()
+
+    allWebContents.forEach((wc) => {
+      // 跳过后台音频窗口（它不需要状态更新）
+      if (this.backgroundAudioWindow && wc.id === this.backgroundAudioWindow.webContents.id) {
+        return
+      }
+
+      // 跳过已销毁的窗口
+      if (wc.isDestroyed()) {
+        return
+      }
+
+      try {
+        wc.send('app:state-changed', stateData)
+      }
+      catch (error) {
+        console.error(`[AudioPlugin] 向窗口 ${wc.id} 广播状态失败:`, error)
+      }
+    })
+
+    console.log(`[AudioPlugin] 已广播状态到 ${allWebContents.length} 个窗口`)
   }
 
   /**
@@ -237,7 +270,6 @@ export class AudioPlugin extends Plugin {
 
     // 清理引用
     this.protocol = null
-    this.mainWindow = null
     this.backgroundAudioWindow = null
 
     // 调用父类 shutdown

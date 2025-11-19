@@ -134,17 +134,12 @@ app.whenReady().then(() => {
       console.log('[Main] Application IPC 已注册（依赖注入模式）')
 
       // 创建主窗口
-      const mainWindow = ensureMainWindow()
+      ensureMainWindow()
 
       // 设置 AudioPlugin 的窗口引用
       const audioPlugin = application.getAudioPlugin()
-      if (audioPlugin) {
-        if (mainWindow) {
-          audioPlugin.setMainWindow(mainWindow)
-        }
-        if (backgroundAudioWindow) {
-          audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
-        }
+      if (audioPlugin && backgroundAudioWindow) {
+        audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
       }
     }
     else {

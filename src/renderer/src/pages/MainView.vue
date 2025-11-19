@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NButton } from 'naive-ui'
-import { onMounted, onUnmounted, ref } from 'vue'
 import Dots from '../components/Dots.vue'
+import { useCallStore } from '../stores/call'
 
 function togglePanel(): void {
   window.api.togglePanel()
@@ -19,63 +19,27 @@ function winClose(): void {
   window.api.close()
 }
 
-// 是否通话中
-const isCalling = ref(false)
-const deviceState = ref('idle')
+// 使用通话状态 Store
+const callStore = useCallStore()
 
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
   try {
-    if (isCalling.value) {
+    if (callStore.isCalling) {
       // 挂断电话 - 停止自动对话
       console.log('[MainView] 挂断电话')
-
-      // 停止自动对话（音频系统由后台窗口管理）
       await window.api.appStopAutoConversation()
-
-      // 更新状态为未通话
-      isCalling.value = false
     }
     else {
       // 拨打电话 - 开始自动对话
       console.log('[MainView] 拨打电话')
-
-      // 开始自动对话（音频系统由后台窗口管理）
       await window.api.appStartAutoConversation()
-
-      // 更新状态为通话中
-      isCalling.value = true
     }
   }
   catch (error) {
     console.error('[MainView] 切换通话状态失败:', error)
-    // 恢复 UI 状态，避免状态不一致
-    isCalling.value = !isCalling.value
   }
 }
-
-onMounted(() => {
-  console.log('[MainView] 组件已挂载')
-
-  // 监听应用状态变化
-  window.api.appOnStateChanged((state) => {
-    deviceState.value = state.deviceState || 'idle'
-
-    // 根据设备状态同步通话状态
-    // 如果设备状态是 idle 且音频通道关闭，则认为通话已结束
-    if (state.deviceState === 'idle' && !state.channelOpen) {
-      isCalling.value = false
-    }
-
-    console.log('[MainView] 状态更新:', state)
-  })
-})
-
-onUnmounted(() => {
-  console.log('[MainView] 组件卸载，清理状态监听器')
-  // 清理状态变化监听器，防止内存泄漏
-  window.api.appRemoveStateChangedListener()
-})
 </script>
 
 <template>
@@ -111,17 +75,17 @@ onUnmounted(() => {
     >
 
     <!-- 标题 -->
-    <div class="text-base text-gray-700 dark:text-gray-300" :class="[isCalling ? 'visible' : 'collapse']">
+    <div class="text-base text-gray-700 dark:text-gray-300" :class="[callStore.isCalling ? 'visible' : 'collapse']">
       请开始说话
     </div>
 
     <!-- Dots 组件 + 按钮组：固定相距 100px -->
     <div class="flex flex-col items-center gap-y-[100px] mt-12">
-      <Dots :is-show="isCalling" />
+      <Dots :is-show="callStore.isCalling" />
       <div class="flex items-center gap-2">
         <!-- 电话按钮：点击拨打/挂断 -->
         <NButton quaternary circle @click="toggleCall">
-          <icon-carbon-phone v-if="!isCalling" class="w-5 h-5 text-green-500" />
+          <icon-carbon-phone v-if="!callStore.isCalling" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">
