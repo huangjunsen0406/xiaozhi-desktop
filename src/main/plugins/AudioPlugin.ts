@@ -136,11 +136,6 @@ export class AudioPlugin extends Plugin {
         console.log('[AudioPlugin] 通知后台音频窗口启动采集')
         this.backgroundAudioWindow.webContents.send('audio:command', 'start')
       }
-      else if (state === 'idle') {
-        // 停止监听 -> 停止音频采集
-        console.log('[AudioPlugin] 通知后台音频窗口停止采集')
-        this.backgroundAudioWindow.webContents.send('audio:command', 'stop')
-      }
     }
 
     // 广播状态变化到所有渲染进程窗口（用于 UI 显示）
@@ -304,6 +299,12 @@ export class AudioPlugin extends Plugin {
    */
   async shutdown(): Promise<void> {
     console.log('[AudioPlugin] 正在关闭...')
+
+    // 停止后台音频窗口的采集
+    if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
+      console.log('[AudioPlugin] 通知后台音频窗口停止采集并清理资源')
+      this.backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
+    }
 
     // 清理 IPC 监听器
     ipcMain.removeAllListeners('audio:pcm')
