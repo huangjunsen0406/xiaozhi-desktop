@@ -5,6 +5,7 @@ import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { PluginManager } from '../plugins/PluginManager'
+import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 /**
@@ -29,6 +30,7 @@ export class Application {
   // 插件系统
   private plugins = new PluginManager()
   private audioPlugin: AudioPlugin | null = null
+  private wakeWordPlugin: WakeWordPlugin | null = null
 
   // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
@@ -68,6 +70,9 @@ export class Application {
     // 注册插件
     this.audioPlugin = new AudioPlugin()
     this.plugins.register(this.audioPlugin)
+
+    this.wakeWordPlugin = new WakeWordPlugin()
+    this.plugins.register(this.wakeWordPlugin)
 
     // 初始化插件
     await this.plugins.setupAll(this)
@@ -576,6 +581,13 @@ export class Application {
    */
   getAudioPlugin(): AudioPlugin | null {
     return this.audioPlugin
+  }
+
+  /**
+   * 获取 WakeWordPlugin 实例
+   */
+  getWakeWordPlugin(): WakeWordPlugin | null {
+    return this.wakeWordPlugin
   }
 
   /**

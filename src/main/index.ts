@@ -126,6 +126,14 @@ app.whenReady().then(() => {
       // 初始化 Application
       const application = getApplication()
       await application.initialize('websocket')
+
+      const audioPlugin = application.getAudioPlugin()
+      if (audioPlugin && backgroundAudioWindow) {
+        audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
+        console.log('[Main] AudioPlugin 窗口引用已设置')
+      }
+
+      // 启动 Application
       await application.start()
 
       // 注册需要 Application 的 IPC 通道（依赖注入）
@@ -135,12 +143,6 @@ app.whenReady().then(() => {
 
       // 创建主窗口
       ensureMainWindow()
-
-      // 设置 AudioPlugin 的窗口引用
-      const audioPlugin = application.getAudioPlugin()
-      if (audioPlugin && backgroundAudioWindow) {
-        audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
-      }
     }
     else {
       // 激活检测失败，退出应用

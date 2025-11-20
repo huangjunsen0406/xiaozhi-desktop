@@ -3,6 +3,7 @@ import type { Buffer } from 'node:buffer'
 import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
+import type { AudioListener } from '../types/audio'
 import { ipcMain, webContents } from 'electron'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
 import { Plugin } from './Plugin'
@@ -32,6 +33,9 @@ export class AudioPlugin extends Plugin {
 
   private protocol: Protocol | null = null
   private backgroundAudioWindow: BrowserWindow | null = null
+
+  // 音频监听器（观察者模式）
+  private audioListeners: Set<AudioListener> = new Set()
 
   /**
    * 插件初始化
@@ -185,6 +189,40 @@ export class AudioPlugin extends Plugin {
   }
 
   /**
+   * 添加音频监听器
+   */
+  addAudioListener(listener: AudioListener): void {
+    this.audioListeners.add(listener)
+    console.log(`[AudioPlugin] 添加音频监听器: ${listener.name}`)
+  }
+
+  /**
+   * 移除音频监听器
+   */
+  removeAudioListener(listener: AudioListener): void {
+    this.audioListeners.delete(listener)
+    console.log(`[AudioPlugin] 移除音频监听器: ${listener.name}`)
+  }
+
+  /**
+   * 广播音频数据到所有监听器
+   */
+  private notifyAudioListeners(pcmData: Int16Array): void {
+    if (this.audioListeners.size === 0) {
+      return
+    }
+
+    for (const listener of this.audioListeners) {
+      try {
+        listener.onAudioData(pcmData)
+      }
+      catch (error) {
+        console.error(`[AudioPlugin] 监听器 ${listener.name} 处理失败:`, error)
+      }
+    }
+  }
+
+  /**
    * 获取后台音频窗口引用
    */
   getBackgroundAudioWindow(): BrowserWindow | null {
@@ -196,29 +234,31 @@ export class AudioPlugin extends Plugin {
    */
   private handlePCMFromRenderer(pcmData: Int16Array): void {
     try {
-      // 检查是否应该采集音频
-      if (!this.app || !this.app.shouldCaptureAudio()) {
-        return
-      }
+      // 1. 发送到服务器（仅在应该采集时）
+      if (this.app?.shouldCaptureAudio()) {
+        const opusCodec = getOpusCodec()
+        if (!opusCodec) {
+          console.error('[AudioPlugin] OpusCodec 未初始化')
+          return
+        }
 
-      const opusCodec = getOpusCodec()
-      if (!opusCodec) {
-        console.error('[AudioPlugin] OpusCodec 未初始化')
-        return
-      }
+        // 编码 PCM → Opus
+        const opusFrame = opusCodec.encode(pcmData)
 
-      // 编码 PCM → Opus
-      const opusFrame = opusCodec.encode(pcmData)
-
-      // 发送到 WebSocket 服务器
-      if (this.protocol && this.protocol.isAudioChannelOpened()) {
-        this.protocol.sendAudio(opusFrame).catch((error) => {
-          console.error('[AudioPlugin] 发送音频失败:', error)
-        })
+        // 发送到 WebSocket 服务器
+        if (this.protocol && this.protocol.isAudioChannelOpened()) {
+          this.protocol.sendAudio(opusFrame).catch((error) => {
+            console.error('[AudioPlugin] 发送音频失败:', error)
+          })
+        }
       }
     }
     catch (error) {
       console.error('[AudioPlugin] 处理 PCM 数据失败:', error)
+    }
+    finally {
+      // 2. 通知音频监听器（始终执行，即使不发送到服务器）
+      this.notifyAudioListeners(pcmData)
     }
   }
 

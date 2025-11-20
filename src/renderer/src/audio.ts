@@ -182,7 +182,4 @@ window.api.onAudioCommand((command: string, data?: any) => {
   }
 })
 
-// 应用启动时自动初始化
-initialize().catch(console.error)
-
 console.log('[BackgroundAudio] 后台音频系统已启动')

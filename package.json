@@ -14,7 +14,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && bash scripts/fix-sherpa-onnx-rpath.sh || true",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
@@ -36,6 +36,8 @@
     "opus-encdec": "^0.1.1",
     "opusscript": "^0.1.1",
     "pinia": "^3.0.4",
+    "pinyin": "^4.0.0",
+    "sherpa-onnx-node": "^1.12.17",
     "uuid": "^13.0.0",
     "vue-router": "^4.5.1",
     "ws": "^8.18.3"

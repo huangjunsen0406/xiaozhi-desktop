@@ -35,3 +35,20 @@ export interface AudioDeviceList {
   inputs: AudioDeviceInfo[]
   outputs: AudioDeviceInfo[]
 }
+
+/**
+ * 音频监听器接口
+ * 用于订阅 AudioPlugin 的音频流（观察者模式）
+ */
+export interface AudioListener {
+  /**
+   * 监听器名称（用于日志）
+   */
+  readonly name: string
+
+  /**
+   * 接收音频数据的回调
+   * @param pcmData - PCM 音频数据 (Int16Array, 16kHz, 单声道)
+   */
+  onAudioData: (pcmData: Int16Array) => void
+}

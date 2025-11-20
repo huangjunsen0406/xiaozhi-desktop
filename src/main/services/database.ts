@@ -111,6 +111,55 @@ export class DatabaseManager {
       )
     `)
 
+    // 唤醒词配置表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS wake_word_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        -- 启用状态
+        enabled INTEGER DEFAULT 1,
+        -- 当前语言/模型
+        language TEXT DEFAULT 'zh',
+        -- 唤醒词列表（换行符分隔的中文列表）
+        keywords_list TEXT DEFAULT '你好小智',
+        -- 检测阈值 (0.1-1.0, 越低越灵敏)
+        threshold REAL DEFAULT 0.2,
+        -- 分数权重
+        score REAL DEFAULT 1.8,
+        -- 冷却时间（毫秒）
+        cooldown_ms INTEGER DEFAULT 1500,
+        -- 时间戳
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `)
+
+    // 如果表已存在但缺少字段，则添加
+    const tableInfo = this.db.pragma('table_info(wake_word_config)') as Array<{ name: string }>
+    const hasKeywordsList = tableInfo.some(col => col.name === 'keywords_list')
+    const hasKeywordZh = tableInfo.some(col => col.name === 'keyword_zh')
+    const hasKeywordEn = tableInfo.some(col => col.name === 'keyword_en')
+
+    if (!hasKeywordsList) {
+      this.db.exec(`
+        ALTER TABLE wake_word_config ADD COLUMN keywords_list TEXT DEFAULT '你好小智'
+      `)
+      console.log('[Database] 已添加 keywords_list 字段到 wake_word_config 表')
+    }
+
+    if (!hasKeywordZh) {
+      this.db.exec(`
+        ALTER TABLE wake_word_config ADD COLUMN keyword_zh TEXT DEFAULT '你好小智'
+      `)
+      console.log('[Database] 已添加 keyword_zh 字段到 wake_word_config 表')
+    }
+
+    if (!hasKeywordEn) {
+      this.db.exec(`
+        ALTER TABLE wake_word_config ADD COLUMN keyword_en TEXT DEFAULT 'MOSS'
+      `)
+      console.log('[Database] 已添加 keyword_en 字段到 wake_word_config 表')
+    }
+
     console.log('[Database] 数据库表检查完成')
   }
 
@@ -390,6 +439,119 @@ export class DatabaseManager {
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
       enableEchoCancellation: Boolean(config.enable_echo_cancellation),
       conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',
+    }
+  }
+
+  /* ==================== 唤醒词配置相关 ==================== */
+
+  /**
+   * 获取或创建唤醒词配置
+   */
+  getOrCreateWakeWordConfig(): any {
+    // 先尝试查找
+    const existing = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get()
+
+    if (existing) {
+      return existing
+    }
+
+    // 插入默认配置
+    const result = this.db.prepare(`
+      INSERT INTO wake_word_config (
+        enabled, language, keywords_list,
+        keyword_zh, keyword_en,
+        threshold, score, cooldown_ms
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(1, 'zh', '你好小智', '你好小智', 'MOSS', 0.2, 1.8, 1500)
+
+    return this.db.prepare('SELECT * FROM wake_word_config WHERE id = ?').get(result.lastInsertRowid)
+  }
+
+  /**
+   * 获取唤醒词配置
+   */
+  getWakeWordConfig(): any {
+    return this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get()
+  }
+
+  /**
+   * 更新唤醒词配置（批量）
+   */
+  updateWakeWordConfig(updates: {
+    enabled?: boolean
+    language?: string
+    keyword?: string
+    threshold?: number
+    score?: number
+    cooldown_ms?: number
+  }): void {
+    // 确保配置记录存在
+    let config = this.getWakeWordConfig()
+    if (!config) {
+      config = this.getOrCreateWakeWordConfig()
+    }
+
+    // 转换布尔值为整数
+    const dbUpdates: Record<string, any> = {}
+    for (const [key, value] of Object.entries(updates)) {
+      if (typeof value === 'boolean') {
+        dbUpdates[key] = value ? 1 : 0
+      }
+      else if (value !== undefined) {
+        dbUpdates[key] = value
+      }
+    }
+
+    // 构建更新语句
+    const fields = Object.keys(dbUpdates)
+    if (fields.length === 0) {
+      return
+    }
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ')
+    const values = fields.map(f => dbUpdates[f])
+
+    this.db.prepare(`
+      UPDATE wake_word_config
+      SET ${setClause}, updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `).run(...values, config.id)
+  }
+
+  /**
+   * 获取格式化的唤醒词配置（转换为应用使用的格式）
+   */
+  getFormattedWakeWordConfig(): {
+    enabled: boolean
+    language: string
+    keyword: string
+    threshold: number
+    score: number
+    cooldownMs: number
+  } {
+    const config = this.getOrCreateWakeWordConfig()
+    const language = config.language || 'zh'
+
+    // 根据当前语言选择对应的唤醒词
+    let keyword: string
+    if (language === 'zh') {
+      keyword = config.keyword_zh || '小智'
+    }
+    else if (language === 'en') {
+      keyword = config.keyword_en || 'HELLO'
+    }
+    else {
+      keyword = config.keyword || '小智'
+    }
+
+    return {
+      enabled: Boolean(config.enabled),
+      language,
+      keyword,
+      threshold: config.threshold || 0.2,
+      score: config.score || 1.8,
+      cooldownMs: config.cooldown_ms || 1500,
     }
   }
 

@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, hoverApi, systemApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, hoverApi, systemApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -68,6 +68,11 @@ const api = {
   // 系统配置 API
   systemGetConfig: systemApi.getConfig,
   systemUpdateConfig: systemApi.updateConfig,
+
+  // 唤醒词 API
+  wakeWordGetConfig: wakeWordApi.getConfig,
+  wakeWordUpdateConfig: wakeWordApi.updateConfig,
+  wakeWordTest: wakeWordApi.test,
 
   // 后台音频窗口 API
   onAudioCommand: backgroundAudioApi.onAudioCommand,

@@ -55,6 +55,10 @@ export interface RendererApi {
   // System Config APIs
   systemGetConfig: () => Promise<any>
   systemUpdateConfig: (config: any) => Promise<any>
+  // Wake Word APIs
+  wakeWordGetConfig: () => Promise<{ success: boolean, data?: any, error?: string }>
+  wakeWordUpdateConfig: (updates: any) => Promise<{ success: boolean, error?: string }>
+  wakeWordTest: () => Promise<{ success: boolean, keyword?: string, error?: string }>
   // Background Audio Window APIs
   onAudioCommand: (callback: (command: string, data?: any) => void) => void
   sendAudioState: (state: any) => void

@@ -1,5 +1,6 @@
 import type { IpcContext } from '../types/ipc'
 import { ipcMain } from 'electron'
+import { registerWakeWordIpc } from './wakeWordIpc'
 
 /**
  * 注册 Application 控制相关的 IPC 通道
@@ -8,6 +9,9 @@ import { ipcMain } from 'electron'
 export function registerAppIpc(context: IpcContext): void {
   const { application } = context
   console.log('[App IPC] 注册 Application 控制 IPC 通道...')
+
+  // 注册唤醒词 IPC
+  registerWakeWordIpc(context)
 
   // 开始手动监听
   ipcMain.handle('app:start-listening-manual', async () => {
