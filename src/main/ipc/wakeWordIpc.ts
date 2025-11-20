@@ -41,13 +41,6 @@ export function registerWakeWordIpc(context: IpcContext): void {
   }) => {
     try {
       console.log('IPC: 更新唤醒词配置', updates)
-      console.log('IPC: [DEBUG] updates.keyword =', updates.keyword)
-      console.log('IPC: [DEBUG] typeof updates.keyword =', typeof updates.keyword)
-      console.log('IPC: [DEBUG] updates.keyword !== undefined?', updates.keyword !== undefined)
-      if (updates.keyword !== undefined) {
-        console.log('IPC: [DEBUG] updates.keyword.trim() =', updates.keyword.trim())
-        console.log('IPC: [DEBUG] updates.keyword.trim() !== \'\'?', updates.keyword.trim() !== '')
-      }
 
       // 转换前端字段名到数据库字段名
       const dbUpdates: any = {}
@@ -79,8 +72,6 @@ export function registerWakeWordIpc(context: IpcContext): void {
 
         // 生成 keywords.txt 文件
         try {
-          console.log('IPC: [DEBUG] 生成 keywords.txt，语言:', currentLanguage)
-
           // 确定模型路径
           const isDev = process.env.NODE_ENV === 'development'
           const modelsPath = isDev
@@ -94,20 +85,16 @@ export function registerWakeWordIpc(context: IpcContext): void {
           let keywordLine: string
           if (currentLanguage === 'zh') {
             // 中文：使用拼音转换
-            console.log('IPC: [DEBUG] 使用 PinyinConverter 转换中文...')
             keywordLine = PinyinConverter.toKeywordFormat(keyword)
           }
           else if (currentLanguage === 'en') {
             // 英文：使用 BPE 转换
-            console.log('IPC: [DEBUG] 使用 BpeConverter 转换英文...')
             const tokensPath = path.join(languageModelPath, 'tokens.txt')
             keywordLine = BpeConverter.toKeywordFormat(keyword, tokensPath)
           }
           else {
             throw new Error(`不支持的语言: ${currentLanguage}`)
           }
-
-          console.log('IPC: [DEBUG] 转换结果:', keywordLine)
 
           // 写入文件
           writeFileSync(keywordsPath, `${keywordLine}\n`, 'utf-8')

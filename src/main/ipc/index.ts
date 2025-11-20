@@ -10,25 +10,17 @@ import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
 import { registerConfigIpc } from './configIpc'
 
 /**
- * 注册所有 IPC 通道
- * @param context - 可选的 IPC 上下文，如果提供则使用依赖注入模式
+ * 注册基础 IPC 通道（不依赖 Application）
+ * 包括: 悬停、激活、配置、音频、后台音频、窗口控制等
  */
-export function registerIpcChannels(context?: IpcContext): void {
+export function registerBasicIpcChannels(): void {
+  console.log('[IPC] 注册基础 IPC 通道...')
+
   registerHoverIpc()
   registerActivationIpc()
   registerConfigIpc()
   registerAudioIpc()
-
-  // Application 控制 IPC - 使用依赖注入
-  if (context) {
-    registerAppIpc(context)
-  }
-  else {
-    // 兼容旧模式：延迟注册，等待 Application 初始化
-    console.warn('[IPC] 未提供 IpcContext，appIpc 将延迟注册')
-  }
-
-  registerBackgroundAudioIpc() // 后台音频窗口控制 IPC
+  registerBackgroundAudioIpc()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()
@@ -99,4 +91,17 @@ export function registerIpcChannels(context?: IpcContext): void {
       toggleToMain()
     }
   })
+
+  console.log('[IPC] ✓ 基础 IPC 通道已注册')
+}
+
+/**
+ * 注册 Application 相关的 IPC 通道（依赖 Application 实例）
+ * 包括: 监听控制、状态管理、文本发送、唤醒词等
+ * @param context - IPC 上下文，包含 Application 实例
+ */
+export function registerAppIpcChannels(context: IpcContext): void {
+  console.log('[IPC] 注册 Application IPC 通道...')
+  registerAppIpc(context)
+  console.log('[IPC] ✓ Application IPC 通道已注册')
 }

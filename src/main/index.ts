@@ -4,8 +4,7 @@ import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
-import { registerIpcChannels } from './ipc'
-import { registerAppIpc } from './ipc/appIpc'
+import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
@@ -18,6 +17,10 @@ app.commandLine.appendSwitch(
   'ChromeWideEchoCancellation,SystemLoopbackAsAecReference',
 )
 
+// 平台检查辅助函数
+const isMacOS = process.platform === 'darwin'
+const hasDock = () => isMacOS && !!app.dock
+
 function resolveAppIconPath(): string {
   const asset = appIconPng as unknown as string
   const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
@@ -27,7 +30,7 @@ function resolveAppIconPath(): string {
 
 let devDockImg: Electron.NativeImage | null = null
 function setDevDockIconOnce(): void {
-  if (process.platform !== 'darwin' || !app.dock || !is.dev)
+  if (!isMacOS || !hasDock() || !is.dev)
     return
   if (!devDockImg) {
     const p = resolveAppIconPath()
@@ -36,22 +39,25 @@ function setDevDockIconOnce(): void {
       devDockImg = img
   }
   if (devDockImg)
-    app.dock.setIcon(devDockImg)
+    app.dock!.setIcon(devDockImg)
 }
 
 function ensureDockVisible(): void {
-  if (process.platform !== 'darwin') {
+  if (!isMacOS)
     return
-  }
+
   app.setName('小智')
   ;(app as any).setActivationPolicy?.('regular')
-  if (app.dock) {
+
+  if (hasDock()) {
     try {
       if (!app.isPackaged)
         setDevDockIconOnce()
-      app.dock.show()
+      app.dock!.show()
     }
-    catch {}
+    catch (error) {
+      console.log(error)
+    }
   }
 }
 
@@ -87,11 +93,12 @@ app.whenReady().then(() => {
     window.on('closed', ensureDockVisible)
   })
 
-  registerIpcChannels()
+  // 注册基础 IPC 通道（不依赖 Application）
+  registerBasicIpcChannels()
   registerTray()
 
   // macOS Dock 菜单
-  if (process.platform === 'darwin' && app.dock) {
+  if (isMacOS && hasDock()) {
     const dockMenu = Menu.buildFromTemplate([
       {
         label: '显示主窗口',
@@ -109,7 +116,7 @@ app.whenReady().then(() => {
         },
       },
     ])
-    app.dock.setMenu(dockMenu)
+    app.dock!.setMenu(dockMenu)
   }
 
   // macOS：二次保险
@@ -136,10 +143,9 @@ app.whenReady().then(() => {
       // 启动 Application
       await application.start()
 
-      // 注册需要 Application 的 IPC 通道（依赖注入）
+      // 注册 Application 相关的 IPC 通道
       const ipcContext: IpcContext = { application }
-      registerAppIpc(ipcContext)
-      console.log('[Main] Application IPC 已注册（依赖注入模式）')
+      registerAppIpcChannels(ipcContext)
 
       // 创建主窗口
       ensureMainWindow()
@@ -151,9 +157,8 @@ app.whenReady().then(() => {
     }
   }).catch((error) => {
     console.error('激活检测出错:', error)
-    // 出错也允许继续，避免阻塞用户
-    ensureBackgroundAudioWindow()
-    ensureMainWindow()
+    // 激活检测异常，统一退出应用
+    app.quit()
   })
 
   app.on('activate', () => {
@@ -169,7 +174,7 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (!isMacOS) {
     app.quit()
   }
 })
