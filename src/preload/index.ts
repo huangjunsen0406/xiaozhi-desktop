@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, hoverApi, systemApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, emotionApi, hoverApi, systemApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -80,6 +80,15 @@ const api = {
   onAudioCommand: backgroundAudioApi.onAudioCommand,
   sendAudioState: backgroundAudioApi.sendAudioState,
   backgroundAudioGetStatus: backgroundAudioApi.getStatus,
+
+  // 表情 API
+  emotionSelectImage: emotionApi.selectImage,
+  emotionUploadCustom: emotionApi.uploadCustom,
+  emotionGetMapping: emotionApi.getMapping,
+  emotionGetCustomPath: emotionApi.getCustomPath,
+  emotionReset: emotionApi.reset,
+  emotionOnChanged: emotionApi.onEmotionChanged,
+  emotionRemoveChangedListener: emotionApi.removeEmotionChangedListener,
 }
 
 // 使用 contextBridge 暴露 API

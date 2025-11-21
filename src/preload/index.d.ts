@@ -65,6 +65,14 @@ export interface RendererApi {
   onAudioCommand: (callback: (command: string, data?: any) => void) => void
   sendAudioState: (state: any) => void
   backgroundAudioGetStatus: () => Promise<any>
+  // Emotion APIs
+  emotionSelectImage: () => Promise<Electron.OpenDialogReturnValue>
+  emotionUploadCustom: (emotionType: string, sourcePath: string) => Promise<{ success: boolean, error?: string }>
+  emotionGetMapping: () => Promise<Record<string, string>>
+  emotionGetCustomPath: (emotionType: string) => Promise<string | null>
+  emotionReset: (emotionType: string) => Promise<{ success: boolean, error?: string }>
+  emotionOnChanged: (callback: (emotionType: string) => void) => void
+  emotionRemoveChangedListener: () => void
 }
 
 declare global {

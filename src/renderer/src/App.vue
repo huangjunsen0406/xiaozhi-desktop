@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useColorMode } from '@vueuse/core'
-import { darkTheme, lightTheme, NConfigProvider, NMessageProvider } from 'naive-ui'
+import { darkTheme, lightTheme, NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useCallStore } from './stores/call'
 import { themeOverrides } from './theme/naiveTheme'
@@ -66,7 +66,9 @@ onUnmounted(() => {
 <template>
   <NConfigProvider :theme="theme" :theme-overrides="themeOverrides">
     <NMessageProvider>
-      <router-view />
+      <NDialogProvider>
+        <router-view />
+      </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
 </template>

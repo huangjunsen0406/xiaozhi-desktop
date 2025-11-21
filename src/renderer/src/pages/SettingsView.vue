@@ -12,6 +12,7 @@ import { computed, h, ref } from 'vue'
 
 // 图标
 import IconCarbonCamera from '~icons/carbon/camera'
+import IconCarbonFaceActivated from '~icons/carbon/face-activated'
 import IconCarbonHeadphones from '~icons/carbon/headphones'
 import IconCarbonKeyboard from '~icons/carbon/keyboard'
 import IconCarbonMicrophone from '~icons/carbon/microphone'
@@ -22,17 +23,19 @@ import IconCarbonView from '~icons/carbon/view'
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue'
 import AudioSettings from '../components/settings/AudioSettings.vue'
 import CameraSettings from '../components/settings/CameraSettings.vue'
+import EmotionSettings from '../components/settings/EmotionSettings.vue'
 import HotkeySettings from '../components/settings/HotkeySettings.vue'
 import SystemSettings from '../components/settings/SystemSettings.vue'
 import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
 
-type Key = 'system' | 'appearance' | 'wake' | 'camera' | 'audio' | 'hotkey'
+type Key = 'system' | 'appearance' | 'emotion' | 'wake' | 'camera' | 'audio' | 'hotkey'
 const selected = ref<Key>('system')
 const withIcon = (Comp: any) => () => h(Comp, { class: 'w-4 h-4' })
 
 const menuOptions = [
   { label: '系统选项', key: 'system', icon: withIcon(IconCarbonSettings) },
   { label: '外观', key: 'appearance', icon: withIcon(IconCarbonView) },
+  { label: '表情', key: 'emotion', icon: withIcon(IconCarbonFaceActivated) },
   { label: '唤醒词', key: 'wake', icon: withIcon(IconCarbonMicrophone) },
   { label: '摄像头', key: 'camera', icon: withIcon(IconCarbonCamera) },
   { label: '音频设备', key: 'audio', icon: withIcon(IconCarbonHeadphones) },
@@ -49,6 +52,7 @@ export interface PanelExposed {
 const panelRefs = ref<Record<Key, PanelExposed | null>>({
   system: null,
   appearance: null,
+  emotion: null,
   wake: null,
   camera: null,
   audio: null,
@@ -69,7 +73,8 @@ const message = useMessage()
 
 const customButtonTextByKey: Record<Key, string | undefined> = {
   system: '重置',
-  appearance: undefined, // 外观设置不需要自定义按钮
+  appearance: undefined,
+  emotion: undefined, // 表情设置没有自定义按钮
   wake: '测试',
   camera: '测试',
   audio: '刷新设备',
@@ -146,6 +151,7 @@ async function onCustomClick() {
                 <!-- 使用 v-show 保持组件实例，避免每次切换都重新挂载 -->
                 <SystemSettings v-show="selected === 'system'" :ref="setPanelRef('system')" />
                 <AppearanceSettings v-show="selected === 'appearance'" :ref="setPanelRef('appearance')" />
+                <EmotionSettings v-show="selected === 'emotion'" :ref="setPanelRef('emotion')" />
                 <WakeWordSettings v-show="selected === 'wake'" :ref="setPanelRef('wake')" />
                 <CameraSettings v-show="selected === 'camera'" :ref="setPanelRef('camera')" />
                 <AudioSettings v-show="selected === 'audio'" :ref="setPanelRef('audio')" />

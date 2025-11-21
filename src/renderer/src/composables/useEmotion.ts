@@ -1,5 +1,5 @@
 import type { EmotionConfig, EmotionState, EmotionType } from '../types/emotion'
-import { computed, reactive, readonly } from 'vue'
+import { computed, onUnmounted, reactive, readonly } from 'vue'
 
 /**
  * 表情管理 Composable
@@ -49,12 +49,30 @@ export function useEmotion(config: EmotionConfig = {}) {
   /**
    * 获取表情图片 URL
    * 降级策略：
-   * 1. 尝试获取指定表情的图片
-   * 2. 如果不存在，降级到 neutral.png
+   * 1. 优先尝试获取自定义图片
+   * 2. 如果没有自定义，使用默认图片
+   * 3. 如果默认图片不存在，降级到 neutral.png
+   *
+   * @param emotion - 表情类型
+   * @param forceRefresh - 是否强制刷新缓存（用于上传新图片后）
    */
-  const getEmotionImageUrl = (emotion: EmotionType): string => {
+  const getEmotionImageUrl = async (emotion: EmotionType, forceRefresh = false): Promise<string> => {
+    try {
+      // 1. 优先检查自定义图片
+      const customPath = await window.api.emotionGetCustomPath(emotion)
+      if (customPath) {
+        console.log(`[useEmotion] 使用自定义表情: ${emotion}`)
+        // base64 data URL 不需要时间戳，每次都是新生成的
+        return customPath
+      }
+    }
+    catch (error) {
+      console.warn(`[useEmotion] 获取自定义表情失败: ${emotion}`, error)
+    }
+
+    // 2. 使用默认图片（从缓存或 assets）
     // 优先从缓存获取
-    if (emotionCache.has(emotion)) {
+    if (emotionCache.has(emotion) && !forceRefresh) {
       return emotionCache.get(emotion)!
     }
 
@@ -72,9 +90,9 @@ export function useEmotion(config: EmotionConfig = {}) {
       }
     }
 
-    // 如果不是 neutral 且找不到，降级到 neutral
+    // 3. 如果不是 neutral 且找不到，降级到 neutral
     if (emotion !== 'neutral') {
-      return getEmotionImageUrl('neutral')
+      return getEmotionImageUrl('neutral', forceRefresh)
     }
 
     // 理论上 neutral.png 应该始终存在，这里返回空字符串作为最后兜底
@@ -85,19 +103,28 @@ export function useEmotion(config: EmotionConfig = {}) {
   /**
    * 更新表情
    * @param emotion - 表情类型
+   * @param forceRefresh - 是否强制刷新缓存
    */
-  const setEmotion = (emotion: EmotionType): void => {
-    // 避免重复更新
-    if (state.current === emotion && state.imageUrl) {
+  const setEmotion = async (emotion: EmotionType, forceRefresh = false): Promise<void> => {
+    // 如果强制刷新，跳过重复检查
+    if (!forceRefresh && state.current === emotion && state.imageUrl) {
       return
     }
 
-    console.log(`[useEmotion] 切换表情: ${state.current} -> ${emotion}`)
+    console.log(`[useEmotion] 切换表情: ${state.current} -> ${emotion}${forceRefresh ? ' (强制刷新)' : ''}`)
 
     state.current = emotion
 
-    // 获取图片 URL（始终返回有效的 URL，降级到 neutral.png）
-    state.imageUrl = getEmotionImageUrl(emotion)
+    // 获取图片 URL（异步，优先自定义，降级到默认）
+    state.imageUrl = await getEmotionImageUrl(emotion, forceRefresh)
+  }
+
+  /**
+   * 刷新当前表情（强制重新加载）
+   * 用于自定义图片上传后更新显示
+   */
+  const refresh = async (): Promise<void> => {
+    await setEmotion(state.current, true)
   }
 
   /**
@@ -109,6 +136,20 @@ export function useEmotion(config: EmotionConfig = {}) {
 
   // 初始化默认表情
   setEmotion(defaultEmotion)
+
+  // 监听表情变更事件（从设置页面广播）
+  window.api.emotionOnChanged((emotionType: string) => {
+    console.log(`[useEmotion] 收到表情变更事件: ${emotionType}`)
+    // 如果当前显示的就是变更的表情，强制刷新
+    if (state.current === emotionType) {
+      setEmotion(emotionType as EmotionType, true)
+    }
+  })
+
+  // 清理监听器
+  onUnmounted(() => {
+    window.api.emotionRemoveChangedListener()
+  })
 
   return {
     // 只读状态
@@ -122,6 +163,7 @@ export function useEmotion(config: EmotionConfig = {}) {
 
     // 方法
     setEmotion,
+    refresh,
     reset,
   }
 }
