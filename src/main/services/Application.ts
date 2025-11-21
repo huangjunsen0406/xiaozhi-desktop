@@ -4,6 +4,7 @@ import type { JsonMessage } from '../types/protocol'
 import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
+import { McpPlugin } from '../plugins/McpPlugin'
 import { PluginManager } from '../plugins/PluginManager'
 import { UIPlugin } from '../plugins/UIPlugin'
 import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
@@ -33,6 +34,7 @@ export class Application {
   private audioPlugin: AudioPlugin | null = null
   private wakeWordPlugin: WakeWordPlugin | null = null
   private uiPlugin: UIPlugin | null = null
+  private mcpPlugin: McpPlugin | null = null
 
   // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
@@ -78,6 +80,9 @@ export class Application {
 
     this.uiPlugin = new UIPlugin()
     this.plugins.register(this.uiPlugin)
+
+    this.mcpPlugin = new McpPlugin()
+    this.plugins.register(this.mcpPlugin)
 
     // 初始化插件
     await this.plugins.setupAll(this)
@@ -436,7 +441,7 @@ export class Application {
    * 处理接收到的音频数据
    */
   private handleIncomingAudio(data: Buffer): void {
-    console.log(`[Application] 收到音频数据，长度: ${data.length}`)
+    // console.log(`[Application] 收到音频数据，长度: ${data.length}`)
 
     // 转发给插件
     this.plugins.notifyIncomingAudio(data).catch((error) => {
@@ -488,6 +493,13 @@ export class Application {
    */
   getDeviceState(): DeviceState {
     return this.deviceState
+  }
+
+  /**
+   * 只读访问器：获取协议实例
+   */
+  getProtocol(): Protocol | null {
+    return this.protocol
   }
 
   /**
