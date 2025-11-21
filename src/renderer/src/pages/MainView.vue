@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import type { EmotionType } from '../types/emotion'
 import { NButton } from 'naive-ui'
+import { watch } from 'vue'
 import Dots from '../components/Dots.vue'
+import { useEmotion } from '../composables/useEmotion'
+import { useServerMessage } from '../composables/useServerMessage'
 import { useCallStore } from '../stores/call'
 
 function togglePanel(): void {
@@ -21,6 +25,19 @@ function winClose(): void {
 
 // 使用通话状态 Store
 const callStore = useCallStore()
+
+// 使用服务器消息处理（自动更新 store）
+useServerMessage()
+
+// 表情管理
+const emotion = useEmotion({
+  defaultEmotion: 'neutral',
+})
+
+// 监听 store 中的表情变化并同步到 emotion
+watch(() => callStore.emotion, (newEmotion) => {
+  emotion.setEmotion(newEmotion as EmotionType)
+}, { immediate: true })
 
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
@@ -68,10 +85,11 @@ async function toggleCall() {
       </NButton>
     </div>
 
-    <!-- Logo -->
+    <!-- 表情头像 -->
     <img
-      src="../assets/icon.png" alt="robot"
-      class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12"
+      :src="emotion.imageUrl.value"
+      :alt="emotion.emotion.value"
+      class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12 transition-opacity duration-300"
     >
 
     <!-- 标题 -->

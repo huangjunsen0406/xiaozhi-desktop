@@ -5,6 +5,7 @@ import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { PluginManager } from '../plugins/PluginManager'
+import { UIPlugin } from '../plugins/UIPlugin'
 import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
@@ -31,6 +32,7 @@ export class Application {
   private plugins = new PluginManager()
   private audioPlugin: AudioPlugin | null = null
   private wakeWordPlugin: WakeWordPlugin | null = null
+  private uiPlugin: UIPlugin | null = null
 
   // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
@@ -73,6 +75,9 @@ export class Application {
 
     this.wakeWordPlugin = new WakeWordPlugin()
     this.plugins.register(this.wakeWordPlugin)
+
+    this.uiPlugin = new UIPlugin()
+    this.plugins.register(this.uiPlugin)
 
     // 初始化插件
     await this.plugins.setupAll(this)

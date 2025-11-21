@@ -66,4 +66,14 @@ export const appApi = {
   removeStateChangedListener: (): void => {
     ipcRenderer.removeAllListeners('app:state-changed')
   },
+
+  // 监听服务器消息（用于接收表情、文本等数据）
+  onServerMessage: (callback: (message: any) => void): void => {
+    ipcRenderer.on('server:message', (_, message) => callback(message))
+  },
+
+  // 移除服务器消息监听器
+  removeServerMessageListener: (): void => {
+    ipcRenderer.removeAllListeners('server:message')
+  },
 }

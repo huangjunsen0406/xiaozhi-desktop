@@ -15,8 +15,17 @@ export interface AppStateSnapshot {
 }
 
 /**
+ * 消息类型
+ */
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+}
+
+/**
  * 通话状态 Store
- * 用于在多个窗口间同步通话状态
+ * 用于在多个窗口间同步通话状态、表情和对话内容
  */
 export const useCallStore = defineStore('call', () => {
   // 设备状态
@@ -24,6 +33,15 @@ export const useCallStore = defineStore('call', () => {
 
   // 音频通道是否打开
   const channelOpen = ref(false)
+
+  // 当前表情
+  const emotion = ref<string>('neutral')
+
+  // 对话消息列表
+  const messages = ref<ChatMessage[]>([])
+
+  // 当前显示的文本（用于实时更新）
+  const currentText = ref<string>('')
 
   /**
    * 是否正在通话
@@ -56,17 +74,58 @@ export const useCallStore = defineStore('call', () => {
   }
 
   /**
+   * 更新表情
+   * @param newEmotion - 新表情
+   */
+  function updateEmotion(newEmotion: string) {
+    emotion.value = newEmotion
+  }
+
+  /**
+   * 更新当前文本
+   * @param text - 文本内容
+   */
+  function updateCurrentText(text: string) {
+    currentText.value = text
+  }
+
+  /**
+   * 添加消息
+   * @param role - 角色
+   * @param content - 内容
+   */
+  function addMessage(role: 'user' | 'assistant', content: string) {
+    messages.value.push({
+      role,
+      content,
+      timestamp: Date.now(),
+    })
+  }
+
+  /**
+   * 清空消息
+   */
+  function clearMessages() {
+    messages.value = []
+  }
+
+  /**
    * 重置状态
    */
   function resetState() {
     deviceState.value = 'idle'
     channelOpen.value = false
+    emotion.value = 'neutral'
+    currentText.value = ''
   }
 
   return {
     // 状态
     deviceState,
     channelOpen,
+    emotion,
+    messages,
+    currentText,
 
     // 计算属性
     isCalling,
@@ -76,6 +135,10 @@ export const useCallStore = defineStore('call', () => {
 
     // 方法
     updateState,
+    updateEmotion,
+    updateCurrentText,
+    addMessage,
+    clearMessages,
     resetState,
   }
 })
