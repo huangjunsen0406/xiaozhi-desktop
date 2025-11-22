@@ -295,6 +295,69 @@ export class AudioPlugin extends Plugin {
   }
 
   /**
+   * 发送预生成的 Opus 音频文件
+   * 用于发送系统提示音或预录音频
+   * @param opusFilePath - Opus 文件路径（带帧长度前缀格式）
+   * @returns 发送的帧数
+   */
+  async sendPreGeneratedAudio(opusFilePath: string): Promise<number> {
+    try {
+      const fs = await import('node:fs')
+
+      // 检查文件是否存在
+      if (!fs.existsSync(opusFilePath)) {
+        console.error(`[AudioPlugin] 音频文件不存在: ${opusFilePath}`)
+        throw new Error(`音频文件不存在: ${opusFilePath}`)
+      }
+
+      // 检查协议是否已连接
+      if (!this.protocol || !this.protocol.isAudioChannelOpened()) {
+        console.error('[AudioPlugin] 音频通道未打开')
+        throw new Error('音频通道未打开')
+      }
+
+      // 读取 Opus 文件
+      const opusData = fs.readFileSync(opusFilePath)
+      console.log(`[AudioPlugin] 读取音频文件: ${opusFilePath}, 大小: ${opusData.length} 字节`)
+
+      // 分帧发送
+      // 文件格式: [2字节帧长度][帧数据][2字节帧长度][帧数据]...
+      let offset = 0
+      let frameCount = 0
+
+      while (offset < opusData.length) {
+        // 读取帧长度 (2字节, little-endian)
+        if (offset + 2 > opusData.length) {
+          break
+        }
+        const frameLength = opusData.readUInt16LE(offset)
+        offset += 2
+
+        // 读取帧数据
+        if (offset + frameLength > opusData.length) {
+          break
+        }
+        const frameData = opusData.subarray(offset, offset + frameLength)
+        offset += frameLength
+
+        // 发送帧
+        await this.protocol.sendAudio(frameData)
+        frameCount++
+
+        // 模拟 20ms 帧间隔
+        await new Promise(resolve => setTimeout(resolve, 20))
+      }
+
+      console.log(`[AudioPlugin] 音频发送完成: ${frameCount} 帧`)
+      return frameCount
+    }
+    catch (error) {
+      console.error('[AudioPlugin] 发送预生成音频失败:', error)
+      throw error
+    }
+  }
+
+  /**
    * 插件关闭
    */
   async shutdown(): Promise<void> {

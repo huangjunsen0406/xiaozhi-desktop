@@ -376,6 +376,66 @@ export class Application {
   }
 
   /**
+   * 通过音频触发方式发送文本消息
+   * 读取预生成的 Opus 音频文件 "获取用户输入文本" 并发送
+   * 实际文本存储在 MCP Server，通过 get_user_input 工具获取
+   */
+  async sendTextViaAudio(text: string): Promise<void> {
+    try {
+      console.log(`[Application] 通过音频发送文本消息: ${text}`)
+
+      // 如果正在说话，先中止
+      if (this.deviceState === DeviceState.SPEAKING) {
+        console.log('[Application] 说话中，先中止语音输出')
+        await this.abortSpeaking(AbortReason.USER_INTERRUPTED)
+      }
+
+      // 确保协议已连接
+      const ok = await this.connectProtocol()
+      if (!ok) {
+        console.error('[Application] 协议未连接，无法发送音频')
+        return
+      }
+
+      // 1. 将文本存储到 MCP Server（通过 McpPlugin）
+      if (!this.mcpPlugin) {
+        console.error('[Application] McpPlugin 未初始化')
+        return
+      }
+      this.mcpPlugin.setSendText(text)
+
+      // 2. 确定音频文件路径
+      const path = await import('node:path')
+      const { app } = await import('electron')
+      const proc = await import('node:process')
+
+      const resourcesPath = app.isPackaged
+        ? path.join(proc.resourcesPath, 'prompts')
+        : path.join(__dirname, '../../resources/prompts')
+      const opusFilePath = path.join(resourcesPath, 'get_user_text.opus')
+
+      // 3. 发送开始监听指令（服务器才会处理音频）
+      console.log('[Application] 发送开始监听指令...')
+      await this.protocol?.sendStartListening(ListeningMode.MANUAL)
+      await this.setDeviceState(DeviceState.LISTENING)
+
+      // 4. 委托给 AudioPlugin 发送预生成音频
+      const frameCount = await this.audioPlugin?.sendPreGeneratedAudio(opusFilePath)
+
+      // 5. 发送停止监听指令（告诉服务器音频发送完毕）
+      console.log('[Application] 发送停止监听指令...')
+      await this.protocol?.sendStopListening()
+
+      console.log(`[Application] 音频消息已发送: ${frameCount} 帧（触发 get_user_input 工具调用）`)
+    }
+    catch (error) {
+      console.error('[Application] 通过音频发送文本失败:', error)
+      this.mcpPlugin?.clearSendText()
+      throw error
+    }
+  }
+
+  /**
    * 处理网络错误
    */
   private handleNetworkError(error: string): void {
@@ -394,6 +454,10 @@ export class Application {
     try {
       const msgType = jsonData.type
       console.log(`[Application] 收到 JSON 消息: type=${msgType}`)
+
+      if (msgType === 'error') {
+        console.log(jsonData)
+      }
 
       // 处理 Alert 消息（错误/警告）
       if (msgType === 'alert') {

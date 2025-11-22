@@ -100,14 +100,6 @@ app.whenReady().then(() => {
   // macOS Dock 菜单
   if (isMacOS && hasDock()) {
     const dockMenu = Menu.buildFromTemplate([
-      {
-        label: '显示主窗口',
-        click: () => {
-          const win = ensureMainWindow()
-          win.show()
-          win.focus()
-        },
-      },
       { type: 'separator' },
       {
         label: '设置',

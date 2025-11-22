@@ -19,6 +19,7 @@ export class McpServer {
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
   private visionConfig: { url?: string, token?: string } = {}
+  private sendText: string = '' // 存储用户发送的文本，供 get_user_input 工具读取
 
   private constructor() {}
 
@@ -386,5 +387,29 @@ export class McpServer {
     if (this.sendCallback) {
       await this.sendCallback(JSON.stringify(payload))
     }
+  }
+
+  /**
+   * 设置用户发送的文本
+   * 用于基于音频触发的文本输入场景
+   */
+  setSendText(text: string): void {
+    this.sendText = text
+    console.log(`[MCP] 用户文本已存储: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`)
+  }
+
+  /**
+   * 获取用户发送的文本
+   * 供 get_user_input MCP 工具调用
+   */
+  getSendText(): string {
+    return this.sendText
+  }
+
+  /**
+   * 清空用户文本缓存
+   */
+  clearSendText(): void {
+    this.sendText = ''
   }
 }

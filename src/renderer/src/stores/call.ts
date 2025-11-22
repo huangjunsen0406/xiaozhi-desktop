@@ -142,6 +142,29 @@ export const useCallStore = defineStore('call', () => {
   }
 
   /**
+   * 通过音频发送文本消息
+   * 使用预生成的 "获取用户输入文本" 音频触发 MCP tool
+   * @param text - 文本内容
+   * @throws 发送失败时抛出错误
+   */
+  async function sendTextViaAudio(text: string): Promise<void> {
+    const trimmedText = text.trim()
+    if (!trimmedText) {
+      throw new Error('文本内容不能为空')
+    }
+
+    try {
+      // 调用 preload API 通过音频发送文本
+      await window.api.appSendTextViaAudio(trimmedText)
+      console.log('[CallStore] 通过音频发送文本:', trimmedText)
+    }
+    catch (error) {
+      console.error('[CallStore] 通过音频发送文本失败:', error)
+      throw error
+    }
+  }
+
+  /**
    * 开始自动对话
    */
   async function startAutoConversation(): Promise<void> {
@@ -221,6 +244,7 @@ export const useCallStore = defineStore('call', () => {
 
     // 交互方法
     sendText,
+    sendTextViaAudio,
     startAutoConversation,
     stopAutoConversation,
     startListeningManual,

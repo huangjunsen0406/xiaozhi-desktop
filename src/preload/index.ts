@@ -61,6 +61,7 @@ const api = {
   appStartAutoConversation: appApi.startAutoConversation,
   appStopAutoConversation: appApi.stopAutoConversation,
   appSendText: appApi.sendText,
+  appSendTextViaAudio: appApi.sendTextViaAudio,
   appGetState: appApi.getState,
   appOnStateChanged: appApi.onStateChanged,
   appRemoveStateChangedListener: appApi.removeStateChangedListener,

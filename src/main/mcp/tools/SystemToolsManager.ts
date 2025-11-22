@@ -1,5 +1,6 @@
 import type OpenAI from 'openai'
 import type { PropertyList, PropertyType } from '../types'
+import { Buffer } from 'node:buffer'
 import { DatabaseManager } from '../../services/database'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
 import { McpServer } from '../McpServer'
@@ -8,7 +9,6 @@ import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
 import { takePhoto } from './camera'
 import { ScreenshotTool } from './screenshot'
-
 /**
  * 系统工具管理器
  * 负责注册系统相关的 MCP 工具（音量控制、应用管理等）
@@ -66,6 +66,9 @@ export class SystemToolsManager {
 
       // 注册截图工具
       this.registerScreenshot(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册用户输入获取工具
+      this.registerGetUserInput(addTool, PropertyListClass, PropertyTypeEnum)
 
       this.initialized = true
       console.log('[SystemToolsManager] 系统工具注册完成')
@@ -321,6 +324,40 @@ Returns JSON with application details including name (for launching), displayNam
     )
 
     console.log('[SystemToolsManager] 注册应用扫描工具成功')
+  }
+
+  /**
+   * 注册用户输入获取工具
+   */
+  private registerGetUserInput(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    _PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const getUserInputProps = new PropertyListClass([])
+
+    const description = `Get user text input that was sent via audio trigger.
+This tool is called when the system receives an audio message saying "获取用户输入文本" (get user input text).
+The actual user text is stored in the MCP server and retrieved by this tool.
+
+Use when:
+- System detects audio trigger for user text input
+- User sends text message via audio-based method
+- Need to retrieve the cached user input text
+
+Returns:
+- The user's text input as a string`
+
+    addTool(
+      'get_user_input',
+      description,
+      getUserInputProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.getUserInput(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册用户输入获取工具成功')
   }
 
   /**
@@ -914,6 +951,30 @@ Examples:
   }
 
   /**
+   * 获取用户输入文本（工具实现）
+   */
+  private async getUserInput(_args: Record<string, unknown>): Promise<string> {
+    try {
+      console.log('[SystemToolsManager] 获取用户输入文本')
+
+      // 从 McpServer 获取存储的用户文本
+      const mcpServer = McpServer.getInstance()
+      const userText = mcpServer.getSendText()
+
+      console.log(`[SystemToolsManager] 获取到用户文本: ${userText}`)
+
+      // 清空缓存（避免重复读取）
+      mcpServer.clearSendText()
+
+      return userText
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 获取用户输入失败:', error)
+      return ''
+    }
+  }
+
+  /**
    * 检查管理器是否已初始化
    */
   isInitialized(): boolean {
@@ -937,6 +998,7 @@ Examples:
       'self.application.scan_installed',
       'self.camera.take_photo',
       'self.screenshot.take',
+      'get_user_input',
     ]
 
     return {

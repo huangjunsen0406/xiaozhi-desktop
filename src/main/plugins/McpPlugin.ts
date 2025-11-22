@@ -93,6 +93,27 @@ export class McpPlugin extends Plugin {
   }
 
   /**
+   * 设置用户发送的文本（供 get_user_input 工具读取）
+   */
+  setSendText(text: string): void {
+    if (this.mcpServer) {
+      this.mcpServer.setSendText(text)
+    }
+    else {
+      console.error('[McpPlugin] McpServer not initialized')
+    }
+  }
+
+  /**
+   * 清除用户发送的文本
+   */
+  clearSendText(): void {
+    if (this.mcpServer) {
+      this.mcpServer.clearSendText()
+    }
+  }
+
+  /**
    * 插件关闭
    */
   async shutdown(): Promise<void> {

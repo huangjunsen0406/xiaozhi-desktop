@@ -12,15 +12,15 @@ async function handleSendText() {
     return
   }
 
+  // 清空输入框
+  text.value = ''
+
   try {
     // 通过 store 发送文本
-    await callStore.sendText(message)
-
-    // 清空输入框
-    text.value = ''
+    await callStore.sendTextViaAudio(message)
   }
   catch (error) {
-    console.error('[PanelView] 发送文本失败:', error)
+    console.error('[PanelView] 通过音频发送文本失败:', error)
   }
 }
 
