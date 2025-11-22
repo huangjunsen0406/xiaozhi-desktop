@@ -69,14 +69,6 @@ export function registerTray(): void {
   tray.setToolTip('小智')
 
   const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示主窗口',
-      click: () => {
-        const win = ensureMainWindow()
-        win.show()
-        win.focus()
-      },
-    },
     { type: 'separator' },
     {
       label: '设置',
