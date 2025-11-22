@@ -1,0 +1,215 @@
+/**
+ * 摄像头捕获工具
+ * 在渲染进程中使用 getUserMedia API 捕获图像
+ */
+
+/**
+ * 捕获摄像头图像
+ * @param width - 画面宽度
+ * @param height - 画面高度
+ * @returns 图像 Blob
+ */
+export async function captureFromWebcam(
+  width = 640,
+  height = 480,
+): Promise<Blob> {
+  let stream: MediaStream | null = null
+
+  try {
+    console.log('[Camera] 请求摄像头权限...')
+
+    // 请求摄像头权限
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: width },
+        height: { ideal: height },
+      },
+      audio: false,
+    })
+
+    console.log('[Camera] 摄像头权限已获取')
+
+    // 创建 video 元素
+    const video = document.createElement('video')
+    video.srcObject = stream
+    video.autoplay = true
+    video.muted = true
+
+    // 等待视频准备好
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => {
+        video.play()
+          .then(() => resolve())
+          .catch(reject)
+      }
+      video.onerror = reject
+    })
+
+    // 等待一小段时间让摄像头稳定
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    console.log('[Camera] 视频流已准备好，捕获帧...')
+
+    // 创建 canvas 并捕获当前帧
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('无法获取 canvas context')
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    // 转换为 Blob
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob)
+          }
+          else {
+            reject(new Error('Failed to convert canvas to blob'))
+          }
+        },
+        'image/jpeg',
+        0.9,
+      )
+    })
+
+    console.log(`[Camera] 图像捕获成功，大小: ${blob.size} 字节`)
+    return blob
+  }
+  catch (error) {
+    console.error('[Camera] 捕获图像失败:', error)
+    throw error
+  }
+  finally {
+    // 停止摄像头
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+      console.log('[Camera] 摄像头已关闭')
+    }
+  }
+}
+
+/**
+ * 检查摄像头权限
+ */
+export async function checkCameraPermission(): Promise<boolean> {
+  try {
+    // 尝试获取摄像头列表
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const hasCamera = devices.some(device => device.kind === 'videoinput')
+
+    if (!hasCamera) {
+      console.warn('[Camera] 未找到摄像头设备')
+      return false
+    }
+
+    return true
+  }
+  catch (error) {
+    console.error('[Camera] 检查摄像头权限失败:', error)
+    return false
+  }
+}
+
+/**
+ * 摄像头设备信息
+ */
+export interface CameraDevice {
+  deviceId: string
+  label: string
+  groupId: string
+}
+
+/**
+ * 获取可用的摄像头设备列表
+ */
+export async function getCameraDevices(): Promise<CameraDevice[]> {
+  try {
+    // 先请求权限，这样才能获取到设备的 label
+    await navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => stream.getTracks().forEach(track => track.stop()))
+      .catch(() => {
+        // 忽略权限拒绝错误，继续枚举设备
+      })
+
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const videoDevices = devices.filter(device => device.kind === 'videoinput')
+
+    return videoDevices.map((device, index) => ({
+      deviceId: device.deviceId,
+      label: device.label || `摄像头 ${index + 1}`,
+      groupId: device.groupId,
+    }))
+  }
+  catch (error) {
+    console.error('[Camera] 获取摄像头设备列表失败:', error)
+    return []
+  }
+}
+
+/**
+ * 测试摄像头设备
+ */
+export async function testCameraDevice(deviceId?: string): Promise<{
+  success: boolean
+  message?: string
+  imageUrl?: string
+}> {
+  try {
+    const constraints: MediaStreamConstraints = {
+      video: deviceId ? { deviceId: { exact: deviceId } } : true,
+      audio: false,
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints)
+
+    // 创建 video 元素
+    const video = document.createElement('video')
+    video.srcObject = stream
+    video.autoplay = true
+
+    // 等待视频加载
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => {
+        video.play().then(() => resolve()).catch(reject)
+      }
+      video.onerror = reject
+    })
+
+    // 等待一帧
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // 捕获图像
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('无法创建 canvas context')
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    // 转换为 Data URL
+    const imageUrl = canvas.toDataURL('image/jpeg', 0.8)
+
+    // 停止所有轨道
+    stream.getTracks().forEach(track => track.stop())
+
+    return {
+      success: true,
+      imageUrl,
+    }
+  }
+  catch (error) {
+    console.error('[Camera] 测试摄像头失败:', error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : '测试摄像头失败',
+    }
+  }
+}

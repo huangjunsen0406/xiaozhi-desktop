@@ -4,6 +4,7 @@ import { darkTheme, lightTheme, NConfigProvider, NDialogProvider, NMessageProvid
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useCallStore } from './stores/call'
 import { themeOverrides } from './theme/naiveTheme'
+import { captureFromWebcam } from './utils/camera'
 
 const mode = useColorMode({
   selector: 'html',
@@ -50,6 +51,31 @@ onMounted(async () => {
         deviceState: state.deviceState,
         channelOpen: state.channelOpen,
       })
+    })
+
+    // 监听摄像头捕获请求
+    const removeCameraListener = window.api.cameraOnCaptureRequest(async () => {
+      console.log('[App] 收到摄像头捕获请求')
+      try {
+        const imageBlob = await captureFromWebcam()
+        const arrayBuffer = await imageBlob.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+        window.api.cameraSendCaptureResult(true, uint8Array)
+        console.log('[App] 摄像头捕获成功，已发送结果')
+      }
+      catch (error) {
+        console.error('[App] 摄像头捕获失败:', error)
+        window.api.cameraSendCaptureResult(
+          false,
+          undefined,
+          error instanceof Error ? error.message : '摄像头捕获失败',
+        )
+      }
+    })
+
+    // 保存清理函数
+    onUnmounted(() => {
+      removeCameraListener()
     })
   }
   catch (error) {

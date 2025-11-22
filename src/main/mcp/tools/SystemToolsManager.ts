@@ -1,5 +1,13 @@
+import type OpenAI from 'openai'
 import type { PropertyList, PropertyType } from '../types'
+import { DatabaseManager } from '../../services/database'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
+import { McpServer } from '../McpServer'
+import { AppLauncher } from './app/AppLauncher'
+import { AppScanner } from './app/AppScanner'
+import { ProcessManager } from './app/ProcessManager'
+import { takePhoto } from './camera'
+import { ScreenshotTool } from './screenshot'
 
 /**
  * 系统工具管理器
@@ -41,14 +49,23 @@ export class SystemToolsManager {
       // 注册音量获取工具
       this.registerVolumeGet(addTool, PropertyListClass, PropertyTypeEnum)
 
-      // TODO: 注册应用程序启动工具
-      // this.registerAppLauncher(addTool, PropertyListClass, PropertyTypeEnum)
+      // 注册应用程序启动工具
+      this.registerAppLauncher(addTool, PropertyListClass, PropertyTypeEnum)
 
-      // TODO: 注册应用程序扫描工具
-      // this.registerAppScanner(addTool, PropertyListClass, PropertyTypeEnum)
+      // 注册进程列表工具
+      this.registerProcessList(addTool, PropertyListClass, PropertyTypeEnum)
 
-      // TODO: 注册应用程序关闭工具
-      // this.registerAppKiller(addTool, PropertyListClass, PropertyTypeEnum)
+      // 注册应用程序关闭工具
+      this.registerAppKiller(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册应用程序扫描工具
+      this.registerAppScanner(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册摄像头工具
+      this.registerCamera(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册截图工具
+      this.registerScreenshot(addTool, PropertyListClass, PropertyTypeEnum)
 
       this.initialized = true
       console.log('[SystemToolsManager] 系统工具注册完成')
@@ -123,6 +140,190 @@ Returns:
   }
 
   /**
+   * 注册应用程序启动工具
+   */
+  private registerAppLauncher(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const appProps = new PropertyListClass([
+      {
+        name: 'app_name',
+        type: PropertyTypeEnum.STRING,
+      },
+    ])
+
+    const description = `Launch desktop applications and software programs by name. This tool opens applications installed on the user's computer across Windows, macOS, and Linux platforms. It automatically detects the operating system and uses appropriate launch methods.
+
+Use this tool when the user wants to:
+1. Open specific software applications (e.g., 'QQ', 'QQ音乐', 'WeChat', '微信')
+2. Launch system utilities (e.g., 'Calculator', '计算器', 'Notepad', '记事本')
+3. Start browsers (e.g., 'Chrome', 'Firefox', 'Safari')
+4. Open media players (e.g., 'VLC', 'Windows Media Player')
+5. Launch development tools (e.g., 'VS Code', 'PyCharm')
+6. Start games or other installed programs
+
+Examples of valid app names:
+- Chinese: 'QQ音乐', '微信', '计算器', '记事本', '浏览器'
+- English: 'QQ', 'WeChat', 'Calculator', 'Notepad', 'Chrome'
+- Mixed: 'QQ Music', 'Microsoft Word', 'Adobe Photoshop'
+
+The system will try multiple launch strategies including direct execution, system commands, and path searching to find and start the application.`
+
+    addTool(
+      'self.application.launch',
+      description,
+      appProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.launchApp(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册应用启动工具成功')
+  }
+
+  /**
+   * 注册进程列表工具
+   */
+  private registerProcessList(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const listProps = new PropertyListClass([
+      {
+        name: 'filter_name',
+        type: PropertyTypeEnum.STRING,
+        defaultValue: '',
+      },
+    ])
+
+    const description = `List all currently running applications and processes. This tool provides real-time information about active applications on the system, including process IDs, names, and commands.
+
+Use this tool when:
+1. User asks what applications are currently running
+2. You need to check if a specific application is running before closing it
+3. User wants to see active processes or programs
+4. Troubleshooting application issues
+
+Parameters:
+- filter_name: Optional filter to show only applications containing this name
+
+Returns detailed information about running applications including process IDs which can be useful for targeted application management.`
+
+    addTool(
+      'self.application.list_running',
+      description,
+      listProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.listRunningApps(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册进程列表工具成功')
+  }
+
+  /**
+   * 注册应用程序关闭工具
+   */
+  private registerAppKiller(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const killerProps = new PropertyListClass([
+      {
+        name: 'app_name',
+        type: PropertyTypeEnum.STRING,
+      },
+      {
+        name: 'force',
+        type: PropertyTypeEnum.BOOLEAN,
+        defaultValue: false,
+      },
+    ])
+
+    const description = `Close or terminate running applications by name. This tool can gracefully close applications or force-kill them if needed. It automatically finds running processes matching the application name and terminates them.
+
+Use this tool when:
+1. User asks to close, quit, or exit an application
+2. User wants to stop or terminate a running program
+3. Application is unresponsive and needs to be force-closed
+4. User says 'close QQ', 'quit Chrome', 'stop music player', etc.
+
+Parameters:
+- app_name: Name of the application to close (e.g., 'QQ', 'Chrome', 'Calculator')
+- force: Set to true for force-kill unresponsive applications (default: false)
+
+The tool will find all running processes matching the application name and attempt to close them gracefully. If force=true, it will use system kill commands to immediately terminate the processes.`
+
+    addTool(
+      'self.application.kill',
+      description,
+      killerProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.killApp(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册应用关闭工具成功')
+  }
+
+  /**
+   * 注册应用程序扫描工具
+   */
+  private registerAppScanner(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const scannerProps = new PropertyListClass([
+      {
+        name: 'force_refresh',
+        type: PropertyTypeEnum.BOOLEAN,
+        defaultValue: false,
+      },
+      {
+        name: 'search_query',
+        type: PropertyTypeEnum.STRING,
+        defaultValue: '',
+      },
+    ])
+
+    const description = `Scan and list all installed applications on the system. This tool discovers applications across different installation locations and provides a comprehensive inventory of available software.
+
+Use this tool when:
+1. User asks what applications are installed on the system
+2. User wants to see available programs or software
+3. You need to verify if a specific application is installed before trying to launch it
+4. User asks "what can I open?", "what programs do I have?", "show installed apps"
+
+Parameters:
+- force_refresh: Set to true to bypass cache and force a fresh scan (default: false)
+- search_query: Optional search term to filter results (searches both name and display name)
+
+The tool automatically:
+- Scans platform-specific application directories (Applications folder on macOS, Start Menu on Windows, .desktop files on Linux)
+- Includes common system utilities and tools
+- Caches results for 5 minutes to improve performance
+- Returns application names, display names, paths, and types
+
+Returns JSON with application details including name (for launching), displayName (for display), path (installation location), and type (application/system/user_application).`
+
+    addTool(
+      'self.application.scan_installed',
+      description,
+      scannerProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.scanInstalledApps(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册应用扫描工具成功')
+  }
+
+  /**
    * 设置音量（工具实现）
    */
   private async setVolume(args: Record<string, unknown>): Promise<string> {
@@ -167,6 +368,552 @@ Returns:
   }
 
   /**
+   * 启动应用（工具实现）
+   */
+  private async launchApp(args: Record<string, unknown>): Promise<string> {
+    try {
+      const appName = args.app_name as string
+
+      console.log(`[SystemToolsManager] 启动应用: ${appName}`)
+
+      // 使用 AppLauncher 启动应用
+      const result = await AppLauncher.launch(appName)
+
+      if (result.success) {
+        console.log(`[SystemToolsManager] 应用启动成功: ${appName}`)
+        return 'true'
+      }
+      else {
+        console.warn(`[SystemToolsManager] 应用启动失败: ${result.message}`)
+        return 'false'
+      }
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 启动应用失败:', error)
+      return 'false'
+    }
+  }
+
+  /**
+   * 列出运行中的应用（工具实现）
+   */
+  private async listRunningApps(args: Record<string, unknown>): Promise<string> {
+    try {
+      const filterName = (args.filter_name as string) || ''
+
+      console.log(`[SystemToolsManager] 列出运行中的应用, 过滤: ${filterName}`)
+
+      // 使用 ProcessManager 列出进程
+      const processes = await ProcessManager.listRunning(filterName)
+
+      console.log(`[SystemToolsManager] 找到 ${processes.length} 个进程`)
+
+      // 格式化返回结果（JSON 字符串）
+      const result = {
+        success: true,
+        total_count: processes.length,
+        applications: processes.map(proc => ({
+          pid: proc.pid,
+          name: proc.name,
+          command: proc.command,
+          cpu: proc.cpu,
+          memory: proc.memory,
+        })),
+        message: `找到 ${processes.length} 个正在运行的应用程序`,
+      }
+
+      return JSON.stringify(result, null, 2)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 列出运行应用失败:', error)
+      const errorResult = {
+        success: false,
+        total_count: 0,
+        applications: [],
+        message: `列出运行应用失败: ${error}`,
+      }
+      return JSON.stringify(errorResult, null, 2)
+    }
+  }
+
+  /**
+   * 关闭应用（工具实现）
+   */
+  private async killApp(args: Record<string, unknown>): Promise<string> {
+    try {
+      const appName = args.app_name as string
+      const force = (args.force as boolean) || false
+
+      console.log(`[SystemToolsManager] 关闭应用: ${appName}, 强制: ${force}`)
+
+      // 使用 ProcessManager 关闭进程
+      const killedCount = await ProcessManager.killByName(appName, force)
+
+      if (killedCount > 0) {
+        console.log(`[SystemToolsManager] 成功关闭 ${killedCount} 个进程`)
+        return 'true'
+      }
+      else {
+        console.warn(`[SystemToolsManager] 未找到或关闭失败: ${appName}`)
+        return 'false'
+      }
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 关闭应用失败:', error)
+      return 'false'
+    }
+  }
+
+  /**
+   * 扫描已安装的应用（工具实现）
+   */
+  private async scanInstalledApps(args: Record<string, unknown>): Promise<string> {
+    try {
+      const forceRefresh = (args.force_refresh as boolean) || false
+      const searchQuery = (args.search_query as string) || ''
+
+      console.log(`[SystemToolsManager] 扫描已安装应用, 强制刷新: ${forceRefresh}, 搜索: ${searchQuery}`)
+
+      let apps
+
+      // 如果有搜索条件，使用搜索方法
+      if (searchQuery) {
+        apps = await AppScanner.search(searchQuery)
+        console.log(`[SystemToolsManager] 搜索到 ${apps.length} 个匹配的应用`)
+      }
+      else {
+        // 否则扫描所有应用
+        apps = await AppScanner.scanInstalled(forceRefresh)
+        console.log(`[SystemToolsManager] 扫描到 ${apps.length} 个已安装应用`)
+      }
+
+      // 格式化返回结果（JSON 字符串）
+      const result = {
+        success: true,
+        total_count: apps.length,
+        platform: AppScanner.getPlatform(),
+        applications: apps.map(app => ({
+          name: app.name,
+          displayName: app.displayName,
+          path: app.path,
+          type: app.type,
+        })),
+        message: searchQuery
+          ? `找到 ${apps.length} 个匹配 "${searchQuery}" 的应用`
+          : `找到 ${apps.length} 个已安装的应用程序`,
+      }
+
+      return JSON.stringify(result, null, 2)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 扫描应用失败:', error)
+      const errorResult = {
+        success: false,
+        total_count: 0,
+        platform: AppScanner.getPlatform(),
+        applications: [],
+        message: `扫描应用失败: ${error}`,
+      }
+      return JSON.stringify(errorResult, null, 2)
+    }
+  }
+
+  /**
+   * 注册摄像头工具
+   */
+  private registerCamera(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const cameraProps = new PropertyListClass([
+      {
+        name: 'question',
+        type: PropertyTypeEnum.STRING,
+        defaultValue: '',
+      },
+    ])
+
+    const description = `Take a photo using the system camera and analyze it with vision AI. This tool captures an image from the user's webcam and can answer questions about what's in the image.
+
+Use this tool when:
+1. User asks to take a photo or picture
+2. User wants to see what's in front of the camera
+3. User asks questions like "what do you see?", "take a photo", "看看我"
+4. User wants visual analysis or image recognition
+
+Parameters:
+- question: Optional question about the image (e.g., "What's in this image?", "图中有什么?")
+  If empty, will provide a general description of the image.
+
+The tool will:
+1. Request camera permission if needed
+2. Capture a single frame from the webcam
+3. Analyze the image using vision AI
+4. Return a description or answer to the question
+
+Examples:
+- "拍张照" -> Takes photo and describes what's seen
+- "看看我现在在哪里" -> Takes photo and describes the location/scene
+- "帮我看看这是什么" -> Takes photo and identifies objects`
+
+    addTool(
+      'self.camera.take_photo',
+      description,
+      cameraProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.takePhoto(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册摄像头工具成功')
+  }
+
+  /**
+   * 注册截图工具
+   */
+  private registerScreenshot(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const screenshotProps = new PropertyListClass([
+      {
+        name: 'question',
+        type: PropertyTypeEnum.STRING,
+        defaultValue: '',
+      },
+      {
+        name: 'display',
+        type: PropertyTypeEnum.STRING,
+        defaultValue: '',
+      },
+    ])
+
+    const description = `Take a screenshot of the desktop and analyze it with vision AI. This tool captures the current screen content and can answer questions about what's displayed.
+
+Use this tool when:
+1. User asks to take a screenshot or capture the screen
+2. User wants to know what's on their screen
+3. User asks questions like "what's on my screen?", "screenshot", "截个屏", "看看我的屏幕"
+4. User wants to analyze or describe screen content
+
+Parameters:
+- question: Optional question about the screenshot (e.g., "What's on the screen?", "屏幕上有什么?")
+  If empty, will provide a general description of the screen content.
+- display: Optional display selection (default: all displays)
+  - "main" or "主屏": Main/primary display only
+  - "secondary" or "副屏": Secondary display only
+  - "1", "2", "3"...: Specific display number
+  - Empty or omitted: Capture all displays
+
+The tool will:
+1. Capture the specified display(s)
+2. Analyze the image using vision AI
+3. Return a description or answer to the question
+
+Examples:
+- "截个屏" -> Takes screenshot of all displays and describes what's shown
+- "看看我主屏上有什么" -> Screenshots main display only and describes content
+- "帮我看看第二个屏幕显示的是什么" -> Screenshots secondary display and analyzes it`
+
+    addTool(
+      'self.screenshot.take',
+      description,
+      screenshotProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.takeScreenshot(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册截图工具成功')
+  }
+
+  /**
+   * 拍照并分析（工具实现）
+   */
+  private async takePhoto(args: Record<string, unknown>): Promise<string> {
+    try {
+      const question = (args.question as string) || ''
+
+      console.log(`[SystemToolsManager] 拍照, 问题: ${question}`)
+
+      // 从数据库获取摄像头配置
+      const db = DatabaseManager.getInstance()
+      const cameraConfig = db.getFormattedCameraConfig()
+
+      // 从 MCP Server 获取 vision 配置（由客户端下发）
+      const mcpServer = McpServer.getInstance()
+      const visionConfig = mcpServer.getVisionConfig()
+
+      // 优先级：本地 VL 配置 > MCP 客户端下发的配置
+      const cameraOptions = {
+        // 如果本地配置了 VL API，则使用本地配置
+        vlApiKey: cameraConfig.useLocalVision ? cameraConfig.vlApiKey : '',
+        vlUrl: cameraConfig.useLocalVision ? cameraConfig.vlUrl : '',
+        vlModel: cameraConfig.vlModel || 'glm-4v-plus',
+        // 如果没有本地 VL 配置，则使用 MCP 客户端下发的配置
+        explainUrl: cameraConfig.useLocalVision ? '' : (visionConfig.url || ''),
+        explainToken: cameraConfig.useLocalVision ? '' : (visionConfig.token || ''),
+        // 设备配置
+        deviceId: cameraConfig.deviceId || '',
+        clientId: '', // TODO: 从网络配置读取
+      }
+
+      console.log(`[SystemToolsManager] 摄像头配置:`, {
+        useLocalVision: cameraConfig.useLocalVision,
+        hasVlUrl: !!cameraOptions.vlUrl,
+        hasExplainUrl: !!cameraOptions.explainUrl,
+      })
+
+      const result = await takePhoto(question, cameraOptions)
+      console.log(`[SystemToolsManager] 拍照完成`)
+      return result
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 拍照失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '拍照失败',
+      })
+    }
+  }
+
+  /**
+   * 截图并分析（工具实现）
+   */
+  private async takeScreenshot(args: Record<string, unknown>): Promise<string> {
+    try {
+      const question = (args.question as string) || ''
+      const display = (args.display as string) || null
+
+      console.log(`[SystemToolsManager] 截图, 问题: ${question}, 显示器: ${display}`)
+
+      // 获取截图工具实例
+      const screenshotTool = ScreenshotTool.getInstance()
+
+      // 截取屏幕
+      const result = await screenshotTool.capture({ display })
+
+      if (!result.success || !result.base64) {
+        console.error('[SystemToolsManager] 截图失败:', result.message)
+        return JSON.stringify({
+          success: false,
+          message: result.message || '截图失败',
+        })
+      }
+
+      console.log('[SystemToolsManager] 截图成功，开始分析...')
+
+      // 从 MCP Server 获取 vision 配置
+      const mcpServer = McpServer.getInstance()
+      const visionConfig = mcpServer.getVisionConfig()
+
+      // 从数据库获取摄像头配置（复用 VL 配置）
+      const db = DatabaseManager.getInstance()
+      const cameraConfig = db.getFormattedCameraConfig()
+
+      // 构建分析请求
+      const useLocalVision = cameraConfig.useLocalVision
+      let analysisResult: string
+
+      if (useLocalVision && cameraConfig.vlApiKey && cameraConfig.vlUrl) {
+        // 使用本地 VL API 分析
+        console.log('[SystemToolsManager] 使用本地 VL API 分析截图')
+        analysisResult = await this.analyzeImageWithLocalVL(
+          result.base64,
+          question || '请描述这张截图的内容',
+          cameraConfig,
+        )
+      }
+      else if (visionConfig.url && visionConfig.token) {
+        // 使用 MCP 客户端下发的 vision API
+        console.log('[SystemToolsManager] 使用 MCP vision API 分析截图')
+        analysisResult = await this.analyzeImageWithMCPVision(
+          result.base64,
+          question || '请描述这张截图的内容',
+          { url: visionConfig.url, token: visionConfig.token },
+        )
+      }
+      else {
+        console.warn('[SystemToolsManager] 未配置 vision API')
+        return JSON.stringify({
+          success: false,
+          message: '未配置视觉分析 API，无法分析截图内容',
+        })
+      }
+
+      return analysisResult
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 截图失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '截图失败',
+      })
+    }
+  }
+
+  /**
+   * 使用本地 VL API 分析图片
+   */
+  private async analyzeImageWithLocalVL(
+    base64Image: string,
+    question: string,
+    config: { vlUrl: string, vlApiKey: string, vlModel: string },
+  ): Promise<string> {
+    try {
+      console.log('[SystemToolsManager] 使用本地 VL API 分析截图')
+
+      // 动态导入 OpenAI 客户端
+      const { default: OpenAI } = await import('openai')
+
+      // 创建客户端
+      const client = new OpenAI({
+        apiKey: config.vlApiKey,
+        baseURL: config.vlUrl,
+      })
+
+      // 准备消息
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`,
+              },
+            },
+            {
+              type: 'text',
+              text: question || '图中描绘的是什么景象？请详细描述。',
+            },
+          ],
+        },
+      ]
+
+      console.log(`[SystemToolsManager] 发送请求到智谱 AI: ${config.vlUrl}`)
+
+      // 发送请求
+      const completion = await client.chat.completions.create({
+        model: config.vlModel,
+        messages,
+        stream: true,
+      })
+
+      // 收集响应
+      let result = ''
+      for await (const chunk of completion) {
+        if (chunk.choices && chunk.choices[0]?.delta?.content) {
+          result += chunk.choices[0].delta.content
+        }
+      }
+
+      console.log(`[SystemToolsManager] 本地 VL 分析完成`)
+
+      return JSON.stringify({
+        success: true,
+        text: result,
+      })
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 本地 VL API 分析失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '分析失败',
+      })
+    }
+  }
+
+  /**
+   * 使用 MCP vision API 分析图片
+   */
+  private async analyzeImageWithMCPVision(
+    base64Image: string,
+    question: string,
+    config: { url: string, token: string },
+  ): Promise<string> {
+    try {
+      console.log('[SystemToolsManager] 使用 MCP vision API 分析截图')
+
+      // 将 base64 转换为 Buffer
+      const imageBuffer = Buffer.from(base64Image, 'base64')
+
+      // 准备 FormData
+      const formData = new FormData()
+      formData.append('question', question)
+      const blob = new Blob([Uint8Array.from(imageBuffer)], { type: 'image/jpeg' })
+      formData.append('file', blob, 'screenshot.jpg')
+
+      // 准备请求头
+      const headers: Record<string, string> = {}
+
+      // 从数据库获取设备配置
+      const db = DatabaseManager.getInstance()
+      const cameraConfig = db.getFormattedCameraConfig()
+      if (cameraConfig.deviceId)
+        headers['Device-Id'] = cameraConfig.deviceId
+
+      // TODO: 从网络配置读取 clientId
+      // if (clientId) headers['Client-Id'] = clientId
+
+      if (config.token)
+        headers.Authorization = `Bearer ${config.token}`
+
+      console.log('[SystemToolsManager] 发送请求到:', config.url)
+
+      // 发送请求
+      const response = await fetch(config.url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorMsg = `Failed to analyze screenshot, status code: ${response.status}`
+        console.error(`[SystemToolsManager] ${errorMsg}`)
+        return JSON.stringify({
+          success: false,
+          message: errorMsg,
+        })
+      }
+
+      const result = await response.text()
+      console.log(`[SystemToolsManager] 分析完成: ${result}`)
+
+      // 尝试解析 JSON
+      try {
+        const jsonResult = JSON.parse(result)
+        // 如果返回的 JSON 已经包含 success 字段，直接返回
+        if ('success' in jsonResult) {
+          return result
+        }
+        // 否则包装成标准格式
+        return JSON.stringify({
+          success: true,
+          text: jsonResult.text || result,
+        })
+      }
+      catch {
+        // 如果不是 JSON，包装成标准格式返回
+        return JSON.stringify({
+          success: true,
+          text: result,
+        })
+      }
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] MCP vision API 分析失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '分析失败',
+      })
+    }
+  }
+
+  /**
    * 检查管理器是否已初始化
    */
   isInitialized(): boolean {
@@ -182,13 +929,14 @@ Returns:
     availableTools: string[]
   } {
     const availableTools = [
-      'set_volume',
-      'get_volume',
-      // TODO: 添加更多工具
-      // 'launch_application',
-      // 'scan_installed_applications',
-      // 'kill_application',
-      // 'list_running_applications',
+      'self.audio_speaker.set_volume',
+      'self.audio_speaker.get_volume',
+      'self.application.launch',
+      'self.application.list_running',
+      'self.application.kill',
+      'self.application.scan_installed',
+      'self.camera.take_photo',
+      'self.screenshot.take',
     ]
 
     return {

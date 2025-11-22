@@ -76,7 +76,7 @@ const customButtonTextByKey: Record<Key, string | undefined> = {
   appearance: undefined,
   emotion: undefined, // 表情设置没有自定义按钮
   wake: '测试',
-  camera: '测试',
+  camera: undefined, // 摄像头改为内嵌预览，不需要自定义按钮
   audio: '刷新设备',
   hotkey: '重置所有',
 }

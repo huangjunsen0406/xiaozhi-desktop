@@ -73,6 +73,36 @@ export interface RendererApi {
   emotionReset: (emotionType: string) => Promise<{ success: boolean, error?: string }>
   emotionOnChanged: (callback: (emotionType: string) => void) => void
   emotionRemoveChangedListener: () => void
+  // Camera APIs
+  cameraOnCaptureRequest: (callback: () => void) => () => void
+  cameraSendCaptureResult: (success: boolean, data?: Uint8Array, message?: string) => void
+  // Camera Config APIs
+  cameraConfigGetConfig: () => Promise<{
+    enabled: boolean
+    deviceId: string
+    deviceLabel: string
+    useLocalVision: boolean
+    vlApiKey: string
+    vlUrl: string
+    vlModel: string
+    captureWidth: number
+    captureHeight: number
+    jpegQuality: number
+    maxDimension: number
+  }>
+  cameraConfigUpdateConfig: (config: {
+    enabled?: boolean
+    deviceId?: string
+    deviceLabel?: string
+    useLocalVision?: boolean
+    vlApiKey?: string
+    vlUrl?: string
+    vlModel?: string
+    captureWidth?: number
+    captureHeight?: number
+    jpegQuality?: number
+    maxDimension?: number
+  }) => Promise<void>
 }
 
 declare global {

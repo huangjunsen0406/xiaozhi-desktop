@@ -7,6 +7,7 @@ import { registerActivationIpc } from './activationIpc'
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
 import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
+import { registerCameraConfigIpc } from './cameraConfigIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc } from './emotionIpc'
 
@@ -23,6 +24,7 @@ export function registerBasicIpcChannels(): void {
   registerAudioIpc()
   registerBackgroundAudioIpc()
   registerEmotionIpc()
+  registerCameraConfigIpc()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()

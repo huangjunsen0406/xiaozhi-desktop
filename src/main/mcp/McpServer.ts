@@ -6,8 +6,8 @@ import type {
   McpToolResult,
   ToolCallback,
 } from './types'
-import { PropertyList, PropertyType } from './types'
 import { SystemToolsManager } from './tools/SystemToolsManager'
+import { PropertyList, PropertyType } from './types'
 
 /**
  * MCP Server 实现
@@ -18,6 +18,7 @@ export class McpServer {
   private static instance: McpServer | null = null
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
+  private visionConfig: { url?: string, token?: string } = {}
 
   private constructor() {}
 
@@ -65,7 +66,7 @@ export class McpServer {
     }
 
     // 检查是否已存在
-    if (this.tools.some((t) => t.name === tool.name)) {
+    if (this.tools.some(t => t.name === tool.name)) {
       console.warn(`[MCP] Tool ${tool.name} already added`)
       return
     }
@@ -261,7 +262,7 @@ export class McpServer {
     console.log(`[MCP] 尝试调用工具: ${toolName}`)
 
     // 查找工具
-    const tool = this.tools.find((t) => t.name === toolName)
+    const tool = this.tools.find(t => t.name === toolName)
     if (!tool) {
       await this.replyError(id, `Unknown tool: ${toolName}`)
       return
@@ -331,12 +332,20 @@ export class McpServer {
     const vision = capabilities.vision as Record<string, unknown> | undefined
     if (vision && typeof vision === 'object') {
       const url = vision.url as string | undefined
-      // const _token = vision.token as string | undefined  // Reserved for future use
+      const token = vision.token as string | undefined
       if (url) {
-        // TODO: 配置 vision service
+        this.visionConfig.url = url
+        this.visionConfig.token = token
         console.log(`[MCP] Vision service configured with URL: ${url}`)
       }
     }
+  }
+
+  /**
+   * 获取 Vision 配置
+   */
+  getVisionConfig(): { url?: string, token?: string } {
+    return { ...this.visionConfig }
   }
 
   /**

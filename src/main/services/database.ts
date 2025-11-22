@@ -133,6 +133,30 @@ export class DatabaseManager {
       )
     `)
 
+    // 摄像头配置表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS camera_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        -- 基础设置
+        enabled INTEGER DEFAULT 1,
+        device_id TEXT DEFAULT '',
+        device_label TEXT DEFAULT '',
+        -- 视觉服务配置（本地）
+        use_local_vision INTEGER DEFAULT 0,
+        vl_api_key TEXT DEFAULT '',
+        vl_url TEXT DEFAULT '',
+        vl_model TEXT DEFAULT 'glm-4v-plus',
+        -- 捕获设置
+        capture_width INTEGER DEFAULT 1280,
+        capture_height INTEGER DEFAULT 720,
+        jpeg_quality INTEGER DEFAULT 80,
+        max_dimension INTEGER DEFAULT 320,
+        -- 时间戳
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `)
+
     // 如果表已存在但缺少字段，则添加
     const tableInfo = this.db.pragma('table_info(wake_word_config)') as Array<{ name: string }>
     const hasKeywordsList = tableInfo.some(col => col.name === 'keywords_list')
@@ -552,6 +576,121 @@ export class DatabaseManager {
       threshold: config.threshold || 0.2,
       score: config.score || 1.8,
       cooldownMs: config.cooldown_ms || 1500,
+    }
+  }
+
+  /* ==================== 摄像头配置相关 ==================== */
+
+  /**
+   * 获取或创建摄像头配置
+   */
+  getOrCreateCameraConfig(): any {
+    // 先尝试查找
+    const existing = this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get()
+
+    if (existing) {
+      return existing
+    }
+
+    // 插入默认配置
+    const result = this.db.prepare(`
+      INSERT INTO camera_config (
+        enabled, device_id, device_label,
+        use_local_vision, vl_api_key, vl_url, vl_model,
+        capture_width, capture_height, jpeg_quality, max_dimension
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(1, '', '', 0, '', '', 'glm-4v-plus', 1280, 720, 80, 320)
+
+    return this.db.prepare('SELECT * FROM camera_config WHERE id = ?').get(result.lastInsertRowid)
+  }
+
+  /**
+   * 获取摄像头配置
+   */
+  getCameraConfig(): any {
+    return this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get()
+  }
+
+  /**
+   * 更新摄像头配置（批量）
+   */
+  updateCameraConfig(updates: {
+    enabled?: boolean
+    device_id?: string
+    device_label?: string
+    use_local_vision?: boolean
+    vl_api_key?: string
+    vl_url?: string
+    vl_model?: string
+    capture_width?: number
+    capture_height?: number
+    jpeg_quality?: number
+    max_dimension?: number
+  }): void {
+    // 确保配置记录存在
+    let config = this.getCameraConfig()
+    if (!config) {
+      config = this.getOrCreateCameraConfig()
+    }
+
+    // 转换布尔值为整数
+    const dbUpdates: Record<string, any> = {}
+    for (const [key, value] of Object.entries(updates)) {
+      if (typeof value === 'boolean') {
+        dbUpdates[key] = value ? 1 : 0
+      }
+      else if (value !== undefined) {
+        dbUpdates[key] = value
+      }
+    }
+
+    // 构建更新语句
+    const fields = Object.keys(dbUpdates)
+    if (fields.length === 0) {
+      return
+    }
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ')
+    const values = fields.map(f => dbUpdates[f])
+
+    this.db.prepare(`
+      UPDATE camera_config
+      SET ${setClause}, updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `).run(...values, config.id)
+  }
+
+  /**
+   * 获取格式化的摄像头配置（转换为应用使用的格式）
+   */
+  getFormattedCameraConfig(): {
+    enabled: boolean
+    deviceId: string
+    deviceLabel: string
+    useLocalVision: boolean
+    vlApiKey: string
+    vlUrl: string
+    vlModel: string
+    captureWidth: number
+    captureHeight: number
+    jpegQuality: number
+    maxDimension: number
+  } {
+    const config = this.getOrCreateCameraConfig()
+
+    return {
+      enabled: Boolean(config.enabled),
+      deviceId: config.device_id || '',
+      deviceLabel: config.device_label || '',
+      useLocalVision: Boolean(config.use_local_vision),
+      vlApiKey: config.vl_api_key || '',
+      vlUrl: config.vl_url || '',
+      vlModel: config.vl_model || 'glm-4v-plus',
+      captureWidth: config.capture_width || 1280,
+      captureHeight: config.capture_height || 720,
+      jpegQuality: config.jpeg_quality || 80,
+      maxDimension: config.max_dimension || 320,
     }
   }
 
