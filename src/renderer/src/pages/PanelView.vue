@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useCallStore } from '../stores/call'
 
 const text = ref('')
+const callStore = useCallStore()
 
 // 发送文本消息
-async function sendText() {
+async function handleSendText() {
   const message = text.value.trim()
   if (!message) {
     return
   }
 
   try {
-    // 发送文本到应用
-    await window.api.appSendText(message)
+    // 通过 store 发送文本
+    await callStore.sendText(message)
 
     // 清空输入框
     text.value = ''
@@ -26,7 +28,7 @@ async function sendText() {
 function handleKeyDown(event: KeyboardEvent) {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault()
-    sendText()
+    handleSendText()
   }
 }
 </script>
@@ -43,7 +45,7 @@ function handleKeyDown(event: KeyboardEvent) {
           @keydown="handleKeyDown"
         />
         <div class="flex items-center gap-[10px]">
-          <NButton circle type="primary" size="small" @click="sendText">
+          <NButton circle type="primary" size="small" @click="handleSendText">
             <icon-carbon-send-alt class="w-4 h-4 dark:text-white" />
           </NButton>
         </div>

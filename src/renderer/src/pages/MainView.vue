@@ -45,12 +45,12 @@ async function toggleCall() {
     if (callStore.isCalling) {
       // 挂断电话 - 停止自动对话
       console.log('[MainView] 挂断电话')
-      await window.api.appStopAutoConversation()
+      await callStore.stopAutoConversation()
     }
     else {
       // 拨打电话 - 开始自动对话
       console.log('[MainView] 拨打电话')
-      await window.api.appStartAutoConversation()
+      await callStore.startAutoConversation()
     }
   }
   catch (error) {

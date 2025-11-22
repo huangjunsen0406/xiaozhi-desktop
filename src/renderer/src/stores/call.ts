@@ -119,6 +119,84 @@ export const useCallStore = defineStore('call', () => {
     currentText.value = ''
   }
 
+  /**
+   * 发送文本消息
+   * @param text - 文本内容
+   * @throws 发送失败时抛出错误
+   */
+  async function sendText(text: string): Promise<void> {
+    const trimmedText = text.trim()
+    if (!trimmedText) {
+      throw new Error('文本内容不能为空')
+    }
+
+    try {
+      // 调用 preload API 发送文本
+      await window.api.appSendText(trimmedText)
+      console.log('[CallStore] 文本消息已发送:', trimmedText)
+    }
+    catch (error) {
+      console.error('[CallStore] 发送文本失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 开始自动对话
+   */
+  async function startAutoConversation(): Promise<void> {
+    try {
+      await window.api.appStartAutoConversation()
+      console.log('[CallStore] 自动对话已启动')
+    }
+    catch (error) {
+      console.error('[CallStore] 启动自动对话失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 停止自动对话
+   */
+  async function stopAutoConversation(): Promise<void> {
+    try {
+      await window.api.appStopAutoConversation()
+      console.log('[CallStore] 自动对话已停止')
+    }
+    catch (error) {
+      console.error('[CallStore] 停止自动对话失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 开始手动监听
+   */
+  async function startListeningManual(): Promise<void> {
+    try {
+      await window.api.appStartListeningManual()
+      console.log('[CallStore] 手动监听已启动')
+    }
+    catch (error) {
+      console.error('[CallStore] 启动手动监听失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 停止手动监听
+   */
+  async function stopListeningManual(): Promise<void> {
+    try {
+      await window.api.appStopListeningManual()
+      console.log('[CallStore] 手动监听已停止')
+    }
+    catch (error) {
+      console.error('[CallStore] 停止手动监听失败:', error)
+      throw error
+    }
+  }
+
   return {
     // 状态
     deviceState,
@@ -133,12 +211,19 @@ export const useCallStore = defineStore('call', () => {
     isListening,
     isSpeaking,
 
-    // 方法
+    // 状态管理方法
     updateState,
     updateEmotion,
     updateCurrentText,
     addMessage,
     clearMessages,
     resetState,
+
+    // 交互方法
+    sendText,
+    startAutoConversation,
+    stopAutoConversation,
+    startListeningManual,
+    stopListeningManual,
   }
 })
