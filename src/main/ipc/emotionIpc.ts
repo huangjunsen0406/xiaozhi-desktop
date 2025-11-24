@@ -37,20 +37,41 @@ async function saveMapping(mapping: Record<string, string>): Promise<void> {
 }
 
 /**
+ * 表情广播回调（由外部注入）
+ */
+let emotionBroadcastCallback: ((emotionType: string) => void) | null = null
+
+/**
+ * 设置表情广播回调
+ * 供外部注入 UIPlugin 的广播方法
+ */
+export function setEmotionBroadcastCallback(callback: (emotionType: string) => void): void {
+  emotionBroadcastCallback = callback
+  console.log('[EmotionIpc] 表情广播回调已设置')
+}
+
+/**
  * 广播表情变更事件到所有窗口
  */
 function broadcastEmotionChanged(emotionType: string): void {
-  const allWebContents = webContents.getAllWebContents()
-  allWebContents.forEach((wc) => {
-    if (!wc.isDestroyed()) {
-      try {
-        wc.send('emotion:changed', emotionType)
+  if (emotionBroadcastCallback) {
+    emotionBroadcastCallback(emotionType)
+  }
+  else {
+    // 降级方案：直接使用 webContents（兼容性）
+    console.warn('[EmotionIpc] 表情广播回调未设置，使用降级方案')
+    const allWebContents = webContents.getAllWebContents()
+    allWebContents.forEach((wc) => {
+      if (!wc.isDestroyed()) {
+        try {
+          wc.send('emotion:changed', emotionType)
+        }
+        catch (error) {
+          console.error(`[EmotionIpc] 广播表情变更失败:`, error)
+        }
       }
-      catch (error) {
-        console.error(`[EmotionIpc] 广播表情变更失败:`, error)
-      }
-    }
-  })
+    })
+  }
 }
 
 /**

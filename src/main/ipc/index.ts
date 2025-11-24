@@ -10,7 +10,7 @@ import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
 import { registerCameraConfigIpc } from './cameraConfigIpc'
 import { registerChatIpc } from './chatIpc'
 import { registerConfigIpc } from './configIpc'
-import { registerEmotionIpc } from './emotionIpc'
+import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
 import { registerThemeIpc } from './themeIpc'
 
 /**
@@ -114,5 +114,19 @@ export function registerBasicIpcChannels(): void {
 export function registerAppIpcChannels(context: IpcContext): void {
   console.log('[IPC] 注册 Application IPC 通道...')
   registerAppIpc(context)
+
+  // 注入表情广播回调（通过 UIPlugin）
+  const pluginManager = context.application.getPluginManager()
+  const uiPlugin = pluginManager.getPlugin<any>('ui')
+  if (uiPlugin && typeof uiPlugin.broadcastEmotion === 'function') {
+    setEmotionBroadcastCallback((emotionType: string) => {
+      uiPlugin.broadcastEmotion(emotionType)
+    })
+    console.log('[IPC] ✓ 表情广播回调已注入到 emotionIpc')
+  }
+  else {
+    console.warn('[IPC] UIPlugin 未找到或不支持 broadcastEmotion，表情广播将使用降级方案')
+  }
+
   console.log('[IPC] ✓ Application IPC 通道已注册')
 }

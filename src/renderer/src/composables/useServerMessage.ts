@@ -1,62 +1,47 @@
-import { onMounted, onUnmounted } from 'vue'
-import { useCallStore } from '../stores/call'
-
+import type { ServerMessage } from '../types/chat'
 /**
- * 服务器消息类型
+ * 全局服务器消息监听 Composable
+ * 统一处理所有窗口的服务器消息，并更新 app store
  */
-interface ServerMessage {
-  type: string
-  [key: string]: any
-}
+import { onMounted, onUnmounted } from 'vue'
+import { useAppStore } from '../stores/app'
 
 /**
- * 使用服务器消息
- * 监听服务器消息并更新 store
+ * 使用服务器消息监听
+ * 所有窗口（MainView、ChatView、HoverView）都应该调用此方法
  */
 export function useServerMessage() {
-  const callStore = useCallStore()
+  const appStore = useAppStore()
 
   /**
    * 处理服务器消息
+   * 所有消息处理逻辑已移到 app store 中
    */
-  const handleServerMessage = (message: ServerMessage) => {
-    const msgType = message.type
-
-    // 处理 LLM 消息（表情）
-    if (msgType === 'llm' && message.emotion) {
-      callStore.updateEmotion(message.emotion)
-    }
-
-    // 处理 TTS 消息（助手回复）
-    if (msgType === 'tts' && message.text) {
-      callStore.updateCurrentText(message.text)
-      // 如果是完整消息，添加到消息列表
-      if (message.state === 'stop') {
-        callStore.addMessage('assistant', message.text)
-      }
-    }
-
-    // 处理 STT 消息（用户输入）
-    if (msgType === 'stt' && message.text) {
-      callStore.updateCurrentText(message.text)
-      // 如果是完整消息，添加到消息列表
-      if (message.state === 'stop') {
-        callStore.addMessage('user', message.text)
-      }
-    }
+  const handleServerMessage = async (message: ServerMessage) => {
+    // 委托给 store 处理
+    await appStore.handleServerMessage(message)
   }
 
   onMounted(() => {
+    console.log('[useServerMessage] 开始监听服务器消息')
     // 监听服务器消息
     window.api.appOnServerMessage(handleServerMessage)
+
+    // 同时监听图片捕获事件
+    window.api.chatOnImageCaptured((data: { imageBase64: string }) => {
+      appStore.handleImageCaptured(data.imageBase64)
+    })
   })
 
   onUnmounted(() => {
+    console.log('[useServerMessage] 停止监听服务器消息')
     // 移除监听器
     window.api.appRemoveServerMessageListener()
+    window.api.chatRemoveImageCapturedListener()
   })
 
   return {
-
+    // 暴露 store，方便组件直接访问
+    appStore,
   }
 }

@@ -1,5 +1,6 @@
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
+import type { UIPlugin } from './UIPlugin'
 import { McpServer } from '../mcp/McpServer'
 import { Plugin } from './Plugin'
 
@@ -51,6 +52,34 @@ export class McpPlugin extends Plugin {
       }
 
       this.mcpServer.setSendCallback(sendCallback)
+
+      // 设置图片广播回调：通过 UIPlugin 广播图片到渲染进程
+      const imageBroadcastCallback = (imageBase64: string, sourceType: 'screenshot' | 'camera'): void => {
+        const pluginManager = this.app?.getPluginManager()
+        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('ui')
+        if (uiPlugin) {
+          uiPlugin.broadcastImage(imageBase64, sourceType)
+        }
+        else {
+          console.warn('[McpPlugin] UIPlugin not found, cannot broadcast image')
+        }
+      }
+
+      this.mcpServer.setImageBroadcastCallback(imageBroadcastCallback)
+
+      // 设置主题广播回调：通过 UIPlugin 广播主题到渲染进程
+      const themeBroadcastCallback = (theme: 'light' | 'dark' | 'auto'): void => {
+        const pluginManager = this.app?.getPluginManager()
+        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('ui')
+        if (uiPlugin) {
+          uiPlugin.broadcastTheme(theme)
+        }
+        else {
+          console.warn('[McpPlugin] UIPlugin not found, cannot broadcast theme')
+        }
+      }
+
+      this.mcpServer.setThemeBroadcastCallback(themeBroadcastCallback)
 
       // 注册通用工具（包含 system, calendar, timer, music 等）
       this.mcpServer.addCommonTools()

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useCallStore } from '../stores/call'
+import { useAppStore } from '../stores/app'
 
 const text = ref('')
-const callStore = useCallStore()
+const appStore = useAppStore()
 
 // 发送文本消息
 async function handleSendText() {
@@ -17,7 +17,7 @@ async function handleSendText() {
 
   try {
     // 通过 store 发送文本
-    await callStore.sendTextViaAudio(message)
+    await appStore.sendTextViaAudio(message)
   }
   catch (error) {
     console.error('[PanelView] 通过音频发送文本失败:', error)

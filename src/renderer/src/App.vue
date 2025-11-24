@@ -2,7 +2,7 @@
 import { useColorMode } from '@vueuse/core'
 import { darkTheme, lightTheme, NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
 import { computed, onMounted, onUnmounted } from 'vue'
-import { useCallStore } from './stores/call'
+import { useAppStore } from './stores/app'
 import { themeOverrides } from './theme/naiveTheme'
 import { captureFromWebcam } from './utils/camera'
 
@@ -27,8 +27,8 @@ const isDark = computed(() => {
 })
 const theme = computed(() => (isDark.value ? darkTheme : lightTheme))
 
-// 初始化通话状态 Store
-const callStore = useCallStore()
+// 初始化应用状态 Store
+const appStore = useAppStore()
 
 onMounted(async () => {
   console.log('[App] 初始化应用状态')
@@ -39,7 +39,7 @@ onMounted(async () => {
     console.log('[App] 初始状态:', state)
 
     // 更新 Store
-    callStore.updateState({
+    appStore.updateState({
       deviceState: state.device_state,
       channelOpen: state.audio_opened,
     })
@@ -47,7 +47,7 @@ onMounted(async () => {
     // 监听状态变化
     window.api.appOnStateChanged((state) => {
       console.log('[App] 状态更新:', state)
-      callStore.updateState({
+      appStore.updateState({
         deviceState: state.deviceState,
         channelOpen: state.channelOpen,
       })

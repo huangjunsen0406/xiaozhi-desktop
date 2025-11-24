@@ -5,7 +5,7 @@ import { watch } from 'vue'
 import Dots from '../components/Dots.vue'
 import { useEmotion } from '../composables/useEmotion'
 import { useServerMessage } from '../composables/useServerMessage'
-import { useCallStore } from '../stores/call'
+import { useAppStore } from '../stores/app'
 
 function togglePanel(): void {
   window.api.togglePanel()
@@ -23,8 +23,8 @@ function winClose(): void {
   window.api.close()
 }
 
-// 使用通话状态 Store
-const callStore = useCallStore()
+// 使用全局 App Store
+const appStore = useAppStore()
 
 // 使用服务器消息处理（自动更新 store）
 useServerMessage()
@@ -35,22 +35,22 @@ const emotion = useEmotion({
 })
 
 // 监听 store 中的表情变化并同步到 emotion
-watch(() => callStore.emotion, (newEmotion) => {
+watch(() => appStore.emotion, (newEmotion) => {
   emotion.setEmotion(newEmotion as EmotionType)
 }, { immediate: true })
 
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
   try {
-    if (callStore.isCalling) {
+    if (appStore.isCalling) {
       // 挂断电话 - 停止自动对话
       console.log('[MainView] 挂断电话')
-      await callStore.stopAutoConversation()
+      await appStore.stopAutoConversation()
     }
     else {
       // 拨打电话 - 开始自动对话
       console.log('[MainView] 拨打电话')
-      await callStore.startAutoConversation()
+      await appStore.startAutoConversation()
     }
   }
   catch (error) {
@@ -93,17 +93,17 @@ async function toggleCall() {
     >
 
     <!-- 标题 -->
-    <div class="text-base text-gray-700 dark:text-gray-300" :class="[callStore.isCalling ? 'visible' : 'collapse']">
+    <div class="text-base text-gray-700 dark:text-gray-300" :class="[appStore.isCalling ? 'visible' : 'collapse']">
       请开始说话
     </div>
 
     <!-- Dots 组件 + 按钮组：固定相距 100px -->
     <div class="flex flex-col items-center gap-y-[100px] mt-12">
-      <Dots :is-show="callStore.isCalling" />
+      <Dots :is-show="appStore.isCalling" />
       <div class="flex items-center gap-2">
         <!-- 电话按钮：点击拨打/挂断 -->
         <NButton quaternary circle @click="toggleCall">
-          <icon-carbon-phone v-if="!callStore.isCalling" class="w-5 h-5 text-green-500" />
+          <icon-carbon-phone v-if="!appStore.isCalling" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">

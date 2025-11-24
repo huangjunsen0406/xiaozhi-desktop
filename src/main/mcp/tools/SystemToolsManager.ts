@@ -1,14 +1,12 @@
 import type OpenAI from 'openai'
 import type { PropertyList, PropertyType } from '../types'
 import { Buffer } from 'node:buffer'
-import { webContents } from 'electron'
 import { DatabaseManager } from '../../services/database'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
 import { McpServer } from '../McpServer'
 import { AppLauncher } from './app/AppLauncher'
 import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
-import { takePhoto } from './camera'
 import { ScreenshotTool } from './screenshot'
 /**
  * 系统工具管理器
@@ -706,9 +704,23 @@ Examples:
         hasVlUrl: !!cameraOptions.vlUrl,
       })
 
-      const result = await takePhoto(question, cameraOptions)
+      // 获取摄像头实例并拍照
+      const { getCameraInstance } = await import('./camera')
+      const camera = getCameraInstance(cameraOptions)
+      const captureResult = await camera.capture()
+
+      if (captureResult.success && captureResult.data) {
+        // 广播图片到渲染进程（用于 ChatView 显示）
+        const imageBase64 = captureResult.data.toString('base64')
+        const mcpServer = McpServer.getInstance()
+        mcpServer.broadcastImage(imageBase64, 'camera')
+        console.log('[SystemToolsManager] 已广播摄像头图片')
+      }
+
+      // 分析图片
+      const analyzeResult = await camera.analyze(question)
       console.log(`[SystemToolsManager] 拍照完成`)
-      return result
+      return JSON.stringify(analyzeResult)
     }
     catch (error) {
       console.error('[SystemToolsManager] 拍照失败:', error)
@@ -745,11 +757,12 @@ Examples:
 
       console.log('[SystemToolsManager] 截图成功，开始分析...')
 
-      // 广播截图到渲染进程（用于 ChatView 显示）
-      this.broadcastImageToRenderer(result.base64, 'screenshot')
-
       // 从 MCP Server 获取 vision 配置
       const mcpServer = McpServer.getInstance()
+
+      // 通过 McpServer 回调广播截图到渲染进程（用于 ChatView 显示）
+      mcpServer.broadcastImage(result.base64, 'screenshot')
+
       const visionConfig = mcpServer.getVisionConfig()
 
       // 从数据库获取摄像头配置（复用 VL 配置）
@@ -1118,9 +1131,9 @@ Examples:
 
       console.log(`[SystemToolsManager] 设置主题为: ${theme}`)
 
-      // 通过 themeIpc 广播主题更改
-      const { broadcastThemeChange } = await import('../../ipc/themeIpc')
-      broadcastThemeChange(theme as 'light' | 'dark' | 'auto')
+      // 通过 McpServer 回调广播主题更改
+      const mcpServer = McpServer.getInstance()
+      mcpServer.broadcastTheme(theme as 'light' | 'dark' | 'auto')
 
       console.log(`[SystemToolsManager] 主题设置成功: ${theme}`)
       return JSON.stringify({
@@ -1292,27 +1305,6 @@ Examples:
         message: error instanceof Error ? error.message : '获取系统信息失败',
       })
     }
-  }
-
-  /**
-   * 广播图片数据到渲染进程
-   */
-  private broadcastImageToRenderer(imageBase64: string, sourceType: 'screenshot' | 'camera'): void {
-    const allWebContents = webContents.getAllWebContents()
-    allWebContents.forEach((wc) => {
-      if (wc.isDestroyed()) return
-      try {
-        wc.send('chat:image-captured', {
-          type: sourceType,
-          imageBase64,
-          timestamp: Date.now(),
-        })
-        console.log(`[SystemToolsManager] 已广播 ${sourceType} 图片到窗口 ${wc.id}`)
-      }
-      catch (error) {
-        console.error(`[SystemToolsManager] 广播图片到窗口 ${wc.id} 失败:`, error)
-      }
-    })
   }
 
   /**

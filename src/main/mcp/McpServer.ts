@@ -20,6 +20,8 @@ export class McpServer {
   private sendCallback: ((message: string) => Promise<void>) | null = null
   private sendText: string = '' // 存储用户发送的文本，供 get_user_input 工具读取
   private visionConfig: { url?: string, token?: string } = {} // 存储 vision 配置供截图工具使用
+  private imageBroadcastCallback: ((imageBase64: string, sourceType: 'screenshot' | 'camera') => void) | null = null
+  private themeBroadcastCallback: ((theme: 'light' | 'dark' | 'auto') => void) | null = null
 
   private constructor() {}
 
@@ -455,5 +457,49 @@ export class McpServer {
    */
   clearSendText(): void {
     this.sendText = ''
+  }
+
+  /**
+   * 设置图片广播回调
+   * 由 McpPlugin 在 setup 时注入，用于将图片数据发送到 UIPlugin
+   */
+  setImageBroadcastCallback(callback: (imageBase64: string, sourceType: 'screenshot' | 'camera') => void): void {
+    this.imageBroadcastCallback = callback
+    console.log('[MCP] 图片广播回调已设置')
+  }
+
+  /**
+   * 广播图片到 UI
+   * 供 SystemToolsManager 等工具调用
+   */
+  broadcastImage(imageBase64: string, sourceType: 'screenshot' | 'camera'): void {
+    if (this.imageBroadcastCallback) {
+      this.imageBroadcastCallback(imageBase64, sourceType)
+    }
+    else {
+      console.warn('[MCP] 图片广播回调未设置，无法广播图片')
+    }
+  }
+
+  /**
+   * 设置主题广播回调
+   * 由 McpPlugin 在 setup 时注入，用于将主题变更发送到 UIPlugin
+   */
+  setThemeBroadcastCallback(callback: (theme: 'light' | 'dark' | 'auto') => void): void {
+    this.themeBroadcastCallback = callback
+    console.log('[MCP] 主题广播回调已设置')
+  }
+
+  /**
+   * 广播主题到 UI
+   * 供 SystemToolsManager 等工具调用
+   */
+  broadcastTheme(theme: 'light' | 'dark' | 'auto'): void {
+    if (this.themeBroadcastCallback) {
+      this.themeBroadcastCallback(theme)
+    }
+    else {
+      console.warn('[MCP] 主题广播回调未设置，无法广播主题')
+    }
   }
 }
