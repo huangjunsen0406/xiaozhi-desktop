@@ -73,9 +73,18 @@ onMounted(async () => {
       }
     })
 
+    // 监听主题变更（来自 MCP 工具）
+    const removeThemeListener = window.api.themeOnChange((theme: string) => {
+      console.log('[App] 收到主题变更请求:', theme)
+      if (['light', 'dark', 'auto'].includes(theme)) {
+        mode.value = theme as 'light' | 'dark' | 'auto'
+      }
+    })
+
     // 保存清理函数
     onUnmounted(() => {
       removeCameraListener()
+      removeThemeListener()
     })
   }
   catch (error) {

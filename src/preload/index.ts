@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, emotionApi, hoverApi, systemApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, emotionApi, hoverApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -98,6 +98,10 @@ const api = {
   // 摄像头配置 API
   cameraConfigGetConfig: cameraConfigApi.getConfig,
   cameraConfigUpdateConfig: cameraConfigApi.updateConfig,
+
+  // 主题 API
+  themeOnChange: themeApi.onThemeChange,
+  themeGetCurrent: themeApi.getCurrentTheme,
 }
 
 // 使用 contextBridge 暴露 API

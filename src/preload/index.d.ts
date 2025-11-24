@@ -104,6 +104,9 @@ export interface RendererApi {
     jpegQuality?: number
     maxDimension?: number
   }) => Promise<void>
+  // Theme APIs
+  themeOnChange: (callback: (theme: string) => void) => () => void
+  themeGetCurrent: () => Promise<string>
 }
 
 declare global {

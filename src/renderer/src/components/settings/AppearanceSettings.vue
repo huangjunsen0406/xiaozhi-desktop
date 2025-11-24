@@ -6,10 +6,11 @@ import { ref } from 'vue'
 const mode = useColorMode({
   selector: 'html',
   attribute: 'class',
+  emitAuto: true,
   modes: {
     light: 'light',
     dark: 'dark',
-    auto: '',
+    auto: 'auto',
   },
 })
 

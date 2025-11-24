@@ -45,7 +45,7 @@ export class PluginManager {
   // 默认广播选项
   private defaultBroadcastOptions: Required<BroadcastOptions> = {
     concurrent: true,
-    timeout: 5000,
+    timeout: 100000,
     enabledOnly: true,
   }
 

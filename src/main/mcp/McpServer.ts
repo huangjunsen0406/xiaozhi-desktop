@@ -18,8 +18,8 @@ export class McpServer {
   private static instance: McpServer | null = null
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
-  private visionConfig: { url?: string, token?: string } = {}
   private sendText: string = '' // 存储用户发送的文本，供 get_user_input 工具读取
+  private visionConfig: { url?: string, token?: string } = {} // 存储 vision 配置供截图工具使用
 
   private constructor() {}
 
@@ -78,12 +78,23 @@ export class McpServer {
 
   /**
    * 添加通用工具
+   *
+   * **重要**: 为了提升响应速度，我们把常用的工具放在前面，利用 Prompt Cache 的特性。
+   * 策略：
+   * 1. 备份现有工具列表
+   * 2. 清空列表
+   * 3. 添加常用工具（如音量控制、摄像头等）到前面
+   * 4. 将原有工具追加到后面
    */
   addCommonTools(): void {
     console.log('[MCP] Adding common tools...')
 
     try {
-      // 注册系统工具
+      // 备份原有工具列表
+      const originalTools = [...this.tools]
+      this.tools = []
+
+      // 注册系统工具（常用工具将被优先添加）
       const systemManager = SystemToolsManager.getInstance()
       systemManager.init(
         this.addTool.bind(this),
@@ -95,6 +106,11 @@ export class McpServer {
       // CalendarManager.getInstance().init(this.addTool.bind(this), PropertyList, PropertyType)
       // TimerManager.getInstance().init(this.addTool.bind(this), PropertyList, PropertyType)
       // MusicManager.getInstance().init(this.addTool.bind(this), PropertyList, PropertyType)
+
+      // 将原有工具恢复到列表末尾
+      this.tools.push(...originalTools)
+
+      console.log(`[MCP] Total tools registered: ${this.tools.length}`)
     }
     catch (error) {
       console.error('[MCP] Failed to add common tools:', error)
@@ -335,15 +351,44 @@ export class McpServer {
       const url = vision.url as string | undefined
       const token = vision.token as string | undefined
       if (url) {
+        // 保存 vision 配置（供截图等工具使用）
         this.visionConfig.url = url
         this.visionConfig.token = token
-        console.log(`[MCP] Vision service configured with URL: ${url}`)
+
+        // 同时直接设置到 Camera 实例（与 C++ 版本保持一致）
+        const { getCameraInstance } = await import('./tools/camera')
+        const { getConfigManager } = await import('../services/configManagerDB')
+
+        const configManager = getConfigManager()
+        const allConfig = configManager.getAll()
+
+        const cameraOptions = {
+          vlApiKey: allConfig.VLapi_key,
+          vlUrl: allConfig.Local_VL_url,
+          vlModel: allConfig.models,
+          explainUrl: url,
+          explainToken: token,
+          deviceId: configManager.getDeviceId(),
+          clientId: configManager.getClientId(),
+        }
+
+        const camera = getCameraInstance(cameraOptions)
+
+        // 如果是 WebCamera，直接设置 URL 和 Token
+        if ('setExplainUrl' in camera && typeof camera.setExplainUrl === 'function') {
+          camera.setExplainUrl(url)
+          if (token && 'setExplainToken' in camera && typeof camera.setExplainToken === 'function') {
+            camera.setExplainToken(token)
+          }
+          console.log(`[MCP] Vision service configured with URL: ${url}`)
+        }
       }
     }
   }
 
   /**
    * 获取 Vision 配置
+   * 供截图等工具使用
    */
   getVisionConfig(): { url?: string, token?: string } {
     return { ...this.visionConfig }
@@ -377,7 +422,6 @@ export class McpServer {
       jsonrpc: '2.0',
       id,
       error: {
-        code: -32000,
         message,
       },
     }

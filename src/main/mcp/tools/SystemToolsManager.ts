@@ -70,6 +70,15 @@ export class SystemToolsManager {
       // 注册用户输入获取工具
       this.registerGetUserInput(addTool, PropertyListClass, PropertyTypeEnum)
 
+      // 注册主题控制工具
+      this.registerThemeControl(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册主题获取工具
+      this.registerThemeGet(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册系统信息工具
+      this.registerSystemInfo(addTool, PropertyListClass, PropertyTypeEnum)
+
       this.initialized = true
       console.log('[SystemToolsManager] 系统工具注册完成')
     }
@@ -679,20 +688,12 @@ Examples:
       const db = DatabaseManager.getInstance()
       const cameraConfig = db.getFormattedCameraConfig()
 
-      // 从 MCP Server 获取 vision 配置（由客户端下发）
-      const mcpServer = McpServer.getInstance()
-      const visionConfig = mcpServer.getVisionConfig()
-
-      // 优先级：本地 VL 配置 > MCP 客户端下发的配置
       const cameraOptions = {
         // 如果本地配置了 VL API，则使用本地配置
         vlApiKey: cameraConfig.useLocalVision ? cameraConfig.vlApiKey : '',
         vlUrl: cameraConfig.useLocalVision ? cameraConfig.vlUrl : '',
         vlModel: cameraConfig.vlModel || 'glm-4v-plus',
-        // 如果没有本地 VL 配置，则使用 MCP 客户端下发的配置
-        explainUrl: cameraConfig.useLocalVision ? '' : (visionConfig.url || ''),
-        explainToken: cameraConfig.useLocalVision ? '' : (visionConfig.token || ''),
-        // 设备配置
+        // explainUrl 和 explainToken 会在 MCP 初始化时设置到 Camera 实例
         deviceId: cameraConfig.deviceId || '',
         clientId: '', // TODO: 从网络配置读取
       }
@@ -700,7 +701,6 @@ Examples:
       console.log(`[SystemToolsManager] 摄像头配置:`, {
         useLocalVision: cameraConfig.useLocalVision,
         hasVlUrl: !!cameraOptions.vlUrl,
-        hasExplainUrl: !!cameraOptions.explainUrl,
       })
 
       const result = await takePhoto(question, cameraOptions)
@@ -975,6 +975,320 @@ Examples:
   }
 
   /**
+   * 注册主题控制工具
+   */
+  private registerThemeControl(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const themeProps = new PropertyListClass([
+      {
+        name: 'theme',
+        type: PropertyTypeEnum.STRING,
+      },
+    ])
+
+    const description = `Set the application theme (light/dark/auto). Changes the visual appearance across all windows.
+
+Use this tool when:
+1. User wants to change the theme or appearance
+2. User says "切换深色模式", "switch to dark mode", "使用浅色主题"
+3. User asks to enable/disable dark mode
+4. User wants the theme to follow system preferences
+
+Parameters:
+- theme: Theme mode to set
+  - "light": Light theme (浅色)
+  - "dark": Dark theme (深色)
+  - "auto": Follow system preferences (跟随系统)
+
+Examples:
+- "切换到深色模式" -> theme="dark"
+- "使用浅色主题" -> theme="light"
+- "跟随系统设置" -> theme="auto"
+- "Turn on dark mode" -> theme="dark"`
+
+    addTool(
+      'self.ui.set_theme',
+      description,
+      themeProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.setTheme(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册主题控制工具成功')
+  }
+
+  /**
+   * 注册主题获取工具
+   */
+  private registerThemeGet(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    _PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const getThemeProps = new PropertyListClass([])
+
+    const description = `Get the current theme setting of the application.
+
+Use when:
+- User asks about current theme
+- Need to check theme before toggling
+- User says "当前是什么主题?", "what theme is active?"
+
+Returns:
+- String indicating current theme: "light", "dark", or "auto"`
+
+    addTool(
+      'self.ui.get_theme',
+      description,
+      getThemeProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.getTheme(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册主题获取工具成功')
+  }
+
+  /**
+   * 注册系统信息工具
+   */
+  private registerSystemInfo(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    _PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const systemInfoProps = new PropertyListClass([])
+
+    const description = `Get detailed system information including OS, hardware, and application details.
+
+Use this tool when:
+1. User asks about system specs or computer information
+2. User wants to know OS version, CPU, memory details
+3. User asks "what's my system info?", "系统信息", "电脑配置"
+4. Troubleshooting or diagnostic purposes
+
+Returns comprehensive JSON with:
+- OS information (platform, version, architecture)
+- Hardware details (CPU model, cores, memory)
+- Application information (version, Electron version, Node version)
+- System uptime and performance metrics
+
+Examples:
+- "我的电脑配置是什么?" -> Returns full system info
+- "What OS am I running?" -> Returns OS details
+- "How much RAM do I have?" -> Returns memory info`
+
+    addTool(
+      'self.system.get_info',
+      description,
+      systemInfoProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.getSystemInfo(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册系统信息工具成功')
+  }
+
+  /**
+   * 设置主题（工具实现）
+   */
+  private async setTheme(args: Record<string, unknown>): Promise<string> {
+    try {
+      const theme = args.theme as string
+
+      // 验证主题值
+      if (!['light', 'dark', 'auto'].includes(theme)) {
+        console.warn(`[SystemToolsManager] 无效的主题值: ${theme}`)
+        return JSON.stringify({
+          success: false,
+          message: `Invalid theme value: ${theme}. Must be 'light', 'dark', or 'auto'`,
+        })
+      }
+
+      console.log(`[SystemToolsManager] 设置主题为: ${theme}`)
+
+      // 通过 themeIpc 广播主题更改
+      const { broadcastThemeChange } = await import('../../ipc/themeIpc')
+      broadcastThemeChange(theme as 'light' | 'dark' | 'auto')
+
+      console.log(`[SystemToolsManager] 主题设置成功: ${theme}`)
+      return JSON.stringify({
+        success: true,
+        theme,
+        message: `Theme set to ${theme}`,
+      })
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 设置主题失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '设置主题失败',
+      })
+    }
+  }
+
+  /**
+   * 获取当前主题（工具实现）
+   */
+  private async getTheme(_args: Record<string, unknown>): Promise<string> {
+    try {
+      console.log('[SystemToolsManager] 获取当前主题')
+
+      // 从任一窗口获取主题设置
+      const { BrowserWindow } = await import('electron')
+      const windows = BrowserWindow.getAllWindows()
+
+      if (windows.length === 0) {
+        return JSON.stringify({
+          success: false,
+          message: 'No windows available',
+        })
+      }
+
+      // 向主窗口请求当前主题
+      const result = await windows[0].webContents.executeJavaScript(
+        `(function() {
+          try {
+            const mode = localStorage.getItem('vueuse-color-scheme') || 'auto';
+            return { success: true, theme: mode };
+          } catch (e) {
+            return { success: false, message: e.message };
+          }
+        })()`,
+      )
+
+      console.log(`[SystemToolsManager] 当前主题:`, result)
+      return JSON.stringify(result)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 获取主题失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '获取主题失败',
+      })
+    }
+  }
+
+  /**
+   * 获取系统信息（工具实现）
+   */
+  private async getSystemInfo(_args: Record<string, unknown>): Promise<string> {
+    try {
+      console.log('[SystemToolsManager] 获取系统信息')
+
+      const os = await import('node:os')
+      const { app } = await import('electron')
+      // eslint-disable-next-line node/prefer-global/process
+      const processVersions = process.versions
+
+      // 获取 CPU 信息
+      const cpus = os.cpus()
+      const cpuModel = cpus.length > 0 ? cpus[0].model : 'Unknown'
+      const cpuCores = cpus.length
+
+      // 计算 CPU 使用率（简单平均）
+      let totalIdle = 0
+      let totalTick = 0
+      cpus.forEach((cpu) => {
+        for (const type in cpu.times) {
+          totalTick += cpu.times[type as keyof typeof cpu.times]
+        }
+        totalIdle += cpu.times.idle
+      })
+      const cpuUsage = Math.round(100 - (totalIdle / totalTick) * 100)
+
+      // 内存信息
+      const totalMemory = os.totalmem()
+      const freeMemory = os.freemem()
+      const usedMemory = totalMemory - freeMemory
+      const memoryUsagePercent = Math.round((usedMemory / totalMemory) * 100)
+
+      // 系统运行时间
+      const uptimeSeconds = os.uptime()
+      const uptimeDays = Math.floor(uptimeSeconds / 86400)
+      const uptimeHours = Math.floor((uptimeSeconds % 86400) / 3600)
+      const uptimeMinutes = Math.floor((uptimeSeconds % 3600) / 60)
+
+      // 网络接口
+      const networkInterfaces = os.networkInterfaces()
+      const activeInterfaces = Object.entries(networkInterfaces)
+        .filter(([_, addrs]) => addrs && addrs.length > 0)
+        .map(([name, addrs]) => ({
+          name,
+          addresses: addrs!.filter(addr => !addr.internal).map(addr => ({
+            address: addr.address,
+            family: addr.family,
+            mac: addr.mac,
+          })),
+        }))
+        .filter(iface => iface.addresses.length > 0)
+
+      const systemInfo = {
+        success: true,
+        os: {
+          platform: os.platform(), // 'darwin', 'win32', 'linux'
+          type: os.type(), // 'Darwin', 'Windows_NT', 'Linux'
+          release: os.release(), // '23.6.0'
+          version: os.version(), // Full OS version string
+          arch: os.arch(), // 'x64', 'arm64'
+          hostname: os.hostname(),
+          uptime: {
+            seconds: uptimeSeconds,
+            formatted: `${uptimeDays}d ${uptimeHours}h ${uptimeMinutes}m`,
+          },
+        },
+        hardware: {
+          cpu: {
+            model: cpuModel,
+            cores: cpuCores,
+            usage: `${cpuUsage}%`,
+            speed: cpus[0]?.speed ? `${cpus[0].speed} MHz` : 'Unknown',
+          },
+          memory: {
+            total: `${Math.round(totalMemory / 1024 / 1024 / 1024)} GB`,
+            free: `${Math.round(freeMemory / 1024 / 1024 / 1024)} GB`,
+            used: `${Math.round(usedMemory / 1024 / 1024 / 1024)} GB`,
+            usage: `${memoryUsagePercent}%`,
+            totalBytes: totalMemory,
+            freeBytes: freeMemory,
+          },
+        },
+        application: {
+          name: app.getName(),
+          version: app.getVersion(),
+          electronVersion: processVersions.electron,
+          chromeVersion: processVersions.chrome,
+          nodeVersion: processVersions.node,
+          v8Version: processVersions.v8,
+        },
+        network: {
+          interfaces: activeInterfaces,
+        },
+        user: {
+          homedir: os.homedir(),
+          tmpdir: os.tmpdir(),
+          username: os.userInfo().username,
+        },
+      }
+
+      console.log('[SystemToolsManager] 系统信息获取成功')
+      return JSON.stringify(systemInfo, null, 2)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 获取系统信息失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '获取系统信息失败',
+      })
+    }
+  }
+
+  /**
    * 检查管理器是否已初始化
    */
   isInitialized(): boolean {
@@ -999,6 +1313,9 @@ Examples:
       'self.camera.take_photo',
       'self.screenshot.take',
       'get_user_input',
+      'self.ui.set_theme',
+      'self.ui.get_theme',
+      'self.system.get_info',
     ]
 
     return {

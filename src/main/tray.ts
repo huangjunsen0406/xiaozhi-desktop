@@ -5,7 +5,7 @@ import linux24 from '../../resources/tray/icon-24.png?asset'
 import linux32 from '../../resources/tray/icon-32.png?asset'
 import winIco from '../../resources/tray/icon.ico?asset'
 import macTpl2x from '../../resources/tray/iconTemplate@2x.png?asset'
-import { ensureMainWindow, toggleSettings } from './windows/windowManager'
+import { toggleSettings } from './windows/windowManager'
 
 let tray: Tray | null = null
 let lastLinuxBucket: 24 | 32 | null = null
