@@ -14,12 +14,13 @@ const mode = useColorMode({
   },
 })
 
-const displayMode = ref<'main' | 'mini'>('main')
+const displayMode = ref<'main' | 'mini' | 'chat'>('main')
 
 // 选项定义
 const displayModeOptions = [
   { label: '标准窗口', value: 'main' },
   { label: '迷你悬浮球', value: 'mini' },
+  { label: '聊天视图', value: 'chat' },
 ]
 
 const themeOptions = [
@@ -28,7 +29,7 @@ const themeOptions = [
   { label: '跟随系统', value: 'auto' },
 ]
 
-async function handleDisplayModeChange(value: 'main' | 'mini') {
+async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat') {
   try {
     // 立即切换显示模式
     await window.api.switchDisplayMode(value)

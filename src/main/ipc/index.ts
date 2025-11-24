@@ -2,7 +2,7 @@ import type { IpcContext } from '../types/ipc'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
-import { showActivation, togglePanel, toggleSettings, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { showActivation, togglePanel, toggleSettings, toggleToChat, toggleToMain, toggleToMini } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
@@ -89,9 +89,12 @@ export function registerBasicIpcChannels(): void {
   })
 
   // 显示模式切换
-  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini') => {
+  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini' | 'chat') => {
     if (mode === 'mini') {
       toggleToMini()
+    }
+    else if (mode === 'chat') {
+      toggleToChat()
     }
     else {
       toggleToMain()

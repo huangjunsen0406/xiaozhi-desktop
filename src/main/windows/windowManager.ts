@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import { buildActivationWindow, buildBackgroundAudioWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
+import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
 let mainWindow: BrowserWindow | null = null
 let miniWindow: BrowserWindow | null = null
@@ -7,6 +7,7 @@ let panelWindow: BrowserWindow | null = null
 let activationWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let backgroundAudioWindow: BrowserWindow | null = null
+let chatWindow: BrowserWindow | null = null
 
 export function ensureMainWindow(): BrowserWindow {
   if (mainWindow == null) {
@@ -117,4 +118,28 @@ export function ensureBackgroundAudioWindow(): BrowserWindow {
 
 export function getBackgroundAudioWindow(): BrowserWindow | null {
   return backgroundAudioWindow
+}
+
+export function ensureChatWindow(): BrowserWindow {
+  if (chatWindow == null) {
+    const win = buildChatWindow()
+    chatWindow = win
+    win.on('closed', () => {
+      chatWindow = null
+    })
+  }
+  return chatWindow as BrowserWindow
+}
+
+export function toggleToChat(): void {
+  const chat = ensureChatWindow()
+  chat.show()
+  if (mainWindow)
+    mainWindow.hide()
+  if (miniWindow)
+    miniWindow.hide()
+}
+
+export function getChatWindow(): BrowserWindow | null {
+  return chatWindow
 }

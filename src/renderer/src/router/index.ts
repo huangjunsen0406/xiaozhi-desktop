@@ -30,6 +30,10 @@ const routes: RouteRecordRaw[] = [
     path: '/settings',
     component: () => import('../pages/SettingsView.vue'),
   },
+  {
+    path: '/chat',
+    component: () => import('../pages/ChatView.vue'),
+  },
 ]
 
 export const router = createRouter({

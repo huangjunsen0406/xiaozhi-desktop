@@ -453,7 +453,7 @@ export class Application {
   private handleIncomingJson(jsonData: JsonMessage): void {
     try {
       const msgType = jsonData.type
-      console.log(`[Application] 收到 JSON 消息: type=${msgType}`)
+      console.log(`[Application] 收到 JSON 消息: type=${msgType}`, jsonData)
 
       if (msgType === 'error') {
         console.log(jsonData)

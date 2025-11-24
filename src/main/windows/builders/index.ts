@@ -1,5 +1,6 @@
 export { buildActivationWindow } from './activationWindow'
 export { buildBackgroundAudioWindow } from './backgroundAudioWindow'
+export { buildChatWindow } from './chatWindow'
 export { buildMainWindow } from './mainWindow'
 export { buildMiniWindow } from './miniWindow'
 export { buildPanelWindow } from './panelWindow'
