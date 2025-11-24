@@ -1,9 +1,9 @@
+import type { Buffer } from 'node:buffer'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 import Database from 'better-sqlite3'
 import { app } from 'electron'
-
 /**
  * 数据库管理器 - 单例模式
  */
@@ -197,34 +197,7 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_message_at ON chat_sessions(last_message_at)
     `)
 
-    // 如果表已存在但缺少字段，则添加
-    const tableInfo = this.db.pragma('table_info(wake_word_config)') as Array<{ name: string }>
-    const hasKeywordsList = tableInfo.some(col => col.name === 'keywords_list')
-    const hasKeywordZh = tableInfo.some(col => col.name === 'keyword_zh')
-    const hasKeywordEn = tableInfo.some(col => col.name === 'keyword_en')
-
-    if (!hasKeywordsList) {
-      this.db.exec(`
-        ALTER TABLE wake_word_config ADD COLUMN keywords_list TEXT DEFAULT '你好小智'
-      `)
-      console.log('[Database] 已添加 keywords_list 字段到 wake_word_config 表')
-    }
-
-    if (!hasKeywordZh) {
-      this.db.exec(`
-        ALTER TABLE wake_word_config ADD COLUMN keyword_zh TEXT DEFAULT '你好小智'
-      `)
-      console.log('[Database] 已添加 keyword_zh 字段到 wake_word_config 表')
-    }
-
-    if (!hasKeywordEn) {
-      this.db.exec(`
-        ALTER TABLE wake_word_config ADD COLUMN keyword_en TEXT DEFAULT 'MOSS'
-      `)
-      console.log('[Database] 已添加 keyword_en 字段到 wake_word_config 表')
-    }
-
-    console.log('[Database] 数据库表检查完成')
+    console.log('[Database] 数据库表初始化完成')
   }
 
   /* ==================== 设备信息相关 ==================== */

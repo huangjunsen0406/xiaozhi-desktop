@@ -107,6 +107,25 @@ export interface RendererApi {
   // Theme APIs
   themeOnChange: (callback: (theme: string) => void) => () => void
   themeGetCurrent: () => Promise<string>
+  // Chat APIs
+  chatGetSessions: (limit?: number, offset?: number) => Promise<any[]>
+  chatGetSession: (sessionId: string) => Promise<any>
+  chatCreateSession: (data: { session_id: string, title?: string, started_at?: number }) => Promise<any>
+  chatGetMessages: (sessionId: string, limit?: number, offset?: number) => Promise<any[]>
+  chatAddMessage: (data: {
+    session_id: string
+    role: 'user' | 'assistant'
+    content: string
+    emotion?: string
+    source_type: string
+    image_data?: Uint8Array
+    timestamp?: number
+  }) => Promise<any>
+  chatUpdateSessionTitle: (sessionId: string, title: string) => Promise<void>
+  chatDeleteSession: (sessionId: string) => Promise<void>
+  chatClearMessages: (sessionId: string) => Promise<void>
+  chatOnImageCaptured: (callback: (data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => void) => void
+  chatRemoveImageCapturedListener: () => void
 }
 
 declare global {

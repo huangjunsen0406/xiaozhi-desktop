@@ -15,6 +15,7 @@ declare module 'vue' {
     Dots: typeof import('./components/Dots.vue')['default']
     EmotionSettings: typeof import('./components/settings/EmotionSettings.vue')['default']
     HotkeySettings: typeof import('./components/settings/HotkeySettings.vue')['default']
+    IconCarbonAdd: typeof import('~icons/carbon/add')['default']
     IconCarbonArrowUp: typeof import('~icons/carbon/arrow-up')['default']
     IconCarbonChat: typeof import('~icons/carbon/chat')['default']
     IconCarbonClose: typeof import('~icons/carbon/close')['default']

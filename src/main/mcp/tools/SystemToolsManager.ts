@@ -1,6 +1,7 @@
 import type OpenAI from 'openai'
 import type { PropertyList, PropertyType } from '../types'
 import { Buffer } from 'node:buffer'
+import { webContents } from 'electron'
 import { DatabaseManager } from '../../services/database'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
 import { McpServer } from '../McpServer'
@@ -353,6 +354,8 @@ Use when:
 - System detects audio trigger for user text input
 - User sends text message via audio-based method
 - Need to retrieve the cached user input text
+- There is no need to say "Obtain the user's income text.
+- Whenever you encounter the "obtaining user income text" scenario, please call the "get_user_input" function and use the content recognized and returned by the system to provide the response.
 
 Returns:
 - The user's text input as a string`
@@ -741,6 +744,9 @@ Examples:
       }
 
       console.log('[SystemToolsManager] 截图成功，开始分析...')
+
+      // 广播截图到渲染进程（用于 ChatView 显示）
+      this.broadcastImageToRenderer(result.base64, 'screenshot')
 
       // 从 MCP Server 获取 vision 配置
       const mcpServer = McpServer.getInstance()
@@ -1286,6 +1292,27 @@ Examples:
         message: error instanceof Error ? error.message : '获取系统信息失败',
       })
     }
+  }
+
+  /**
+   * 广播图片数据到渲染进程
+   */
+  private broadcastImageToRenderer(imageBase64: string, sourceType: 'screenshot' | 'camera'): void {
+    const allWebContents = webContents.getAllWebContents()
+    allWebContents.forEach((wc) => {
+      if (wc.isDestroyed()) return
+      try {
+        wc.send('chat:image-captured', {
+          type: sourceType,
+          imageBase64,
+          timestamp: Date.now(),
+        })
+        console.log(`[SystemToolsManager] 已广播 ${sourceType} 图片到窗口 ${wc.id}`)
+      }
+      catch (error) {
+        console.error(`[SystemToolsManager] 广播图片到窗口 ${wc.id} 失败:`, error)
+      }
+    })
   }
 
   /**

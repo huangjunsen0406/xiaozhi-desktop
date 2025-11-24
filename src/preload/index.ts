@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, emotionApi, hoverApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -102,6 +102,18 @@ const api = {
   // 主题 API
   themeOnChange: themeApi.onThemeChange,
   themeGetCurrent: themeApi.getCurrentTheme,
+
+  // 聊天 API
+  chatGetSessions: chatApi.getSessions,
+  chatGetSession: chatApi.getSession,
+  chatCreateSession: chatApi.createSession,
+  chatGetMessages: chatApi.getMessages,
+  chatAddMessage: chatApi.addMessage,
+  chatUpdateSessionTitle: chatApi.updateSessionTitle,
+  chatDeleteSession: chatApi.deleteSession,
+  chatClearMessages: chatApi.clearMessages,
+  chatOnImageCaptured: chatApi.onImageCaptured,
+  chatRemoveImageCapturedListener: chatApi.removeImageCapturedListener,
 }
 
 // 使用 contextBridge 暴露 API
