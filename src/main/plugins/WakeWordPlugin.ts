@@ -203,6 +203,12 @@ export class WakeWordPlugin extends Plugin {
 
   /**
    * 唤醒词检测回调
+   *
+   * 行为规则：
+   * 1. 说话中（SPEAKING）→ 打断 → 进入自动对话
+   * 2. 空闲（IDLE）且断开连接 → 连接 → 进入自动对话
+   * 3. 手动监听（LISTENING + manual）→ 停止手动 → 进入自动对话
+   * 4. 已在自动对话（LISTENING + auto/realtime）→ 保持当前状态
    */
   private async onWakeWordDetected(keyword: string): Promise<void> {
     console.log(`[WakeWordPlugin] 🎤 唤醒词触发: "${keyword}"`)
@@ -213,8 +219,28 @@ export class WakeWordPlugin extends Plugin {
     }
 
     try {
-      if (this.app.isSpeaking()) {
-        // 正在说话 → 打断语音输出
+      // 获取当前状态
+      const snapshot = this.app.getStateSnapshot()
+      const { device_state, listening_mode, keep_listening } = snapshot
+
+      console.log(`[WakeWordPlugin] 当前状态: deviceState=${device_state}, listeningMode=${listening_mode}, keepListening=${keep_listening}`)
+
+      // 情况4: 已经在自动对话中，忽略唤醒词
+      if (keep_listening && (listening_mode === 'realtime' || listening_mode === 'auto')) {
+        console.log('[WakeWordPlugin] 已在自动对话中，忽略唤醒词')
+        return
+      }
+
+      // 情况3: 手动监听中，先停止手动模式
+      if (device_state === 'listening' && listening_mode === 'manual') {
+        console.log('[WakeWordPlugin] 检测到手动模式激活，停止手动模式')
+        await this.app.stopListeningManual()
+        // 等待状态稳定
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      // 情况1: 说话中，打断语音输出
+      if (device_state === 'speaking') {
         console.log('[WakeWordPlugin] 当前正在说话，打断输出')
         await this.app.abortSpeaking(AbortReason.USER_INTERRUPTED)
 
@@ -225,11 +251,11 @@ export class WakeWordPlugin extends Plugin {
           backgroundWindow.webContents.send('audio:command', 'clearQueue')
         }
 
-        // 等待一小段时间让音频完全停止
+        // 等待音频完全停止
         await new Promise(resolve => setTimeout(resolve, 100))
       }
 
-      // 启动自动对话
+      // 情况2 & 通用: 启动自动对话（会自动连接协议）
       console.log('[WakeWordPlugin] 启动自动对话')
       await this.app.startAutoConversation()
     }

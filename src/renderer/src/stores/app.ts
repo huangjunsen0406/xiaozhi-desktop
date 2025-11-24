@@ -1,4 +1,4 @@
-import type { ChatMessage as ChatMessageType, ChatSession, DbMessage, DbSession, GroupedSessions, ServerMessage } from '../types/chat'
+import type { ChatMessage as ChatMessageType, ChatSession, DbMessage, DbSession, ServerMessage } from '../types/chat'
 /**
  * 全局应用 Store
  * 统一管理设备状态、通话状态、会话、消息等
@@ -6,16 +6,20 @@ import type { ChatMessage as ChatMessageType, ChatSession, DbMessage, DbSession,
  */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { formatDateLabel, generateSessionTitle, getTodaySessionPrefix, isTodaySession } from '../utils/dateUtils'
+import { generateSessionTitle, getTodaySessionPrefix, isTodaySession } from '../utils/dateUtils'
 
 // ==================== 类型定义 ====================
 
 /** 设备状态类型 */
 export type DeviceState = 'idle' | 'listening' | 'speaking'
 
+/** 监听模式类型 */
+export type ListeningMode = 'auto' | 'manual' | 'realtime'
+
 /** 应用状态快照 */
 export interface AppStateSnapshot {
   deviceState: DeviceState
+  listeningMode: ListeningMode
   channelOpen: boolean
 }
 
@@ -26,6 +30,9 @@ export const useAppStore = defineStore('app', () => {
 
   /** 设备状态 */
   const deviceState = ref<DeviceState>('idle')
+
+  /** 监听模式 */
+  const listeningMode = ref<ListeningMode>('manual')
 
   /** 音频通道是否打开 */
   const channelOpen = ref(false)
@@ -40,9 +47,6 @@ export const useAppStore = defineStore('app', () => {
 
   /** 会话列表 */
   const sessions = ref<ChatSession[]>([])
-
-  /** 按日期分组的会话列表 */
-  const groupedSessions = ref<GroupedSessions[]>([])
 
   /** 当前会话 ID */
   const currentSessionId = ref<string>('')
@@ -84,6 +88,16 @@ export const useAppStore = defineStore('app', () => {
   /** 是否有活跃会话 */
   const hasActiveSession = computed(() => !!currentSessionId.value)
 
+  /** 是否为自动模式 (通话中且模式为 realtime 或 auto) */
+  const isAutoMode = computed(() => {
+    return isCalling.value && (listeningMode.value === 'realtime' || listeningMode.value === 'auto')
+  })
+
+  /** 是否为手动模式 (正在监听且模式为 manual) */
+  const isManualMode = computed(() => {
+    return deviceState.value === 'listening' && listeningMode.value === 'manual'
+  })
+
   // ==================== 设备 & 通话状态管理 ====================
 
   /**
@@ -91,6 +105,7 @@ export const useAppStore = defineStore('app', () => {
    */
   function updateState(state: AppStateSnapshot) {
     deviceState.value = state.deviceState
+    listeningMode.value = state.listeningMode
     channelOpen.value = state.channelOpen
   }
 
@@ -113,6 +128,7 @@ export const useAppStore = defineStore('app', () => {
    */
   function resetState() {
     deviceState.value = 'idle'
+    listeningMode.value = 'manual'
     channelOpen.value = false
     emotion.value = 'neutral'
     currentText.value = ''
@@ -231,40 +247,11 @@ export const useAppStore = defineStore('app', () => {
         lastMessageAt: s.last_message_at,
       }))
 
-      // 按天分组
-      groupedSessions.value = groupSessionsByDate(sessions.value)
-
       console.log('[AppStore] 会话列表已加载:', sessions.value.length)
     }
     catch (error) {
       console.error('[AppStore] 加载会话列表失败:', error)
     }
-  }
-
-  /**
-   * 按天分组会话
-   */
-  function groupSessionsByDate(sessionList: ChatSession[]): GroupedSessions[] {
-    const groups = new Map<string, ChatSession[]>()
-
-    sessionList.forEach((session) => {
-      const dateKey = formatDateLabel(session.lastMessageAt)
-      if (!groups.has(dateKey)) {
-        groups.set(dateKey, [])
-      }
-      groups.get(dateKey)!.push(session)
-    })
-
-    const result: GroupedSessions[] = []
-    groups.forEach((sessions, dateKey) => {
-      result.push({
-        date: dateKey,
-        timestamp: sessions[0].lastMessageAt,
-        sessions: sessions.sort((a, b) => b.lastMessageAt - a.lastMessageAt),
-      })
-    })
-
-    return result.sort((a, b) => b.timestamp - a.timestamp)
   }
 
   /**
@@ -762,13 +749,14 @@ export const useAppStore = defineStore('app', () => {
   return {
     // 设备 & 通话状态
     deviceState,
+    listeningMode,
     channelOpen,
     emotion,
     currentText,
 
     // 会话 & 消息状态
     sessions,
-    groupedSessions,
+
     currentSessionId,
     messages,
     isStreaming,
@@ -782,6 +770,8 @@ export const useAppStore = defineStore('app', () => {
     isSpeaking,
     isCurrentSessionToday,
     hasActiveSession,
+    isAutoMode,
+    isManualMode,
 
     // 设备 & 通话控制
     updateState,

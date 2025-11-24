@@ -93,3 +93,45 @@ export function imageDataToDataURL(imageData: Uint8Array | any): string {
     return ''
   }
 }
+
+/**
+ * 将图片数据转换为 Blob
+ * @param imageData - 图片二进制数据
+ * @returns Blob 或 null
+ */
+export function imageDataToBlob(imageData: Uint8Array | any): Blob | null {
+  try {
+    const buffer = convertToUint8Array(imageData)
+    if (!buffer || buffer.length === 0) {
+      return null
+    }
+    const mimeType = detectImageMimeType(buffer)
+    return new Blob([buffer as any], { type: mimeType })
+  }
+  catch (error) {
+    console.error('[imageUtils] 转换 Blob 失败:', error)
+    return null
+  }
+}
+
+/**
+ * 创建图片的 Object URL
+ * @param imageData - 图片二进制数据
+ * @returns Object URL 或空字符串
+ */
+export function createObjectUrl(imageData: Uint8Array | any): string {
+  const blob = imageDataToBlob(imageData)
+  if (!blob)
+    return ''
+  return URL.createObjectURL(blob)
+}
+
+/**
+ * 释放 Object URL
+ * @param url - Object URL
+ */
+export function revokeObjectUrl(url: string) {
+  if (url && url.startsWith('blob:')) {
+    URL.revokeObjectURL(url)
+  }
+}

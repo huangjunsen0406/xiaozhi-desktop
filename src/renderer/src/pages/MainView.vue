@@ -4,7 +4,6 @@ import { NButton } from 'naive-ui'
 import { watch } from 'vue'
 import Dots from '../components/Dots.vue'
 import { useEmotion } from '../composables/useEmotion'
-import { useServerMessage } from '../composables/useServerMessage'
 import { useAppStore } from '../stores/app'
 
 function togglePanel(): void {
@@ -26,9 +25,6 @@ function winClose(): void {
 // 使用全局 App Store
 const appStore = useAppStore()
 
-// 使用服务器消息处理（自动更新 store）
-useServerMessage()
-
 // 表情管理
 const emotion = useEmotion({
   defaultEmotion: 'neutral',
@@ -42,7 +38,7 @@ watch(() => appStore.emotion, (newEmotion) => {
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
   try {
-    if (appStore.isCalling) {
+    if (appStore.isAutoMode) {
       // 挂断电话 - 停止自动对话
       console.log('[MainView] 挂断电话')
       await appStore.stopAutoConversation()
@@ -103,7 +99,7 @@ async function toggleCall() {
       <div class="flex items-center gap-2">
         <!-- 电话按钮：点击拨打/挂断 -->
         <NButton quaternary circle @click="toggleCall">
-          <icon-carbon-phone v-if="!appStore.isCalling" class="w-5 h-5 text-green-500" />
+          <icon-carbon-phone v-if="!appStore.isAutoMode" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">

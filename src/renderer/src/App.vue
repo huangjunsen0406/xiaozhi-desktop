@@ -41,6 +41,7 @@ onMounted(async () => {
     // 更新 Store
     appStore.updateState({
       deviceState: state.device_state,
+      listeningMode: state.listening_mode,
       channelOpen: state.audio_opened,
     })
 
@@ -49,6 +50,7 @@ onMounted(async () => {
       console.log('[App] 状态更新:', state)
       appStore.updateState({
         deviceState: state.deviceState,
+        listeningMode: state.listeningMode,
         channelOpen: state.channelOpen,
       })
     })
@@ -81,10 +83,22 @@ onMounted(async () => {
       }
     })
 
+    // 监听服务器消息
+    window.api.appOnServerMessage((message) => {
+      appStore.handleServerMessage(message)
+    })
+
+    // 监听图片捕获事件
+    window.api.chatOnImageCaptured((data: { imageBase64: string }) => {
+      appStore.handleImageCaptured(data.imageBase64)
+    })
+
     // 保存清理函数
     onUnmounted(() => {
       removeCameraListener()
       removeThemeListener()
+      window.api.appRemoveServerMessageListener()
+      window.api.chatRemoveImageCapturedListener()
     })
   }
   catch (error) {

@@ -207,6 +207,7 @@ export class Application {
         return
       }
 
+      this.listeningMode = ListeningMode.MANUAL
       this.keepListening = false
 
       // 如果正在说话，先发送打断
@@ -485,7 +486,9 @@ export class Application {
             // 继续对话：重启监听
             this.restartListening()
           }
-          else {
+          else if (this.deviceState !== DeviceState.LISTENING) {
+            // 如果当前不是监听状态，才设置为空闲
+            // 避免打断后手动启动的监听被 TTS stop 关闭
             this.setDeviceState(DeviceState.IDLE)
           }
         }

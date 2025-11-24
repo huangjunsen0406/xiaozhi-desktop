@@ -146,9 +146,18 @@ export class AudioPlugin extends Plugin {
    * 广播状态变化到所有渲染进程窗口
    */
   private broadcastStateChanged(state: DeviceState): void {
+    // 获取完整的状态快照(包含 listeningMode)
+    const snapshot = this.app?.getStateSnapshot() || {
+      device_state: state,
+      listening_mode: 'manual',
+      keep_listening: false,
+      audio_opened: this.protocol?.isAudioChannelOpened() || false,
+    }
+
     const stateData = {
-      deviceState: state,
-      channelOpen: this.protocol?.isAudioChannelOpened() || false,
+      deviceState: snapshot.device_state,
+      listeningMode: snapshot.listening_mode,
+      channelOpen: snapshot.audio_opened,
     }
 
     // 获取所有 webContents（排除后台音频窗口）

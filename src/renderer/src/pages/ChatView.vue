@@ -3,21 +3,28 @@ import { NButton, NDropdown } from 'naive-ui'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import AudioWave from '../components/AudioWave.vue'
-import { useServerMessage } from '../composables/useServerMessage'
+import ChatImage from '../components/ChatImage.vue'
 import { useAppStore } from '../stores/app'
-import { imageDataToDataURL } from '../utils/imageUtils'
 
 // UI 状态
 const inputValue = ref('')
-const isRecording = ref(false)
 const isSidebarOpen = ref(true)
 const messagesContainer = ref<HTMLElement>()
+
+// 麦克风按钮的本地状态（用于立即响应，避免等待后端状态更新）
+const isLocalListening = ref(false)
 
 // 使用全局 App Store
 const appStore = useAppStore()
 
-// 使用服务器消息处理（自动更新 store）
-useServerMessage()
+// 监听后端状态变化，同步到本地状态
+watch(
+  () => appStore.isManualMode,
+  (newValue) => {
+    isLocalListening.value = newValue
+  },
+  { immediate: true },
+)
 
 // 监听消息变化，自动滚动到底部
 watch(
@@ -67,9 +74,9 @@ onUnmounted(() => {
   console.log('[ChatView] 组件卸载')
 })
 
-
 /**
  * 发送消息
+ * 互斥：如果有模式在运行，先停止
  */
 async function sendMessage() {
   const text = inputValue.value.trim()
@@ -78,6 +85,22 @@ async function sendMessage() {
 
   try {
     console.log('[ChatView] 发送消息:', text)
+
+    // 互斥逻辑：停止任何正在运行的模式
+    if (appStore.isAutoMode) {
+      console.log('[ChatView] 发送文本前停止自动模式')
+      await appStore.stopAutoConversation()
+    }
+    if (isLocalListening.value || appStore.isManualMode) {
+      console.log('[ChatView] 发送文本前停止手动模式')
+      isLocalListening.value = false
+      await appStore.stopListeningManual()
+    }
+
+    // 等待状态稳定
+    if (appStore.isAutoMode || appStore.isManualMode) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
 
     // 确保有当前会话
     if (!appStore.currentSessionId) {
@@ -152,24 +175,70 @@ function scrollToBottom() {
 }
 
 /**
- * 显示图片（从二进制数据转为 data URL）
- */
-function getImageUrl(imageData: Uint8Array | any): string {
-  return imageDataToDataURL(imageData)
-}
-
-/**
- * 切换录音状态
- */
-function toggleRecording() {
-  isRecording.value = !isRecording.value
-}
-
-/**
  * 切换侧边栏
  */
 function toggleSidebar() {
   isSidebarOpen.value = !isSidebarOpen.value
+}
+
+/**
+ * 处理麦克风按钮点击
+ * 智能判断：如果正在监听则停止，否则开始监听
+ * 互斥：如果自动模式激活，先停止自动模式
+ */
+async function handleMicrophoneClick() {
+  try {
+    // 如果自动模式正在运行，先停止
+    if (appStore.isAutoMode) {
+      console.log('[ChatView] 检测到自动模式激活，先停止自动模式')
+      await appStore.stopAutoConversation()
+      // 等待状态更新
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    // 如果正在监听（手动模式），则停止
+    if (isLocalListening.value) {
+      isLocalListening.value = false
+      await appStore.stopListeningManual()
+    }
+    else {
+      // 否则（包括空闲、说话等），立即设置本地状态，然后开始监听
+      isLocalListening.value = true
+      await appStore.startListeningManual()
+    }
+  }
+  catch (error) {
+    console.error('[ChatView] 麦克风按钮点击处理失败:', error)
+    isLocalListening.value = false
+  }
+}
+
+/**
+ * 处理电话按钮点击（自动模式）
+ * 互斥：如果手动模式激活，先停止手动模式
+ */
+async function handlePhoneClick() {
+  try {
+    // 如果手动模式正在运行，先停止
+    if (isLocalListening.value || appStore.isManualMode) {
+      console.log('[ChatView] 检测到手动模式激活，先停止手动模式')
+      isLocalListening.value = false
+      await appStore.stopListeningManual()
+      // 等待状态更新
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    // 切换自动模式
+    if (appStore.isAutoMode) {
+      await appStore.stopAutoConversation()
+    }
+    else {
+      await appStore.startAutoConversation()
+    }
+  }
+  catch (error) {
+    console.error('[ChatView] 电话按钮点击处理失败:', error)
+  }
 }
 
 /**
@@ -198,44 +267,34 @@ function handleKeydown(event: KeyboardEvent) {
         <span :class="{ 'opacity-0': !isSidebarOpen }">历史对话</span>
       </div>
 
-      <!-- History List (Grouped by Date) -->
-      <div class="flex-1 overflow-y-auto px-2 space-y-3">
-        <div v-for="group in appStore.groupedSessions" :key="group.date" class="space-y-1">
-          <!-- Date Header -->
-          <div
-            class="px-3 py-1 text-xs font-medium text-gray-500 dark:text-gray-400"
-            :class="{ 'opacity-0': !isSidebarOpen }"
-          >
-            {{ group.date }}
-          </div>
-          <!-- Sessions in this group -->
-          <div
-            v-for="item in group.sessions"
-            :key="item.id"
-            class="group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors whitespace-nowrap relative"
-            :class="[
-              item.active
-                ? 'bg-gray-200/60 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50',
+      <!-- History List -->
+      <div class="flex-1 overflow-y-auto px-2 space-y-1">
+        <div
+          v-for="item in appStore.sessions"
+          :key="item.id"
+          class="group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors whitespace-nowrap relative"
+          :class="[
+            item.active
+              ? 'bg-gray-200/60 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50',
+          ]"
+          @click="switchSession(item.sessionId)"
+        >
+          <icon-carbon-chat class="w-4 h-4 flex-shrink-0 opacity-70" />
+          <span class="truncate flex-1" :class="{ 'opacity-0': !isSidebarOpen }">{{ item.title }}</span>
+          <NDropdown
+            v-if="item.active && isSidebarOpen"
+            trigger="click"
+            :options="[
+              { label: '删除对话', key: 'delete' },
             ]"
-            @click="switchSession(item.sessionId)"
+            @select="(key: string) => key === 'delete' && deleteSession(item.sessionId)"
           >
-            <icon-carbon-chat class="w-4 h-4 flex-shrink-0 opacity-70" />
-            <span class="truncate flex-1" :class="{ 'opacity-0': !isSidebarOpen }">{{ item.title }}</span>
-            <NDropdown
-              v-if="item.active && isSidebarOpen"
-              trigger="click"
-              :options="[
-                { label: '删除对话', key: 'delete' },
-              ]"
-              @select="(key: string) => key === 'delete' && deleteSession(item.sessionId)"
-            >
-              <icon-carbon-overflow-menu-horizontal
-                class="w-4 h-4 opacity-50 hover:opacity-100 cursor-pointer"
-                @click.stop
-              />
-            </NDropdown>
-          </div>
+            <icon-carbon-overflow-menu-horizontal
+              class="w-4 h-4 opacity-50 hover:opacity-100 cursor-pointer"
+              @click.stop
+            />
+          </NDropdown>
         </div>
       </div>
 
@@ -259,12 +318,12 @@ function handleKeydown(event: KeyboardEvent) {
           <!-- User Message -->
           <div v-if="msg.role === 'user'" class="self-end max-w-[80%]">
             <!-- 图片 -->
-            <img
+            <ChatImage
               v-if="msg.imageData"
-              :src="getImageUrl(msg.imageData)"
-              class="rounded-lg mb-2 max-w-full"
+              :image-data="msg.imageData"
+              class-name="rounded-lg mb-2 max-w-full"
               alt="User uploaded image"
-            >
+            />
             <!-- 文本 -->
             <div class="bg-[#F3F3F3] dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed">
               {{ msg.content }}
@@ -274,12 +333,12 @@ function handleKeydown(event: KeyboardEvent) {
           <!-- Assistant Message -->
           <div v-else class="self-start max-w-[80%]">
             <!-- 图片 -->
-            <img
+            <ChatImage
               v-if="msg.imageData"
-              :src="getImageUrl(msg.imageData)"
-              class="rounded-lg mb-2 max-w-full shadow-md"
+              :image-data="msg.imageData"
+              class-name="rounded-lg mb-2 max-w-full shadow-md"
               alt="Screenshot or photo"
-            >
+            />
             <!-- 文本 (只在有内容时显示) -->
             <div v-if="msg.content && msg.content !== '[图片]'" class="text-gray-900 dark:text-gray-100 text-sm leading-relaxed whitespace-pre-line">
               {{ msg.content }}
@@ -304,18 +363,29 @@ function handleKeydown(event: KeyboardEvent) {
 
           <!-- Input Actions -->
           <div class="flex items-center justify-end gap-2 px-4 pb-3">
-            <NButton quaternary circle size="small" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-              <icon-carbon-phone class="w-4 h-4" />
-            </NButton>
+            <!-- Phone Button: Auto Mode -->
             <NButton
               quaternary
               circle
               size="small"
               class="transition-colors duration-200"
-              :class="[isRecording ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
-              @click="toggleRecording"
+              :class="[appStore.isAutoMode ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
+              @click="handlePhoneClick"
             >
-              <AudioWave v-if="isRecording" :active="true" class="w-4 h-4" />
+              <icon-carbon-phone-block-filled v-if="appStore.isAutoMode" class="w-4 h-4" />
+              <icon-carbon-phone v-else class="w-4 h-4" />
+            </NButton>
+
+            <!-- Microphone Button: Manual Mode -->
+            <NButton
+              quaternary
+              circle
+              size="small"
+              class="transition-colors duration-200"
+              :class="[isLocalListening ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
+              @click="handleMicrophoneClick"
+            >
+              <AudioWave v-if="isLocalListening" :active="true" class="w-4 h-4" />
               <icon-carbon-microphone v-else class="w-4 h-4" />
             </NButton>
             <NButton
