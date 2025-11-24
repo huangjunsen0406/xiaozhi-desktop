@@ -157,6 +157,46 @@ export class DatabaseManager {
       )
     `)
 
+    // 聊天会话表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT UNIQUE NOT NULL,
+        title TEXT,
+        message_count INTEGER DEFAULT 0,
+        started_at INTEGER NOT NULL,
+        last_message_at INTEGER,
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `)
+
+    // 聊天消息表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        emotion TEXT,
+        source_type TEXT NOT NULL,
+        image_data BLOB,
+        timestamp INTEGER NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id)
+      )
+    `)
+
+    // 创建索引以提高查询性能
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_message_at ON chat_sessions(last_message_at)
+    `)
+
     // 如果表已存在但缺少字段，则添加
     const tableInfo = this.db.pragma('table_info(wake_word_config)') as Array<{ name: string }>
     const hasKeywordsList = tableInfo.some(col => col.name === 'keywords_list')
@@ -692,6 +732,171 @@ export class DatabaseManager {
       jpegQuality: config.jpeg_quality || 80,
       maxDimension: config.max_dimension || 320,
     }
+  }
+
+  /* ==================== 聊天会话相关 ==================== */
+
+  /**
+   * 创建新会话
+   */
+  createChatSession(data: {
+    session_id: string
+    title?: string
+    started_at?: number
+  }): any {
+    const startedAt = data.started_at || Math.floor(Date.now() / 1000)
+
+    const result = this.db.prepare(`
+      INSERT INTO chat_sessions (session_id, title, started_at, last_message_at)
+      VALUES (?, ?, ?, ?)
+    `).run(data.session_id, data.title || null, startedAt, startedAt)
+
+    return this.db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(result.lastInsertRowid)
+  }
+
+  /**
+   * 获取所有会话列表（按最后消息时间倒序）
+   */
+  getChatSessions(limit = 50, offset = 0): any[] {
+    return this.db.prepare(`
+      SELECT * FROM chat_sessions
+      ORDER BY last_message_at DESC
+      LIMIT ? OFFSET ?
+    `).all(limit, offset) as any[]
+  }
+
+  /**
+   * 根据 session_id 获取会话
+   */
+  getChatSession(sessionId: string): any {
+    return this.db.prepare('SELECT * FROM chat_sessions WHERE session_id = ?').get(sessionId)
+  }
+
+  /**
+   * 更新会话标题
+   */
+  updateChatSessionTitle(sessionId: string, title: string): void {
+    this.db.prepare(`
+      UPDATE chat_sessions
+      SET title = ?
+      WHERE session_id = ?
+    `).run(title, sessionId)
+  }
+
+  /**
+   * 更新会话的消息数量和最后消息时间
+   */
+  updateChatSessionStats(sessionId: string): void {
+    // 获取该会话的消息数量和最后一条消息时间
+    const stats = this.db.prepare(`
+      SELECT COUNT(*) as count, MAX(timestamp) as last_ts
+      FROM chat_messages
+      WHERE session_id = ?
+    `).get(sessionId) as any
+
+    this.db.prepare(`
+      UPDATE chat_sessions
+      SET message_count = ?, last_message_at = ?
+      WHERE session_id = ?
+    `).run(stats.count, stats.last_ts, sessionId)
+  }
+
+  /**
+   * 删除会话及其所有消息
+   */
+  deleteChatSession(sessionId: string): void {
+    // 开启事务，确保原子性
+    const deleteMessages = this.db.prepare('DELETE FROM chat_messages WHERE session_id = ?')
+    const deleteSession = this.db.prepare('DELETE FROM chat_sessions WHERE session_id = ?')
+
+    const transaction = this.db.transaction(() => {
+      deleteMessages.run(sessionId)
+      deleteSession.run(sessionId)
+    })
+
+    transaction()
+  }
+
+  /* ==================== 聊天消息相关 ==================== */
+
+  /**
+   * 添加消息到会话
+   */
+  addChatMessage(data: {
+    session_id: string
+    role: 'user' | 'assistant'
+    content: string
+    emotion?: string
+    source_type: string
+    image_data?: Buffer
+    timestamp?: number
+  }): any {
+    const timestamp = data.timestamp || Math.floor(Date.now() / 1000)
+
+    const result = this.db.prepare(`
+      INSERT INTO chat_messages (session_id, role, content, emotion, source_type, image_data, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      data.session_id,
+      data.role,
+      data.content,
+      data.emotion || null,
+      data.source_type,
+      data.image_data || null,
+      timestamp,
+    )
+
+    // 更新会话统计
+    this.updateChatSessionStats(data.session_id)
+
+    return this.db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(result.lastInsertRowid)
+  }
+
+  /**
+   * 获取指定会话的所有消息
+   */
+  getChatMessages(sessionId: string, limit = 100, offset = 0): any[] {
+    return this.db.prepare(`
+      SELECT * FROM chat_messages
+      WHERE session_id = ?
+      ORDER BY timestamp ASC
+      LIMIT ? OFFSET ?
+    `).all(sessionId, limit, offset) as any[]
+  }
+
+  /**
+   * 获取指定会话的消息数量
+   */
+  getChatMessageCount(sessionId: string): number {
+    const result = this.db.prepare(`
+      SELECT COUNT(*) as count
+      FROM chat_messages
+      WHERE session_id = ?
+    `).get(sessionId) as any
+    return result.count
+  }
+
+  /**
+   * 删除指定消息
+   */
+  deleteChatMessage(messageId: number): void {
+    // 先获取消息所属的会话
+    const message = this.db.prepare('SELECT session_id FROM chat_messages WHERE id = ?').get(messageId) as any
+
+    if (message) {
+      this.db.prepare('DELETE FROM chat_messages WHERE id = ?').run(messageId)
+      // 更新会话统计
+      this.updateChatSessionStats(message.session_id)
+    }
+  }
+
+  /**
+   * 清空指定会话的所有消息
+   */
+  clearChatMessages(sessionId: string): void {
+    this.db.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(sessionId)
+    // 更新会话统计
+    this.updateChatSessionStats(sessionId)
   }
 
   /**
