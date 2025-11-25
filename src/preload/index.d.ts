@@ -49,7 +49,6 @@ export interface RendererApi {
   appStartAutoConversation: () => Promise<void>
   appStopAutoConversation: () => Promise<void>
   appSendText: (text: string) => Promise<void>
-  appSendTextViaAudio: (text: string) => Promise<void>
   appGetState: () => Promise<any>
   appOnStateChanged: (callback: (state: any) => void) => void
   appRemoveStateChangedListener: () => void
@@ -126,6 +125,10 @@ export interface RendererApi {
   chatClearMessages: (sessionId: string) => Promise<void>
   chatOnImageCaptured: (callback: (data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => void) => void
   chatRemoveImageCapturedListener: () => void
+  chatOnMessageAdded: (callback: (data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => void) => void
+  chatRemoveMessageAddedListener: () => void
+  chatOnMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => void
+  chatRemoveMessagesBatchAddedListener: () => void
 }
 
 declare global {

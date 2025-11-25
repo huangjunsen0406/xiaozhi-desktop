@@ -25,10 +25,10 @@ export function getTodayDateString(): string {
 }
 
 /**
- * 生成今天的会话 ID 前缀（格式：chat_YYYYMMDD）
- * @returns 会话 ID 前缀，如 "chat_20251124"
+ * 生成今天的会话 ID（格式：chat_YYYYMMDD）
+ * @returns 会话 ID，如 "chat_20251124"
  */
-export function getTodaySessionPrefix(): string {
+export function getTodaySessionId(): string {
   return `chat_${getTodayDateString()}`
 }
 
@@ -38,21 +38,18 @@ export function getTodaySessionPrefix(): string {
  * @returns 是否是今天的会话
  */
 export function isTodaySession(sessionId: string): boolean {
-  return sessionId.startsWith(getTodaySessionPrefix())
+  return sessionId === getTodaySessionId()
 }
 
 /**
- * 生成会话标题
- * @param sequenceNumber - 序号（1 表示今天第一个会话，2+ 表示新对话）
- * @returns 会话标题
+ * 从会话 ID 生成标题
+ * @param sessionId - 会话 ID（格式：chat_YYYYMMDD）
+ * @returns 会话标题，如 "11月24日的对话"
  */
-export function generateSessionTitle(sequenceNumber: number): string {
-  const today = new Date()
-  const month = today.getMonth() + 1
-  const date = today.getDate()
-
-  if (sequenceNumber === 1) {
-    return `${month}月${date}日的对话`
-  }
-  return `新对话 ${sequenceNumber}`
+export function generateSessionTitle(sessionId: string): string {
+  // 提取日期部分 YYYYMMDD
+  const dateStr = sessionId.replace('chat_', '')
+  const month = Number.parseInt(dateStr.substring(4, 6), 10)
+  const date = Number.parseInt(dateStr.substring(6, 8), 10)
+  return `${month}月${date}日的对话`
 }

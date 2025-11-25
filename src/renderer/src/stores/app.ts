@@ -6,7 +6,7 @@ import type { ChatMessage as ChatMessageType, ChatSession, DbMessage, DbSession,
  */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { generateSessionTitle, getTodaySessionPrefix, isTodaySession } from '../utils/dateUtils'
+import { generateSessionTitle, getTodaySessionId, isTodaySession } from '../utils/dateUtils'
 
 // ==================== 类型定义 ====================
 
@@ -65,6 +65,9 @@ export const useAppStore = defineStore('app', () => {
 
   /** 待保存的图片数据 */
   const pendingImageData = ref<string | null>(null)
+
+  /** 最后发送的文本（用于过滤重复的 STT 消息） */
+  const lastSentText = ref<string | null>(null)
 
   // ==================== 计算属性 ====================
 
@@ -146,30 +149,16 @@ export const useAppStore = defineStore('app', () => {
     }
 
     try {
+      // 记录发送的文本，用于过滤 STT 重复消息
+      lastSentText.value = trimmedText
+      console.log('[AppStore] 设置 lastSentText:', lastSentText.value)
+
       await window.api.appSendText(trimmedText)
       console.log('[AppStore] 文本消息已发送:', trimmedText)
     }
     catch (error) {
       console.error('[AppStore] 发送文本失败:', error)
-      throw error
-    }
-  }
-
-  /**
-   * 通过音频发送文本消息
-   */
-  async function sendTextViaAudio(text: string): Promise<void> {
-    const trimmedText = text.trim()
-    if (!trimmedText) {
-      throw new Error('文本内容不能为空')
-    }
-
-    try {
-      await window.api.appSendTextViaAudio(trimmedText)
-      console.log('[AppStore] 通过音频发送文本:', trimmedText)
-    }
-    catch (error) {
-      console.error('[AppStore] 通过音频发送文本失败:', error)
+      lastSentText.value = null // 发送失败时清空标记
       throw error
     }
   }
@@ -255,17 +244,40 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
+   * 加载指定会话的消息列表
+   */
+  async function loadMessages(sessionId: string) {
+    try {
+      console.log('[AppStore] 加载会话消息:', sessionId)
+
+      const msgs = await window.api.chatGetMessages(sessionId)
+      messages.value = msgs.map((m: DbMessage) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        emotion: m.emotion ?? undefined,
+        imageData: m.image_data ?? undefined,
+        timestamp: m.timestamp,
+      }))
+
+      console.log('[AppStore] 消息已加载，数量:', messages.value.length)
+    }
+    catch (error) {
+      console.error('[AppStore] 加载消息失败:', error)
+    }
+  }
+
+  /**
    * 获取或创建今天的会话
    */
   async function getTodaySession(): Promise<string> {
     try {
-      const sessionIdPrefix = getTodaySessionPrefix()
+      const sessionId = getTodaySessionId()
       const data = await window.api.chatGetSessions()
-      const todaySession = data.find((s: DbSession) => s.session_id.startsWith(sessionIdPrefix))
+      const todaySession = data.find((s: DbSession) => s.session_id === sessionId)
 
       if (!todaySession) {
-        const sessionId = `${sessionIdPrefix}_01`
-        const title = generateSessionTitle(1)
+        const title = generateSessionTitle(sessionId)
 
         await window.api.chatCreateSession({
           session_id: sessionId,
@@ -319,39 +331,6 @@ export const useAppStore = defineStore('app', () => {
     }
     catch (error) {
       console.error('[AppStore] 切换会话失败:', error)
-    }
-  }
-
-  /**
-   * 创建新会话
-   */
-  async function createNewSession(): Promise<string | null> {
-    try {
-      const sessionIdPrefix = getTodaySessionPrefix()
-      const data = await window.api.chatGetSessions()
-      const todaySessions = data.filter((s: DbSession) => s.session_id.startsWith(sessionIdPrefix))
-      const nextNumber = todaySessions.length + 1
-      const sessionId = `${sessionIdPrefix}_${String(nextNumber).padStart(2, '0')}`
-
-      const title = generateSessionTitle(nextNumber)
-      await window.api.chatCreateSession({
-        session_id: sessionId,
-        title,
-        started_at: Math.floor(Date.now() / 1000),
-      })
-
-      // 切换到新会话
-      await switchSession(sessionId)
-
-      // 刷新会话列表
-      await loadSessions()
-
-      console.log('[AppStore] 创建新会话:', sessionId)
-      return sessionId
-    }
-    catch (error) {
-      console.error('[AppStore] 创建新会话失败:', error)
-      return null
     }
   }
 
@@ -418,40 +397,27 @@ export const useAppStore = defineStore('app', () => {
 
   /**
    * 处理 STT 消息（用户语音识别）
+   * ⚠️ 主进程负责保存和广播,前端通过 message-added 事件刷新
+   * 这里只是记录日志,不做任何界面更新
    */
   async function handleSttMessage(text: string) {
     console.log('[AppStore] 处理 STT 消息:', text)
+    console.log('[AppStore] lastSentText.value:', lastSentText.value)
 
     // 过滤特殊提示
     if (text === '获取用户输入文本。') {
       return
     }
 
-    // 添加用户消息到界面
-    messages.value.push({
-      role: 'user',
-      content: text,
-      timestamp: Math.floor(Date.now() / 1000),
-    })
-
-    // 保存到数据库
-    try {
-      await window.api.chatAddMessage({
-        session_id: currentSessionId.value,
-        role: 'user',
-        content: text,
-        source_type: 'voice',
-        timestamp: Math.floor(Date.now() / 1000),
-      })
-
-      // 刷新会话列表
-      await loadSessions()
-
-      console.log('[AppStore] STT 消息已保存')
+    // 如果是通过 sendText 发送的文本,清空标记(后端已保存,会通过 message-added 刷新)
+    if (lastSentText.value && text === lastSentText.value) {
+      console.log('[AppStore] 这是 sendText 发送的文本,等待 message-added 事件刷新')
+      lastSentText.value = null
+      return
     }
-    catch (error) {
-      console.error('[AppStore] 保存 STT 消息失败:', error)
-    }
+
+    // 对于真正的语音 STT,也不在这里显示,等待后端保存后通过 message-added 刷新
+    console.log('[AppStore] 这是语音 STT,等待后端保存后通过 message-added 刷新')
   }
 
   /**
@@ -541,73 +507,45 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
-   * 处理 TTS stop（保存完整回复）
+   * 处理 TTS stop（完成显示）
+   * ⚠️ 主进程负责保存，这里只负责 UI 状态管理
    */
   async function handleTtsStop() {
-    console.log('[AppStore] TTS stop，保存完整回复')
+    console.log('[AppStore] TTS stop，完成显示')
 
     if (!accumulatedContent.value && !pendingImageData.value) {
-      console.log('[AppStore] 没有需要保存的内容')
+      console.log('[AppStore] 没有需要显示的内容')
       resetStreamingState()
       return
     }
 
-    // 检查是否已经保存过（防止重复保存）
+    // 检查是否已经处理过（防止重复）
     const contentToSave = accumulatedContent.value
     if (contentToSave && streamingMessageIndex.value >= 0) {
       const currentMessage = messages.value[streamingMessageIndex.value]
-      // 如果当前消息已经不是 streaming 状态，说明已经保存过了
+      // 如果当前消息已经不是 streaming 状态，说明已经处理过了
       if (!currentMessage?.isStreaming) {
-        console.log('[AppStore] 消息已经保存过，跳过')
+        console.log('[AppStore] 消息已经处理过，跳过')
         resetStreamingState()
         return
       }
     }
 
-    try {
-      // 保存图片（如果有）
-      if (pendingImageData.value) {
-        const binaryString = atob(pendingImageData.value)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
-        }
-
-        await window.api.chatAddMessage({
-          session_id: currentSessionId.value,
-          role: 'assistant',
-          content: '[图片]',
-          source_type: 'image',
-          image_data: bytes,
-          timestamp: Math.floor(Date.now() / 1000) - 1,
-        })
-
-        pendingImageData.value = null
-      }
-
-      // 保存文本（如果有）
-      if (accumulatedContent.value) {
-        await window.api.chatAddMessage({
-          session_id: currentSessionId.value,
-          role: 'assistant',
-          content: accumulatedContent.value,
-          emotion: emotion.value,
-          source_type: 'tts',
-          timestamp: Math.floor(Date.now() / 1000),
-        })
-
-        console.log('[AppStore] 消息已保存，内容:', accumulatedContent.value)
-      }
-
-      // 刷新会话列表
-      await loadSessions()
+    // 标记流式消息为完成
+    if (streamingMessageIndex.value >= 0 && messages.value[streamingMessageIndex.value]) {
+      messages.value[streamingMessageIndex.value].isStreaming = false
     }
-    catch (error) {
-      console.error('[AppStore] 保存消息失败:', error)
-    }
-    finally {
-      resetStreamingState()
-    }
+
+    // 清空待处理的图片数据（主进程已保存）
+    pendingImageData.value = null
+
+    console.log('[AppStore] 消息显示已完成')
+
+    // 重置状态
+    resetStreamingState()
+
+    // 刷新会话列表（显示最新的消息数量）
+    await loadSessions()
   }
 
   /**
@@ -674,6 +612,8 @@ export const useAppStore = defineStore('app', () => {
 
   /**
    * 添加文本消息（用户手动输入）
+   * ⚠️ 主进程负责保存，这里只负责显示
+   * 注意：实际保存由 sendText() → appSendText() → Application.sendText() 完成
    */
   async function addTextMessage(text: string) {
     console.log('[AppStore] 添加文本消息:', text)
@@ -683,31 +623,14 @@ export const useAppStore = defineStore('app', () => {
       currentSessionId.value = await getTodaySession()
     }
 
-    // 添加到界面
+    // 只显示到界面（主进程通过 sendText 保存）
     messages.value.push({
       role: 'user',
       content: text,
       timestamp: Math.floor(Date.now() / 1000),
     })
 
-    // 保存到数据库
-    try {
-      await window.api.chatAddMessage({
-        session_id: currentSessionId.value,
-        role: 'user',
-        content: text,
-        source_type: 'text',
-        timestamp: Math.floor(Date.now() / 1000),
-      })
-
-      // 刷新会话列表
-      await loadSessions()
-
-      console.log('[AppStore] 文本消息已保存')
-    }
-    catch (error) {
-      console.error('[AppStore] 保存文本消息失败:', error)
-    }
+    console.log('[AppStore] 文本消息已显示')
   }
 
   /**
@@ -779,7 +702,6 @@ export const useAppStore = defineStore('app', () => {
     updateCurrentText,
     resetState,
     sendText,
-    sendTextViaAudio,
     startAutoConversation,
     stopAutoConversation,
     startListeningManual,
@@ -787,9 +709,9 @@ export const useAppStore = defineStore('app', () => {
 
     // 会话管理
     loadSessions,
+    loadMessages,
     getTodaySession,
     switchSession,
-    createNewSession,
     deleteSession,
 
     // 消息处理

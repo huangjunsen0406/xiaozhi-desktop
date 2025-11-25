@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 // 设备信息
 const serialNumber = ref('--')
@@ -25,7 +25,8 @@ onMounted(async () => {
       if (deviceInfo.activationStatus) {
         activationStatus.value = '已激活'
         statusColor.value = '#28a745'
-      } else {
+      }
+      else {
         activationStatus.value = '未激活'
         statusColor.value = '#dc3545'
       }
@@ -38,7 +39,8 @@ onMounted(async () => {
       // 自动开始激活流程
       startActivation()
     }
-  } catch (error) {
+  }
+  catch (error) {
     console.error('初始化失败:', error)
   }
 })
@@ -65,16 +67,19 @@ async function startActivation() {
       setTimeout(() => {
         closeWindow()
       }, 1500)
-    } else {
+    }
+    else {
       activationStatus.value = '激活失败'
       statusColor.value = '#dc3545'
       console.error('激活失败:', result.error)
     }
-  } catch (error) {
+  }
+  catch (error) {
     console.error('激活过程出错:', error)
     activationStatus.value = '激活失败'
     statusColor.value = '#dc3545'
-  } finally {
+  }
+  finally {
     isActivating.value = false
   }
 }

@@ -93,12 +93,36 @@ onMounted(async () => {
       appStore.handleImageCaptured(data.imageBase64)
     })
 
+    // 监听单条消息添加事件
+    window.api.chatOnMessageAdded((data) => {
+      console.log('[App] 收到消息添加事件:', data)
+      // 如果是当前会话的消息，刷新消息列表
+      if (data.sessionId === appStore.currentSessionId) {
+        appStore.loadMessages(data.sessionId)
+      }
+      // 无论如何都刷新会话列表（更新消息计数）
+      appStore.loadSessions()
+    })
+
+    // 监听批量消息添加事件（图片+文本）
+    window.api.chatOnMessagesBatchAdded((data) => {
+      console.log('[App] 收到批量消息添加事件:', data)
+      // 如果是当前会话的消息，刷新消息列表
+      if (data.sessionId === appStore.currentSessionId) {
+        appStore.loadMessages(data.sessionId)
+      }
+      // 刷新会话列表
+      appStore.loadSessions()
+    })
+
     // 保存清理函数
     onUnmounted(() => {
       removeCameraListener()
       removeThemeListener()
       window.api.appRemoveServerMessageListener()
       window.api.chatRemoveImageCapturedListener()
+      window.api.chatRemoveMessageAddedListener()
+      window.api.chatRemoveMessagesBatchAddedListener()
     })
   }
   catch (error) {

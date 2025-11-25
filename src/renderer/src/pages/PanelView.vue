@@ -17,10 +17,10 @@ async function handleSendText() {
 
   try {
     // 通过 store 发送文本
-    await appStore.sendTextViaAudio(message)
+    await appStore.sendText(message)
   }
   catch (error) {
-    console.error('[PanelView] 通过音频发送文本失败:', error)
+    console.error('[PanelView] 发送文本失败:', error)
   }
 }
 

@@ -98,26 +98,5 @@ export function registerAppIpc(context: IpcContext): void {
     }
   })
 
-  // 通过音频发送文本消息
-  ipcMain.handle('app:send-text-via-audio', async (_event, text: string) => {
-    try {
-      // 参数校验
-      if (!text || typeof text !== 'string') {
-        return { success: false, error: '文本内容不能为空' }
-      }
-
-      if (text.length > 500) {
-        return { success: false, error: '文本内容不能超过 500 字符' }
-      }
-
-      await application.sendTextViaAudio(text)
-      return { success: true }
-    }
-    catch (error) {
-      console.error('[App IPC] 通过音频发送文本失败:', error)
-      return { success: false, error: String(error) }
-    }
-  })
-
   console.log('[App IPC] Application 控制 IPC 通道已注册')
 }

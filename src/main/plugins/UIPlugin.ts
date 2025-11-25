@@ -60,6 +60,36 @@ export class UIPlugin extends Plugin {
   }
 
   /**
+   * 广播单条消息已添加事件
+   * @param messageId - 消息 ID
+   * @param sessionId - 会话 ID
+   * @param role - 消息角色
+   */
+  broadcastMessageAdded(messageId: number, sessionId: string, role: 'user' | 'assistant'): void {
+    const payload = {
+      messageId,
+      sessionId,
+      role,
+      timestamp: Date.now(),
+    }
+    this.broadcastToRenderer('chat:message-added', payload)
+  }
+
+  /**
+   * 广播批量消息已添加事件（图片+文本组合）
+   * @param messageIds - 消息 ID 列表
+   * @param sessionId - 会话 ID
+   */
+  broadcastMessagesBatchAdded(messageIds: number[], sessionId: string): void {
+    const payload = {
+      messageIds,
+      sessionId,
+      timestamp: Date.now(),
+    }
+    this.broadcastToRenderer('chat:messages-batch-added', payload)
+  }
+
+  /**
    * 广播消息到渲染进程
    * @param channel - IPC 通道名称
    * @param data - 要发送的数据

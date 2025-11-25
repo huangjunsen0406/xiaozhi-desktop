@@ -108,8 +108,7 @@ async function sendMessage() {
       await appStore.switchSession(sessionId)
     }
 
-    // 添加用户消息到界面和数据库
-    await appStore.addTextMessage(text)
+    // 清空输入框
     inputValue.value = ''
 
     // 滚动到底部
@@ -117,25 +116,12 @@ async function sendMessage() {
     scrollToBottom()
 
     // 发送到服务器
-    await appStore.sendTextViaAudio(text)
+    // 后端会保存消息并通过 broadcastMessageAdded 广播事件
+    // App.vue 监听事件后会自动 loadMessages 刷新界面
+    await appStore.sendText(text)
   }
   catch (error) {
     console.error('[ChatView] 发送消息失败:', error)
-  }
-}
-
-/**
- * 开启新对话
- */
-async function startNewConversation() {
-  const newSessionId = await appStore.createNewSession()
-
-  if (newSessionId) {
-    console.log('[ChatView] 创建新对话:', newSessionId)
-
-    // 滚动到底部
-    await nextTick()
-    scrollToBottom()
   }
 }
 
@@ -401,11 +387,8 @@ function handleKeydown(event: KeyboardEvent) {
         </div>
 
         <!-- 查看历史记录时显示提示 -->
-        <div v-else class="text-center py-4">
-          <NButton type="primary" @click="startNewConversation">
-            <icon-carbon-add class="w-4 h-4 mr-2" />
-            开启新对话
-          </NButton>
+        <div v-else class="text-center py-4 text-gray-400">
+          这是历史记录，无法继续对话
         </div>
       </div>
     </div>

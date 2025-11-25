@@ -4,7 +4,7 @@ import type { ChatSession, DbSession, GroupedSessions } from '../types/chat'
  * 负责会话列表的加载、创建、切换、删除等操作
  */
 import { ref } from 'vue'
-import { formatDateLabel, generateSessionTitle, getTodaySessionPrefix, isTodaySession } from '../utils/dateUtils'
+import { formatDateLabel, generateSessionTitle, getTodaySessionId, isTodaySession } from '../utils/dateUtils'
 
 export function useSessionManager() {
   // 状态
@@ -73,17 +73,15 @@ export function useSessionManager() {
    */
   async function getTodaySession(): Promise<string> {
     try {
-      // 生成今天的日期标识（格式：chat_20250124）
-      const sessionIdPrefix = getTodaySessionPrefix()
+      const sessionId = getTodaySessionId()
 
       // 查找今天的会话
       const sessions = await window.api.chatGetSessions()
-      const todaySession = sessions.find((s: DbSession) => s.session_id.startsWith(sessionIdPrefix))
+      const todaySession = sessions.find((s: DbSession) => s.session_id === sessionId)
 
       if (!todaySession) {
-        // 创建今天的第一个会话
-        const sessionId = `${sessionIdPrefix}_01`
-        const title = generateSessionTitle(1)
+        // 创建今天的会话
+        const title = generateSessionTitle(sessionId)
 
         await window.api.chatCreateSession({
           session_id: sessionId,
@@ -102,50 +100,6 @@ export function useSessionManager() {
       console.error('[useSessionManager] 获取今天会话失败:', error)
       // 失败时返回一个临时 ID
       return `chat_temp_${Date.now()}`
-    }
-  }
-
-  /**
-   * 开启新对话（手动创建）
-   */
-  async function startNewConversation() {
-    try {
-      // 生成新的会话 ID
-      const sessionIdPrefix = getTodaySessionPrefix()
-
-      // 查找今天已有的会话数量
-      const sessions = await window.api.chatGetSessions()
-      const todaySessions = sessions.filter((s: DbSession) => s.session_id.startsWith(sessionIdPrefix))
-      const nextNumber = todaySessions.length + 1
-      const sessionId = `${sessionIdPrefix}_${String(nextNumber).padStart(2, '0')}`
-
-      // 创建新会话
-      const title = generateSessionTitle(nextNumber)
-      await window.api.chatCreateSession({
-        session_id: sessionId,
-        title,
-        started_at: Math.floor(Date.now() / 1000),
-      })
-
-      // 更新当前会话 ID
-      currentSessionId.value = sessionId
-      localSessionId.value = sessionId
-
-      // 刷新会话列表
-      await loadSessions()
-
-      // 更新激活状态
-      historyList.value.forEach((item) => {
-        item.active = item.sessionId === sessionId
-      })
-
-      console.log('[useSessionManager] 创建新对话:', sessionId)
-
-      return sessionId
-    }
-    catch (error) {
-      console.error('[useSessionManager] 创建新对话失败:', error)
-      return null
     }
   }
 
@@ -232,7 +186,6 @@ export function useSessionManager() {
     // 方法
     loadSessions,
     getTodaySession,
-    startNewConversation,
     switchSession,
     deleteSession,
   }

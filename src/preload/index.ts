@@ -61,7 +61,6 @@ const api = {
   appStartAutoConversation: appApi.startAutoConversation,
   appStopAutoConversation: appApi.stopAutoConversation,
   appSendText: appApi.sendText,
-  appSendTextViaAudio: appApi.sendTextViaAudio,
   appGetState: appApi.getState,
   appOnStateChanged: appApi.onStateChanged,
   appRemoveStateChangedListener: appApi.removeStateChangedListener,
@@ -114,6 +113,10 @@ const api = {
   chatClearMessages: chatApi.clearMessages,
   chatOnImageCaptured: chatApi.onImageCaptured,
   chatRemoveImageCapturedListener: chatApi.removeImageCapturedListener,
+  chatOnMessageAdded: chatApi.onMessageAdded,
+  chatRemoveMessageAddedListener: chatApi.removeMessageAddedListener,
+  chatOnMessagesBatchAdded: chatApi.onMessagesBatchAdded,
+  chatRemoveMessagesBatchAddedListener: chatApi.removeMessagesBatchAddedListener,
 }
 
 // 使用 contextBridge 暴露 API

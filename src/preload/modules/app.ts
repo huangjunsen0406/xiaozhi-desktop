@@ -54,14 +54,6 @@ export const appApi = {
     }
   },
 
-  // 通过音频发送文本消息
-  sendTextViaAudio: async (text: string): Promise<void> => {
-    const result: any = await ipcRenderer.invoke('app:send-text-via-audio', text)
-    if (!result.success) {
-      throw new Error(result.error || '通过音频发送文本失败')
-    }
-  },
-
   // 获取状态快照
   getState: (): Promise<AppStateSnapshot> => ipcRenderer.invoke('app:get-state'),
 

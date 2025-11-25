@@ -129,4 +129,32 @@ export const chatApi = {
   removeImageCapturedListener: () => {
     ipcRenderer.removeAllListeners('chat:image-captured')
   },
+
+  /**
+   * 监听单条消息添加事件
+   */
+  onMessageAdded: (callback: (data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => void) => {
+    ipcRenderer.on('chat:message-added', (_, data) => callback(data))
+  },
+
+  /**
+   * 移除单条消息添加监听器
+   */
+  removeMessageAddedListener: () => {
+    ipcRenderer.removeAllListeners('chat:message-added')
+  },
+
+  /**
+   * 监听批量消息添加事件
+   */
+  onMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => {
+    ipcRenderer.on('chat:messages-batch-added', (_, data) => callback(data))
+  },
+
+  /**
+   * 移除批量消息添加监听器
+   */
+  removeMessagesBatchAddedListener: () => {
+    ipcRenderer.removeAllListeners('chat:messages-batch-added')
+  },
 }
