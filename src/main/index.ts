@@ -8,7 +8,7 @@ import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
-import { ensureBackgroundAudioWindow, ensureMainWindow, toggleSettings } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToMain, toggleToMini } from './windows/windowManager'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -68,6 +68,61 @@ app.on('ready', () => {
 
 // 窗口创建与 IPC 注册均已拆分至模块
 
+/**
+ * 构建 Dock 菜单（macOS）
+ */
+function buildDockMenu(): Menu {
+  const currentMode = getCurrentDisplayMode()
+
+  return Menu.buildFromTemplate([
+    {
+      label: '显示模式',
+      submenu: [
+        {
+          label: '标准窗口',
+          type: 'radio',
+          checked: currentMode === 'main',
+          click: () => {
+            toggleToMain()
+          },
+        },
+        {
+          label: '迷你悬浮球',
+          type: 'radio',
+          checked: currentMode === 'mini',
+          click: () => {
+            toggleToMini()
+          },
+        },
+        {
+          label: '聊天视图',
+          type: 'radio',
+          checked: currentMode === 'chat',
+          click: () => {
+            toggleToChat()
+          },
+        },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: '设置',
+      click: () => {
+        toggleSettings()
+      },
+    },
+  ])
+}
+
+/**
+ * 更新 Dock 菜单（macOS）
+ */
+function updateDockMenu(): void {
+  if (isMacOS && hasDock()) {
+    app.dock!.setMenu(buildDockMenu())
+  }
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -99,16 +154,12 @@ app.whenReady().then(() => {
 
   // macOS Dock 菜单
   if (isMacOS && hasDock()) {
-    const dockMenu = Menu.buildFromTemplate([
-      { type: 'separator' },
-      {
-        label: '设置',
-        click: () => {
-          toggleSettings()
-        },
-      },
-    ])
-    app.dock!.setMenu(dockMenu)
+    app.dock!.setMenu(buildDockMenu())
+
+    // 注册显示模式变化回调
+    onDisplayModeChange(() => {
+      updateDockMenu()
+    })
   }
 
   // macOS：二次保险

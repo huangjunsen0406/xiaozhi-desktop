@@ -9,6 +9,40 @@ let settingsWindow: BrowserWindow | null = null
 let backgroundAudioWindow: BrowserWindow | null = null
 let chatWindow: BrowserWindow | null = null
 
+// 显示模式状态管理
+type DisplayMode = 'main' | 'mini' | 'chat'
+let currentDisplayMode: DisplayMode = 'main'
+let onDisplayModeChanged: ((mode: DisplayMode) => void) | null = null
+
+/**
+ * 获取当前显示模式
+ */
+export function getCurrentDisplayMode(): DisplayMode {
+  return currentDisplayMode
+}
+
+/**
+ * 设置显示模式（内部使用，更新状态并触发回调）
+ */
+function setDisplayMode(mode: DisplayMode): void {
+  if (currentDisplayMode !== mode) {
+    currentDisplayMode = mode
+    console.log(`[WindowManager] 显示模式已切换: ${mode}`)
+
+    // 触发回调更新菜单
+    if (onDisplayModeChanged) {
+      onDisplayModeChanged(mode)
+    }
+  }
+}
+
+/**
+ * 注册显示模式变化回调（用于更新托盘和 Dock 菜单）
+ */
+export function onDisplayModeChange(callback: (mode: DisplayMode) => void): void {
+  onDisplayModeChanged = callback
+}
+
 export function ensureMainWindow(): BrowserWindow {
   if (mainWindow == null) {
     const win = buildMainWindow()
@@ -69,6 +103,7 @@ export function toggleToMini(): void {
   const main = ensureMainWindow()
   mini.show()
   main.hide()
+  setDisplayMode('mini')
 }
 
 export function toggleToMain(): void {
@@ -76,6 +111,9 @@ export function toggleToMain(): void {
     mainWindow.show()
   if (miniWindow)
     miniWindow.hide()
+  if (chatWindow)
+    chatWindow.hide()
+  setDisplayMode('main')
 }
 
 export function togglePanel(): void {
@@ -138,6 +176,7 @@ export function toggleToChat(): void {
     mainWindow.hide()
   if (miniWindow)
     miniWindow.hide()
+  setDisplayMode('chat')
 }
 
 export function getChatWindow(): BrowserWindow | null {

@@ -5,7 +5,7 @@ import linux24 from '../../resources/tray/icon-24.png?asset'
 import linux32 from '../../resources/tray/icon-32.png?asset'
 import winIco from '../../resources/tray/icon.ico?asset'
 import macTpl2x from '../../resources/tray/iconTemplate@2x.png?asset'
-import { toggleSettings } from './windows/windowManager'
+import { getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToMain, toggleToMini } from './windows/windowManager'
 
 let tray: Tray | null = null
 let lastLinuxBucket: 24 | 32 | null = null
@@ -60,15 +60,42 @@ function buildTrayImage(): Electron.NativeImage {
   return img
 }
 
-export function registerTray(): void {
-  if (tray)
-    return
+/**
+ * 构建托盘菜单
+ */
+function buildTrayMenu(): Menu {
+  const currentMode = getCurrentDisplayMode()
 
-  const image = buildTrayImage()
-  tray = new Tray(image)
-  tray.setToolTip('小智')
-
-  const contextMenu = Menu.buildFromTemplate([
+  return Menu.buildFromTemplate([
+    {
+      label: '显示模式',
+      submenu: [
+        {
+          label: '标准窗口',
+          type: 'radio',
+          checked: currentMode === 'main',
+          click: () => {
+            toggleToMain()
+          },
+        },
+        {
+          label: '迷你悬浮球',
+          type: 'radio',
+          checked: currentMode === 'mini',
+          click: () => {
+            toggleToMini()
+          },
+        },
+        {
+          label: '聊天视图',
+          type: 'radio',
+          checked: currentMode === 'chat',
+          click: () => {
+            toggleToChat()
+          },
+        },
+      ],
+    },
     { type: 'separator' },
     {
       label: '设置',
@@ -79,7 +106,31 @@ export function registerTray(): void {
     { type: 'separator' },
     { label: '退出', click: () => app.quit() },
   ])
-  tray.setContextMenu(contextMenu)
+}
+
+/**
+ * 更新托盘菜单（当显示模式变化时调用）
+ */
+function updateTrayMenu(): void {
+  if (!tray) return
+  tray.setContextMenu(buildTrayMenu())
+}
+
+export function registerTray(): void {
+  if (tray)
+    return
+
+  const image = buildTrayImage()
+  tray = new Tray(image)
+  tray.setToolTip('小智')
+
+  // 设置初始菜单
+  tray.setContextMenu(buildTrayMenu())
+
+  // 注册显示模式变化回调
+  onDisplayModeChange(() => {
+    updateTrayMenu()
+  })
 
   // macOS：左键弹出菜单；Win/Linux：右键弹出
   if (process.platform === 'darwin') {
