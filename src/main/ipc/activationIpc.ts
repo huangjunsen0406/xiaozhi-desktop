@@ -1,13 +1,10 @@
 import { ipcMain } from 'electron'
 import { getActivationService } from '../services/ActivationService'
-import { DeviceFingerprintManager } from '../services/deviceFingerprintDB'
-import { SystemInitializer } from '../services/systemInitializer'
 
 /**
  * 注册激活相关的 IPC 通道
  */
 export function registerActivationIpc(): void {
-  let systemInitializer: SystemInitializer | null = null
   const activationService = getActivationService()
 
   /**
@@ -16,10 +13,14 @@ export function registerActivationIpc(): void {
   ipcMain.handle('activation:initialize', async () => {
     try {
       console.log('IPC: 开始系统初始化')
-      systemInitializer = new SystemInitializer()
-      const result = await systemInitializer.runInitialization()
+      const result = await activationService.handleStartup()
       console.log('IPC: 系统初始化完成', result)
-      return result
+      return {
+        success: result.success,
+        need_activation_ui: result.needActivationUI,
+        status_message: result.message,
+        error: result.error,
+      }
     }
     catch (error) {
       console.error('IPC: 系统初始化失败', error)
@@ -36,10 +37,13 @@ export function registerActivationIpc(): void {
    */
   ipcMain.handle('activation:get-device-info', () => {
     try {
-      const deviceFingerprint = DeviceFingerprintManager.getInstance()
-      const deviceInfo = deviceFingerprint.getDeviceInfo()
+      const deviceInfo = activationService.getDeviceInfo()
       console.log('IPC: 获取设备信息', deviceInfo)
-      return deviceInfo
+      return deviceInfo || {
+        serialNumber: '',
+        macAddress: '',
+        activationStatus: false,
+      }
     }
     catch (error) {
       console.error('IPC: 获取设备信息失败', error)
@@ -56,14 +60,7 @@ export function registerActivationIpc(): void {
    */
   ipcMain.handle('activation:get-activation-data', () => {
     try {
-      // 优先从统一激活服务获取
-      let activationData = activationService.getActivationData()
-
-      // 如果服务中没有，尝试从本地初始化器获取
-      if (!activationData && systemInitializer) {
-        activationData = systemInitializer.getActivationData()
-      }
-
+      const activationData = activationService.getActivationData()
       console.log('IPC: 获取激活数据', activationData)
       return activationData
     }
