@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui'
+import { NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, useMessage } from 'naive-ui'
 import { onMounted, ref, watch } from 'vue'
 
 const message = useMessage()
 const loading = ref(false)
+
+// 防止 watch 循环的标志
+const isUpdatingLanguage = ref(false)
 
 // 配置项
 const enableWakeWord = ref(true)
@@ -18,10 +21,13 @@ const languageOptions = [
 
 // 监听语言变化，自动切换唤醒词
 watch(language, async (newLanguage, oldLanguage) => {
-  if (newLanguage !== oldLanguage && oldLanguage !== undefined) {
+  // 避免初始化触发和递归触发
+  if (newLanguage !== oldLanguage && oldLanguage !== undefined && !isUpdatingLanguage.value) {
     console.log('语言切换:', oldLanguage, '->', newLanguage)
     try {
       loading.value = true
+      isUpdatingLanguage.value = true
+
       // 先保存语言切换到后端
       const result = await window.api.wakeWordUpdateConfig({
         language: newLanguage,
@@ -33,15 +39,16 @@ watch(language, async (newLanguage, oldLanguage) => {
       }
       else {
         console.error('切换语言失败:', result.error)
-        message.error(`切换语言失败: ${result.error}`)
+        message.error(`切换语言失败: ${result.error || '未知错误'}`)
       }
     }
     catch (error) {
       console.error('切换语言异常:', error)
-      message.error('切换语言异常')
+      message.error(`切换语言异常: ${error instanceof Error ? error.message : '未知错误'}`)
     }
     finally {
       loading.value = false
+      isUpdatingLanguage.value = false
     }
   }
 })
@@ -62,12 +69,12 @@ async function loadConfig() {
     }
     else {
       console.error('加载唤醒词配置失败:', result.error)
-      message.error('加载配置失败')
+      message.error(`加载配置失败: ${result.error || '未知错误'}`)
     }
   }
   catch (error) {
     console.error('加载唤醒词配置异常:', error)
-    message.error('加载配置异常')
+    message.error(`加载配置异常: ${error instanceof Error ? error.message : '未知错误'}`)
   }
   finally {
     loading.value = false
@@ -93,12 +100,12 @@ async function handleSave() {
     }
     else {
       console.error('保存唤醒词配置失败:', result.error)
-      message.error(`保存失败: ${result.error}`)
+      message.error(`保存失败: ${result.error || '未知错误'}`)
     }
   }
   catch (error) {
     console.error('保存唤醒词配置异常:', error)
-    message.error('保存异常')
+    message.error(`保存异常: ${error instanceof Error ? error.message : '未知错误'}`)
   }
   finally {
     loading.value = false
@@ -119,12 +126,12 @@ async function handleCustomButton() {
     }
     else {
       console.error('测试唤醒词失败:', result.error)
-      message.error(`测试失败: ${result.error}`)
+      message.error(`测试失败: ${result.error || '未知错误'}`)
     }
   }
   catch (error) {
     console.error('测试唤醒词异常:', error)
-    message.error('测试异常')
+    message.error(`测试异常: ${error instanceof Error ? error.message : '未知错误'}`)
   }
   finally {
     loading.value = false

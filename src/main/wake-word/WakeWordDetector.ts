@@ -25,10 +25,12 @@ export class WakeWordDetector implements AudioListener {
   private keywordSpotter: any = null
   private stream: any = null
   private enabled: boolean = false
+  private shuttingDown: boolean = false
 
   // 音频队列（异步处理）
   private audioQueue: Int16Array[] = []
   private processing: boolean = false
+  private processingHandle: NodeJS.Immediate | null = null
   private maxQueueSize: number = 100
 
   // 防抖机制
@@ -96,6 +98,7 @@ export class WakeWordDetector implements AudioListener {
 
       this.stream = this.keywordSpotter.createStream()
       this.enabled = true
+      this.shuttingDown = false
       console.log('[WakeWordDetector] KeywordSpotter 初始化成功')
     }
     catch (error) {
@@ -114,21 +117,46 @@ export class WakeWordDetector implements AudioListener {
   reload(config: WakeWordConfig): void {
     console.log('[WakeWordDetector] 重新加载模型...')
 
-    // 清理旧资源
-    this.audioQueue = []
-    this.stream = null
-    this.keywordSpotter = null
+    // 标记为关闭状态，停止接收新音频
+    this.shuttingDown = true
     this.enabled = false
 
-    // 重新初始化
-    this.initKeywordSpotter(config)
+    // 取消 pending 的处理
+    if (this.processingHandle) {
+      clearImmediate(this.processingHandle)
+      this.processingHandle = null
+    }
+
+    // 等待当前处理完成
+    const waitForProcessing = () => {
+      return new Promise<void>((resolve) => {
+        if (!this.processing) {
+          resolve()
+        }
+        else {
+          setTimeout(() => {
+            waitForProcessing().then(resolve)
+          }, 50)
+        }
+      })
+    }
+
+    waitForProcessing().then(() => {
+      // 清理旧资源
+      this.audioQueue = []
+      this.stream = null
+      this.keywordSpotter = null
+
+      // 重新初始化
+      this.initKeywordSpotter(config)
+    })
   }
 
   /**
    * AudioListener 接口实现：接收音频数据
    */
   onAudioData(pcmData: Int16Array): void {
-    if (!this.enabled || !this.stream) {
+    if (!this.enabled || !this.stream || this.shuttingDown) {
       return
     }
 
@@ -141,9 +169,12 @@ export class WakeWordDetector implements AudioListener {
     }
 
     // 异步处理（避免阻塞主线程）
-    if (!this.processing) {
+    if (!this.processing && !this.processingHandle) {
       this.processing = true
-      setImmediate(() => this.processAudioQueue())
+      this.processingHandle = setImmediate(() => {
+        this.processingHandle = null
+        this.processAudioQueue()
+      })
     }
   }
 
@@ -151,8 +182,14 @@ export class WakeWordDetector implements AudioListener {
    * 处理音频队列
    */
   private processAudioQueue(): void {
+    // 检查是否正在关闭
+    if (this.shuttingDown || !this.enabled) {
+      this.processing = false
+      return
+    }
+
     try {
-      while (this.audioQueue.length > 0) {
+      while (this.audioQueue.length > 0 && !this.shuttingDown) {
         const pcmData = this.audioQueue.shift()!
 
         // 转换 Int16Array → Float32Array
@@ -249,10 +286,29 @@ export class WakeWordDetector implements AudioListener {
    */
   shutdown(): void {
     console.log('[WakeWordDetector] 正在关闭...')
+    this.shuttingDown = true
     this.enabled = false
-    this.audioQueue = []
-    this.stream = null
-    this.keywordSpotter = null
-    console.log('[WakeWordDetector] 已关闭')
+
+    // 取消 pending 的处理
+    if (this.processingHandle) {
+      clearImmediate(this.processingHandle)
+      this.processingHandle = null
+    }
+
+    // 等待当前处理完成
+    const waitForProcessing = () => {
+      if (!this.processing) {
+        // 清理资源
+        this.audioQueue = []
+        this.stream = null
+        this.keywordSpotter = null
+        console.log('[WakeWordDetector] 已关闭')
+      }
+      else {
+        setTimeout(() => waitForProcessing(), 50)
+      }
+    }
+
+    waitForProcessing()
   }
 }

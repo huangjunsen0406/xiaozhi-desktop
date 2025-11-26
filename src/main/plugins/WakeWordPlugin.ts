@@ -21,6 +21,7 @@ export class WakeWordPlugin extends Plugin {
   }
 
   private detector: WakeWordDetector | null = null
+  private pendingTimer: NodeJS.Timeout | null = null
 
   /**
    * 获取模型基础路径
@@ -179,7 +180,8 @@ export class WakeWordPlugin extends Plugin {
       backgroundWindow.webContents.once('did-finish-load', () => {
         console.log('[WakeWordPlugin] 后台音频窗口已加载')
         // 等待一小段时间确保页面完全初始化
-        setTimeout(() => {
+        this.pendingTimer = setTimeout(() => {
+          this.pendingTimer = null
           this.sendAudioCommands(backgroundWindow)
         }, 500)
       })
@@ -268,6 +270,12 @@ export class WakeWordPlugin extends Plugin {
    * 插件停止
    */
   async stop(): Promise<void> {
+    // 清理 pending timer
+    if (this.pendingTimer) {
+      clearTimeout(this.pendingTimer)
+      this.pendingTimer = null
+    }
+
     if (this.detector) {
       const audioPlugin = this.app?.getAudioPlugin()
       if (audioPlugin) {
@@ -284,6 +292,12 @@ export class WakeWordPlugin extends Plugin {
    * 插件关闭
    */
   async shutdown(): Promise<void> {
+    // 清理 pending timer
+    if (this.pendingTimer) {
+      clearTimeout(this.pendingTimer)
+      this.pendingTimer = null
+    }
+
     if (this.detector) {
       const audioPlugin = this.app?.getAudioPlugin()
       if (audioPlugin) {
