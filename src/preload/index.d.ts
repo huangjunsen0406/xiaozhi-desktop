@@ -129,6 +129,21 @@ export interface RendererApi {
   chatRemoveMessageAddedListener: () => void
   chatOnMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => void
   chatRemoveMessagesBatchAddedListener: () => void
+  // Shortcut APIs
+  shortcutGetAll: () => Promise<ShortcutConfig[]>
+  shortcutUpdate: (action: string, accelerator: string | null) => Promise<{ success: boolean }>
+  shortcutCheckConflict: (accelerator: string, excludeAction?: string) => Promise<{ conflict: boolean, name: string | null }>
+  shortcutReset: () => Promise<{ success: boolean }>
+}
+
+export interface ShortcutConfig {
+  id: number
+  action: string
+  name: string
+  category: string
+  accelerator: string | null
+  enabled: number
+  is_global: number
 }
 
 declare global {

@@ -1,5 +1,6 @@
 import type { IpcContext } from '../types/ipc'
 import { ipcMain } from 'electron'
+import { registerShortcutIpcChannels } from './shortcutIpc'
 import { registerWakeWordIpc } from './wakeWordIpc'
 
 /**
@@ -12,6 +13,9 @@ export function registerAppIpc(context: IpcContext): void {
 
   // 注册唤醒词 IPC
   registerWakeWordIpc(context)
+
+  // 注册快捷键 IPC
+  registerShortcutIpcChannels(application)
 
   // 开始手动监听
   ipcMain.handle('app:start-listening-manual', async () => {

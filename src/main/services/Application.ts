@@ -1,6 +1,8 @@
 import type { Protocol } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
 import { Buffer } from 'node:buffer'
+import path from 'node:path'
+import { app } from 'electron'
 import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
@@ -11,6 +13,7 @@ import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 import { DatabaseManager } from './database'
+import { ShortcutManager } from './ShortcutManager'
 /**
  * 应用核心类 (单例模式)
  * 负责协调协议通信、插件管理和设备状态
@@ -36,6 +39,9 @@ export class Application {
   private wakeWordPlugin: WakeWordPlugin | null = null
   private uiPlugin: UIPlugin | null = null
   private mcpPlugin: McpPlugin | null = null
+
+  // 快捷键管理器
+  private shortcutManager: ShortcutManager | null = null
 
   // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
@@ -100,6 +106,11 @@ export class Application {
 
     // 初始化插件
     await this.plugins.setupAll(this)
+
+    // 初始化快捷键管理器
+    const dbPath = path.join(app.getPath('userData'), 'xiaozhi.db')
+    this.shortcutManager = new ShortcutManager(dbPath, this)
+    await this.shortcutManager.registerAll()
 
     console.log('[Application] 初始化完成')
   }
@@ -881,6 +892,41 @@ export class Application {
   }
 
   /**
+   * 获取 ShortcutManager 实例
+   */
+  getShortcutManager(): ShortcutManager | null {
+    return this.shortcutManager
+  }
+
+  /**
+   * 获取当前状态（供快捷键使用）
+   */
+  getState(): {
+    deviceState: DeviceState
+    listeningMode: ListeningMode
+    channelOpen: boolean
+  } {
+    return {
+      deviceState: this.deviceState,
+      listeningMode: this.listeningMode,
+      channelOpen: this.isAudioChannelOpened(),
+    }
+  }
+
+  /**
+   * 打断说话（供快捷键使用）
+   */
+  interruptSpeaking(): void {
+    if (this.deviceState === DeviceState.SPEAKING) {
+      this.stopAutoConversation()
+      console.log('[Application] 已打断当前对话')
+    }
+    else {
+      console.log('[Application] 当前不在说话状态，无需打断')
+    }
+  }
+
+  /**
    * 保存图片到数据库（供工具调用）
    * @param imageBase64 - base64 编码的图片数据
    * @param sourceType - 图片来源类型
@@ -937,6 +983,9 @@ export class Application {
       // 停止并关闭所有插件
       await this.plugins.stopAll()
       await this.plugins.shutdownAll()
+
+      // 销毁快捷键管理器
+      this.shortcutManager?.destroy()
 
       console.log('[Application] 应用关闭完成')
     }

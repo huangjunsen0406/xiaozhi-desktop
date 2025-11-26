@@ -1,155 +1,147 @@
 <script setup lang="ts">
-import { NButton, NCard, NForm, NFormItem, NSwitch, NTag } from 'naive-ui'
-import { ref } from 'vue'
+import { NForm, NFormItem, NSwitch, useMessage } from 'naive-ui'
+import { computed, onMounted, ref } from 'vue'
+import ShortcutRecorder from '../ShortcutRecorder.vue'
+
+interface ShortcutConfig {
+  id: number
+  action: string
+  name: string
+  category: string
+  accelerator: string | null
+  enabled: number
+  is_global: number
+}
+
+const message = useMessage()
 
 const enableGlobalHotkeys = ref(true)
-const hotkeys = ref([
-  {
-    id: 'toggle-window',
-    name: '显示/隐藏主窗口',
-    combination: 'Cmd+Shift+X',
-    enabled: true,
-  },
-  {
-    id: 'start-recording',
-    name: '开始/停止录音',
-    combination: 'Cmd+Shift+R',
-    enabled: true,
-  },
-  {
-    id: 'open-settings',
-    name: '打开设置',
-    combination: 'Cmd+,',
-    enabled: true,
-  },
-  {
-    id: 'toggle-mini',
-    name: '切换迷你模式',
-    combination: 'Cmd+Shift+M',
-    enabled: false,
-  },
-])
+const shortcuts = ref<ShortcutConfig[]>([])
 
-const isRecording = ref(false)
-const recordingTarget = ref('')
+// 按分类分组
+const groupedShortcuts = computed(() => {
+  const groups = {
+    window: [] as ShortcutConfig[],
+    conversation: [] as ShortcutConfig[],
+    quick: [] as ShortcutConfig[],
+  }
 
-async function handleSave() {
-  console.log('保存快捷键设置', {
-    enableGlobalHotkeys: enableGlobalHotkeys.value,
-    hotkeys: hotkeys.value,
+  shortcuts.value.forEach((s: ShortcutConfig) => {
+    if (s.category in groups) {
+      groups[s.category as keyof typeof groups].push(s)
+    }
   })
-}
 
-function startRecordingHotkey(hotkeyId: string) {
-  isRecording.value = true
-  recordingTarget.value = hotkeyId
-  // TODO: 实现快捷键录制逻辑
-  console.log('开始录制快捷键:', hotkeyId)
-}
+  return [
+    { key: 'window', title: '窗口控制', items: groups.window },
+    { key: 'conversation', title: '对话控制', items: groups.conversation },
+    { key: 'quick', title: '快速操作', items: groups.quick },
+  ].filter(g => g.items.length > 0)
+})
 
-function resetHotkey(hotkeyId: string) {
-  const hotkey = hotkeys.value.find(h => h.id === hotkeyId)
-  if (hotkey) {
-    hotkey.combination = ''
+// 加载快捷键列表
+async function loadShortcuts() {
+  try {
+    shortcuts.value = await window.api.shortcutGetAll()
+  }
+  catch (error) {
+    console.error('[HotkeySettings] 加载失败:', error)
+    message.error('加载快捷键配置失败')
   }
 }
 
-function resetAllHotkeys() {
-  // 重置为默认值
-  hotkeys.value = [
-    {
-      id: 'toggle-window',
-      name: '显示/隐藏主窗口',
-      combination: 'Cmd+Shift+X',
-      enabled: true,
-    },
-    {
-      id: 'start-recording',
-      name: '开始/停止录音',
-      combination: 'Cmd+Shift+R',
-      enabled: true,
-    },
-    {
-      id: 'open-settings',
-      name: '打开设置',
-      combination: 'Cmd+,',
-      enabled: true,
-    },
-    {
-      id: 'toggle-mini',
-      name: '切换迷你模式',
-      combination: 'Cmd+Shift+M',
-      enabled: false,
-    },
-  ]
+// 更新快捷键
+async function updateShortcut(action: string, accelerator: string | null) {
+  try {
+    await window.api.shortcutUpdate(action, accelerator)
+    message.success('快捷键已更新')
+    await loadShortcuts() // 刷新列表
+  }
+  catch (error) {
+    console.error('[HotkeySettings] 更新失败:', error)
+    message.error('更新快捷键失败')
+  }
 }
 
-async function handleCustomButton() {
-  // 自定义：重置所有
-  resetAllHotkeys()
+// 冲突提示
+function handleConflict(name: string) {
+  message.warning(`快捷键冲突:已被「${name}」使用`)
 }
+
+// 重置为默认
+async function resetToDefaults() {
+  try {
+    await window.api.shortcutReset()
+    message.success('已重置为默认快捷键')
+    await loadShortcuts()
+  }
+  catch (error) {
+    console.error('[HotkeySettings] 重置失败:', error)
+    message.error('重置失败')
+  }
+}
+
+// 保存（预留,目前是实时保存）
+async function handleSave() {
+  message.success('快捷键配置已保存')
+}
+
+// 自定义按钮（重置）
+async function handleCustomButton() {
+  await resetToDefaults()
+}
+
+onMounted(() => {
+  loadShortcuts()
+})
 
 defineExpose({ handleSave, handleCustomButton })
 </script>
 
 <template>
-  <NForm label-placement="left" :label-width="120">
-    <NFormItem label="启用全局快捷键">
-      <NSwitch v-model:value="enableGlobalHotkeys" />
-    </NFormItem>
+  <div class="min-h-0">
+    <NForm label-placement="left" :label-width="120">
+      <NFormItem label="启用全局快捷键">
+        <div class="flex flex-col gap-1">
+          <NSwitch v-model:value="enableGlobalHotkeys" />
+        </div>
+      </NFormItem>
 
-    <NFormItem label="快捷键配置">
-      <div class="w-full space-y-3">
-        <NCard
-          v-for="hotkey in hotkeys"
-          :key="hotkey.id"
-          size="small"
-          :bordered="false"
-          class="bg-gray-50 dark:bg-gray-800"
+      <template v-for="group in groupedShortcuts" :key="group.key">
+        <div class="group-title">
+          {{ group.title }}
+        </div>
+
+        <NFormItem
+          v-for="shortcut in group.items"
+          :key="shortcut.action"
+          :label="shortcut.name"
         >
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-              <NSwitch
-                v-model:value="hotkey.enabled"
-                :disabled="!enableGlobalHotkeys"
-                size="small"
-              />
-              <span class="font-medium">{{ hotkey.name }}</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <NTag
-                v-if="hotkey.combination"
-                type="info"
-                size="small"
-                class="font-mono"
-              >
-                {{ hotkey.combination }}
-              </NTag>
-              <NButton
-                size="small"
-                secondary
-                :disabled="!enableGlobalHotkeys || !hotkey.enabled"
-                @click="startRecordingHotkey(hotkey.id)"
-              >
-                <template #icon>
-                  <icon-carbon-send-alt class="w-3 h-3" />
-                </template>
-                {{ isRecording && recordingTarget === hotkey.id ? '按键中...' : '设置' }}
-              </NButton>
-              <NButton
-                size="small"
-                quaternary
-                :disabled="!enableGlobalHotkeys || !hotkey.enabled"
-                @click="resetHotkey(hotkey.id)"
-              >
-                <template #icon>
-                  <icon-carbon-close class="w-3 h-3" />
-                </template>
-              </NButton>
-            </div>
-          </div>
-        </NCard>
-      </div>
-    </NFormItem>
-  </NForm>
+          <ShortcutRecorder
+            :model-value="shortcut.accelerator"
+            :disabled="!enableGlobalHotkeys"
+            @update:model-value="(val) => updateShortcut(shortcut.action, val)"
+            @conflict="handleConflict"
+          />
+        </NFormItem>
+      </template>
+    </NForm>
+  </div>
 </template>
+
+<style scoped>
+.group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--n-text-color-1);
+  margin: 24px 0 16px 0;
+  padding-left: 4px;
+  border-left: 3px solid var(--n-primary-color);
+  line-height: 1;
+}
+
+/* 调整 ShortcutRecorder 的宽度以匹配其他输入框 */
+:deep(.shortcut-recorder) {
+  width: 300px;
+}
+</style>
