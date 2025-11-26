@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { convertEventToAccelerator, formatShortcutDisplay } from '../utils/shortcutFormatter'
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 interface Emits {
   (e: 'update:modelValue', value: string | null): void
   (e: 'conflict', name: string): void
+  (e: 'error', message: string): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -20,6 +21,8 @@ const emit = defineEmits<Emits>()
 
 const isRecording = ref(false)
 const tempAccelerator = ref<string | null>(null)
+const pendingTimer = ref<number | null>(null)
+const abortController = ref<AbortController | null>(null)
 
 function startRecording() {
   if (props.disabled)
@@ -31,6 +34,12 @@ function startRecording() {
 function stopRecording() {
   isRecording.value = false
   tempAccelerator.value = null
+
+  // Clear pending timer
+  if (pendingTimer.value !== null) {
+    clearTimeout(pendingTimer.value)
+    pendingTimer.value = null
+  }
 }
 
 async function handleKeyDown(e: KeyboardEvent) {
@@ -53,24 +62,65 @@ async function handleKeyDown(e: KeyboardEvent) {
     return
   }
 
-  // 检测冲突
-  const result = await window.api.shortcutCheckConflict(accelerator)
-
-  if (result.conflict && result.name) {
-    emit('conflict', result.name)
-    stopRecording()
-    return
+  // Cancel previous request if exists
+  if (abortController.value) {
+    abortController.value.abort()
   }
 
-  // 保存
-  emit('update:modelValue', accelerator)
-  tempAccelerator.value = accelerator
+  // Create new AbortController for this request
+  abortController.value = new AbortController()
 
-  // 延迟关闭录制状态（让用户看到结果）
-  setTimeout(() => {
-    stopRecording()
-  }, 300)
+  try {
+    // 检测冲突
+    const result = await window.api.shortcutCheckConflict(accelerator)
+
+    // Check if component is still recording (not unmounted)
+    if (!isRecording.value) {
+      return
+    }
+
+    if (result.conflict && result.name) {
+      emit('conflict', result.name)
+      stopRecording()
+      return
+    }
+
+    // 保存
+    emit('update:modelValue', accelerator)
+    tempAccelerator.value = accelerator
+
+    // 延迟关闭录制状态（让用户看到结果）
+    pendingTimer.value = window.setTimeout(() => {
+      if (isRecording.value) {
+        stopRecording()
+      }
+    }, 300)
+  }
+  catch (error) {
+    // Only handle error if component is still mounted
+    if (isRecording.value) {
+      console.error('[ShortcutRecorder] 冲突检测失败:', error)
+      emit('error', '快捷键冲突检测失败，请重试')
+      stopRecording()
+    }
+  }
+  finally {
+    abortController.value = null
+  }
 }
+
+onUnmounted(() => {
+  if (pendingTimer.value !== null) {
+    clearTimeout(pendingTimer.value)
+    pendingTimer.value = null
+  }
+
+  // Abort any in-flight requests
+  if (abortController.value) {
+    abortController.value.abort()
+    abortController.value = null
+  }
+})
 
 function handleClear(e: MouseEvent) {
   e.stopPropagation()

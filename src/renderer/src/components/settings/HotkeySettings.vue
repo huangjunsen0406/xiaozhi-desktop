@@ -54,18 +54,29 @@ async function loadShortcuts() {
 async function updateShortcut(action: string, accelerator: string | null) {
   try {
     await window.api.shortcutUpdate(action, accelerator)
+
+    // Update local state instead of reloading all shortcuts
+    const index = shortcuts.value.findIndex(s => s.action === action)
+    if (index !== -1) {
+      shortcuts.value[index].accelerator = accelerator
+    }
+
     message.success('快捷键已更新')
-    await loadShortcuts() // 刷新列表
   }
   catch (error) {
     console.error('[HotkeySettings] 更新失败:', error)
-    message.error('更新快捷键失败')
+    message.error(`更新快捷键失败: ${error instanceof Error ? error.message : '未知错误'}`)
   }
 }
 
 // 冲突提示
 function handleConflict(name: string) {
   message.warning(`快捷键冲突:已被「${name}」使用`)
+}
+
+// 处理错误
+function handleError(errorMessage: string) {
+  message.error(errorMessage)
 }
 
 // 重置为默认
@@ -77,7 +88,7 @@ async function resetToDefaults() {
   }
   catch (error) {
     console.error('[HotkeySettings] 重置失败:', error)
-    message.error('重置失败')
+    message.error(`重置失败: ${error instanceof Error ? error.message : '未知错误'}`)
   }
 }
 
@@ -122,6 +133,7 @@ defineExpose({ handleSave, handleCustomButton })
             :disabled="!enableGlobalHotkeys"
             @update:model-value="(val) => updateShortcut(shortcut.action, val)"
             @conflict="handleConflict"
+            @error="handleError"
           />
         </NFormItem>
       </template>
