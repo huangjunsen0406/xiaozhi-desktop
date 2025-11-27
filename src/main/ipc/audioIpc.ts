@@ -155,7 +155,7 @@ export function getAudioConfig(): Partial<AudioConfig> {
  */
 export function setAudioConfig(config: Partial<AudioConfig>): void {
   try {
-    const dbUpdates: any = {}
+    const dbUpdates: Record<string, string | boolean | null> = {}
 
     if ('inputDeviceName' in config) {
       dbUpdates.input_device_name = config.inputDeviceName || null
@@ -164,13 +164,13 @@ export function setAudioConfig(config: Partial<AudioConfig>): void {
       dbUpdates.output_device_name = config.outputDeviceName || null
     }
     if ('enableNoiseReduction' in config) {
-      dbUpdates.enable_noise_reduction = config.enableNoiseReduction
+      dbUpdates.enable_noise_reduction = config.enableNoiseReduction ?? false
     }
     if ('enableEchoCancellation' in config) {
-      dbUpdates.enable_echo_cancellation = config.enableEchoCancellation
+      dbUpdates.enable_echo_cancellation = config.enableEchoCancellation ?? false
     }
     if ('conversationMode' in config) {
-      dbUpdates.conversation_mode = config.conversationMode
+      dbUpdates.conversation_mode = config.conversationMode ?? 'auto'
     }
 
     db.updateAudioConfig(dbUpdates)

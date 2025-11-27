@@ -162,7 +162,7 @@ export class WakeWordPlugin extends Plugin {
   /**
    * 启动后台音频采集
    */
-  private async startBackgroundAudioCapture(audioPlugin: any): Promise<void> {
+  private async startBackgroundAudioCapture(audioPlugin: { getBackgroundAudioWindow: () => Electron.BrowserWindow | null }): Promise<void> {
     const backgroundWindow = audioPlugin.getBackgroundAudioWindow()
     if (!backgroundWindow || backgroundWindow.isDestroyed()) {
       console.warn('[WakeWordPlugin] 后台音频窗口未找到')
@@ -191,7 +191,7 @@ export class WakeWordPlugin extends Plugin {
   /**
    * 发送音频启动指令
    */
-  private sendAudioCommands(backgroundWindow: any): void {
+  private sendAudioCommands(backgroundWindow: Electron.BrowserWindow): void {
     if (backgroundWindow.isDestroyed()) {
       console.warn('[WakeWordPlugin] 窗口已销毁，无法启动音频')
       return

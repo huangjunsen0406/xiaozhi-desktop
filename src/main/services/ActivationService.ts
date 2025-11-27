@@ -140,7 +140,11 @@ export class ActivationService {
   /**
    * 获取 OTA 配置
    */
-  private async fetchOtaConfig(): Promise<any> {
+  private async fetchOtaConfig(): Promise<{
+    mqtt?: Record<string, string>
+    websocket?: { url?: string, token?: string }
+    activation?: { challenge: string, code: string, message?: string }
+  }> {
     const otaUrl = this.configManager.getOtaVersionUrl()
     const deviceId = this.configManager.getDeviceId()
     const clientId = this.configManager.getClientId()
@@ -150,9 +154,9 @@ export class ActivationService {
     }
 
     const activationVersion = this.configManager.getActivationVersion()
-    const headers: any = {
+    const headers: Record<string, string> = {
       'Device-Id': deviceId,
-      'Client-Id': clientId,
+      'Client-Id': clientId || '',
       'Content-Type': 'application/json',
       'Accept-Language': 'zh-CN',
     }
@@ -224,7 +228,7 @@ export class ActivationService {
   /**
    * 分析激活状态
    */
-  private analyzeActivationStatus(otaConfig: any): ActivationResult {
+  private analyzeActivationStatus(otaConfig: { activation?: { challenge: string, code: string, message?: string } }): ActivationResult {
     const localActivated = this.deviceFingerprint.isActivated()
     const serverActivated = !otaConfig.activation // 服务器没返回激活码 = 已授权
 

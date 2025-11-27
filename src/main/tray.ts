@@ -112,7 +112,8 @@ function buildTrayMenu(): Menu {
  * 更新托盘菜单（当显示模式变化时调用）
  */
 function updateTrayMenu(): void {
-  if (!tray) return
+  if (!tray)
+    return
   tray.setContextMenu(buildTrayMenu())
 }
 

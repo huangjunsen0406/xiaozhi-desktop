@@ -68,12 +68,12 @@ export interface ServerMessage {
   payload?: {
     params?: {
       name?: string
-      [key: string]: any
+      [key: string]: unknown
     }
-    [key: string]: any
+    [key: string]: unknown
   }
   /** 其他属性 */
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**

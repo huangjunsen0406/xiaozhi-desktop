@@ -16,7 +16,7 @@ export interface DeviceInfo {
  */
 export async function getDeviceIdByName(
   deviceName: string,
-  kind: 'audioinput' | 'audiooutput'
+  kind: 'audioinput' | 'audiooutput',
 ): Promise<string | undefined> {
   try {
     // 枚举所有设备
@@ -24,13 +24,14 @@ export async function getDeviceIdByName(
 
     // 通过名称匹配设备
     const device = devices.find(
-      d => d.kind === kind && d.label === deviceName
+      d => d.kind === kind && d.label === deviceName,
     )
 
     if (device) {
       console.log(`[DeviceUtils] 匹配到${kind === 'audioinput' ? '输入' : '输出'}设备:`, deviceName, '→', device.deviceId)
       return device.deviceId
-    } else {
+    }
+    else {
       console.warn(`[DeviceUtils] 未找到匹配的${kind === 'audioinput' ? '输入' : '输出'}设备:`, deviceName)
       return undefined
     }

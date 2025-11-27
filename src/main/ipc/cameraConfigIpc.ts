@@ -25,7 +25,19 @@ export function registerCameraConfigIpc(): void {
   /**
    * 更新摄像头配置
    */
-  ipcMain.handle('camera-config:update', async (_event, updates: any) => {
+  ipcMain.handle('camera-config:update', async (_event, updates: {
+    enabled?: boolean
+    device_id?: string
+    device_label?: string
+    use_local_vision?: boolean
+    vl_api_key?: string
+    vl_url?: string
+    vl_model?: string
+    capture_width?: number
+    capture_height?: number
+    jpeg_quality?: number
+    max_dimension?: number
+  }) => {
     try {
       console.log('[Camera Config IPC] 更新配置:', updates)
       db.updateCameraConfig(updates)

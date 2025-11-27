@@ -3,16 +3,21 @@
  */
 
 /**
+ * 图片数据的多种可能格式
+ */
+type ImageDataInput = Uint8Array | { type?: string, data?: number[] } | number[] | { buffer: ArrayBuffer } | ArrayBuffer
+
+/**
  * 将二进制数据转换为 Uint8Array
  * 支持多种输入格式：Uint8Array, Buffer 对象, 数组等
  * @param imageData - 图片二进制数据
  * @returns Uint8Array 或 null（如果格式无法识别）
  */
-export function convertToUint8Array(imageData: Uint8Array | any): Uint8Array | null {
+export function convertToUint8Array(imageData: ImageDataInput): Uint8Array | null {
   if (imageData instanceof Uint8Array) {
     return imageData
   }
-  else if (imageData?.data && Array.isArray(imageData.data)) {
+  else if (imageData && typeof imageData === 'object' && 'data' in imageData && Array.isArray(imageData.data)) {
     // 如果是 {type: 'Buffer', data: [...]} 格式
     return new Uint8Array(imageData.data)
   }
@@ -20,7 +25,7 @@ export function convertToUint8Array(imageData: Uint8Array | any): Uint8Array | n
     // 如果是数组格式
     return new Uint8Array(imageData)
   }
-  else if (imageData?.buffer) {
+  else if (imageData && typeof imageData === 'object' && 'buffer' in imageData) {
     // 如果有 buffer 属性
     return new Uint8Array(imageData.buffer)
   }
@@ -72,7 +77,7 @@ export function base64ToUint8Array(base64: string): Uint8Array {
  * @param imageData - 图片二进制数据（支持多种格式）
  * @returns data URL 或空字符串（如果转换失败）
  */
-export function imageDataToDataURL(imageData: Uint8Array | any): string {
+export function imageDataToDataURL(imageData: ImageDataInput): string {
   try {
     // 转换为 Uint8Array
     const buffer = convertToUint8Array(imageData)
@@ -99,14 +104,17 @@ export function imageDataToDataURL(imageData: Uint8Array | any): string {
  * @param imageData - 图片二进制数据
  * @returns Blob 或 null
  */
-export function imageDataToBlob(imageData: Uint8Array | any): Blob | null {
+export function imageDataToBlob(imageData: ImageDataInput): Blob | null {
   try {
     const buffer = convertToUint8Array(imageData)
     if (!buffer || buffer.length === 0) {
       return null
     }
     const mimeType = detectImageMimeType(buffer)
-    return new Blob([buffer as any], { type: mimeType })
+    // 创建新的 ArrayBuffer 来避免 SharedArrayBuffer 类型兼容问题
+    const arrayBuffer = new ArrayBuffer(buffer.length)
+    new Uint8Array(arrayBuffer).set(buffer)
+    return new Blob([arrayBuffer], { type: mimeType })
   }
   catch (error) {
     console.error('[imageUtils] 转换 Blob 失败:', error)
@@ -119,7 +127,7 @@ export function imageDataToBlob(imageData: Uint8Array | any): Blob | null {
  * @param imageData - 图片二进制数据
  * @returns Object URL 或空字符串
  */
-export function createObjectUrl(imageData: Uint8Array | any): string {
+export function createObjectUrl(imageData: ImageDataInput): string {
   const blob = imageDataToBlob(imageData)
   if (!blob)
     return ''

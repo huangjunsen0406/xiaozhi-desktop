@@ -43,6 +43,12 @@ export class Application {
 
   // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
+  private stateChangeLock: Promise<void> | null = null
+  private isShuttingDown: boolean = false
+
+  // 任务管理（用于追踪和优雅关闭）
+  private activeTasks: Map<string, Promise<unknown>> = new Map()
+  private taskIdCounter: number = 0
 
   private constructor() {
     console.log('[Application] 初始化应用实例')
@@ -50,18 +56,126 @@ export class Application {
 
   /**
    * 获取单例实例
+   *
+   * 注意：当前实现依赖以下假设：
+   * 1. 构造函数是同步的（无异步操作）
+   * 2. 首次调用发生在 index.ts 启动时
+   * 3. 其他地方都是后续使用已创建的实例
+   *
+   * 如果需要异步初始化，应使用 getInstanceAsync() 模式
    */
   static getInstance(): Application {
-    if (!Application.instance) {
-      if (Application.initializationLock) {
-        throw new Error('Application 正在初始化中')
-      }
-      Application.initializationLock = true
+    if (Application.instance) {
+      return Application.instance
+    }
+
+    if (Application.initializationLock) {
+      // 理论上不会触发（构造函数是同步的）
+      // 但保留此检查作为防御性编程
+      throw new Error('Application 正在初始化中，这通常表示存在并发初始化问题')
+    }
+
+    Application.initializationLock = true
+    try {
       Application.instance = new Application()
+      return Application.instance
+    }
+    catch (error) {
+      // 确保初始化失败时释放锁
+      console.error('[Application] 初始化失败:', error)
+      throw error
+    }
+    finally {
       Application.initializationLock = false
     }
-    return Application.instance
   }
+
+  // ========== 任务管理 ==========
+
+  /**
+   * 派发异步任务并追踪
+   *
+   * 功能：
+   * 1. 防止 shutdown 后创建新任务
+   * 2. 追踪活跃任务（调试用）
+   * 3. shutdown 时等待重要任务完成
+   *
+   * @param promise - 要执行的 Promise
+   * @param name - 任务名称（用于日志和调试）
+   * @returns 原始 Promise（如果 shutdown 中则返回 resolved Promise）
+   */
+  spawn<T>(promise: Promise<T>, name: string): Promise<T> {
+    // shutdown 期间拒绝新任务
+    if (this.isShuttingDown || !this.running) {
+      console.log(`[Application] 跳过任务创建（应用正在关闭）: ${name}`)
+      return Promise.resolve(undefined as T)
+    }
+
+    const taskId = `${name}:${++this.taskIdCounter}`
+
+    // 包装 Promise 以追踪完成状态
+    const trackedPromise = promise
+      .catch((error) => {
+        console.error(`[Application] 任务 ${taskId} 异常:`, error)
+        throw error // 重新抛出，让调用者处理
+      })
+      .finally(() => {
+        this.activeTasks.delete(taskId)
+      })
+
+    this.activeTasks.set(taskId, trackedPromise)
+    return trackedPromise as Promise<T>
+  }
+
+  /**
+   * 等待所有活跃任务完成（用于优雅关闭）
+   * @param timeout - 超时时间（毫秒），默认 5000ms
+   */
+  private async waitForTasks(timeout: number = 5000): Promise<void> {
+    if (this.activeTasks.size === 0) {
+      return
+    }
+
+    console.log(`[Application] 等待 ${this.activeTasks.size} 个任务完成...`)
+
+    const taskNames = Array.from(this.activeTasks.keys())
+    console.log(`[Application] 活跃任务: ${taskNames.join(', ')}`)
+
+    // 创建超时 Promise
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        if (this.activeTasks.size > 0) {
+          console.warn(`[Application] 等待任务超时，${this.activeTasks.size} 个任务未完成`)
+        }
+        resolve()
+      }, timeout)
+    })
+
+    // 等待所有任务完成或超时
+    await Promise.race([
+      Promise.allSettled(this.activeTasks.values()),
+      timeoutPromise,
+    ])
+
+    // 清理剩余任务引用
+    this.activeTasks.clear()
+  }
+
+  /**
+   * 获取当前活跃任务数量（调试用）
+   */
+  getActiveTaskCount(): number {
+    return this.activeTasks.size
+  }
+
+  /**
+   * 获取活跃任务名称列表（调试用）
+   */
+  getActiveTaskNames(): string[] {
+    return Array.from(this.activeTasks.keys())
+  }
+
+  // ========== 生命周期 ==========
 
   /**
    * 初始化应用
@@ -146,7 +260,13 @@ export class Application {
     })
 
     this.protocol.onIncomingJson((data) => {
-      this.handleIncomingJson(data)
+      // 使用 spawn 追踪任务，不阻塞协议层
+      this.spawn(
+        this.handleIncomingJson(data),
+        'handle:json',
+      ).catch(() => {
+        // spawn 内部已记录错误，这里静默处理
+      })
     })
 
     this.protocol.onIncomingAudio((data) => {
@@ -322,25 +442,38 @@ export class Application {
    * 设置设备状态
    */
   private async setDeviceState(state: DeviceState): Promise<void> {
+    // 等待之前的状态变更完成
+    if (this.stateChangeLock) {
+      await this.stateChangeLock
+    }
+
+    // 再次检查（可能在等待期间已变更）
     if (this.deviceState === state) {
       return
     }
 
-    console.log(`[Application] 设备状态变更: ${this.deviceState} -> ${state}`)
-    this.deviceState = state
+    this.stateChangeLock = (async () => {
+      try {
+        console.log(`[Application] 设备状态变更: ${this.deviceState} -> ${state}`)
+        this.deviceState = state
 
-    // 如果进入监听状态，立即重置中止标志（在广播之前）
-    if (state === DeviceState.LISTENING) {
-      this.aborted = false
-    }
+        // 如果进入监听状态，立即重置中止标志（在广播之前）
+        if (state === DeviceState.LISTENING) {
+          this.aborted = false
+        }
 
-    // 广播状态变化
-    try {
-      await this.plugins.notifyDeviceStateChanged(state)
-    }
-    catch (error) {
-      console.error('[Application] 广播状态变化失败:', error)
-    }
+        // 广播状态变化
+        await this.plugins.notifyDeviceStateChanged(state)
+      }
+      catch (error) {
+        console.error('[Application] 广播状态变化失败:', error)
+      }
+      finally {
+        this.stateChangeLock = null
+      }
+    })()
+
+    await this.stateChangeLock
   }
 
   /**
@@ -437,29 +570,32 @@ export class Application {
         if (state === 'start') {
           // TTS 开始：根据是否持续监听决定状态
           if (this.keepListening && this.listeningMode === ListeningMode.REALTIME) {
-            this.setDeviceState(DeviceState.LISTENING)
+            await this.setDeviceState(DeviceState.LISTENING)
           }
           else {
-            this.setDeviceState(DeviceState.SPEAKING)
+            await this.setDeviceState(DeviceState.SPEAKING)
           }
         }
         else if (state === 'stop') {
           // TTS 结束
           if (this.keepListening) {
             // 继续对话：重启监听
-            this.restartListening()
+            await this.restartListening()
           }
           else if (this.deviceState !== DeviceState.LISTENING) {
             // 如果当前不是监听状态，才设置为空闲
             // 避免打断后手动启动的监听被 TTS stop 关闭
-            this.setDeviceState(DeviceState.IDLE)
+            await this.setDeviceState(DeviceState.IDLE)
           }
         }
       }
 
-      // 转发给插件
-      this.plugins.notifyIncomingJson(jsonData).catch((error) => {
-        console.error('[Application] 通知插件 JSON 消息失败:', error)
+      // 转发给插件（使用 spawn 追踪）
+      this.spawn(
+        this.plugins.notifyIncomingJson(jsonData),
+        'notify:plugin:json',
+      ).catch(() => {
+        // spawn 内部已记录错误
       })
     }
     catch (error) {
@@ -471,9 +607,8 @@ export class Application {
    * 处理接收到的音频数据
    */
   private handleIncomingAudio(data: Buffer): void {
-    // console.log(`[Application] 收到音频数据，长度: ${data.length}`)
-
-    // 转发给插件
+    // 音频数据是高频事件，不追踪（避免性能开销）
+    // 直接转发给插件
     this.plugins.notifyIncomingAudio(data).catch((error) => {
       console.error('[Application] 通知插件音频数据失败:', error)
     })
@@ -662,9 +797,9 @@ export class Application {
   /**
    * 打断说话（供快捷键使用）
    */
-  interruptSpeaking(): void {
+  async interruptSpeaking(): Promise<void> {
     if (this.deviceState === DeviceState.SPEAKING) {
-      this.stopAutoConversation()
+      await this.stopAutoConversation()
       console.log('[Application] 已打断当前对话')
     }
     else {
@@ -676,14 +811,28 @@ export class Application {
    * 关闭应用
    */
   async shutdown(): Promise<void> {
-    if (!this.running) {
+    if (!this.running || this.isShuttingDown) {
       return
     }
 
+    this.isShuttingDown = true
     console.log('[Application] 正在关闭应用...')
     this.running = false
 
     try {
+      // 等待活跃任务完成（最多等待 3 秒��
+      await this.waitForTasks(3000)
+
+      // 等待状态变更完成
+      if (this.stateChangeLock) {
+        await this.stateChangeLock
+      }
+
+      // 等待连接操作完成
+      if (this.connectLock) {
+        await this.connectLock
+      }
+
       // 关闭协议
       if (this.protocol) {
         try {
@@ -692,6 +841,7 @@ export class Application {
         catch (error) {
           console.error('[Application] 关闭协议失败:', error)
         }
+        this.protocol = null
       }
 
       // 停止并关闭所有插件
@@ -700,11 +850,27 @@ export class Application {
 
       // 销毁快捷键管理器
       this.shortcutManager?.destroy()
+      this.shortcutManager = null
+
+      // 清理插件引用
+      this.audioPlugin = null
+      this.wakeWordPlugin = null
+      this.uiPlugin = null
+      this.mcpPlugin = null
+      this.chatPlugin = null
+
+      // 重置状态
+      this.deviceState = DeviceState.IDLE
+      this.keepListening = false
+      this.aborted = false
 
       console.log('[Application] 应用关闭完成')
     }
     catch (error) {
       console.error('[Application] 关闭应用时出错:', error)
+    }
+    finally {
+      this.isShuttingDown = false
     }
   }
 }

@@ -1,4 +1,5 @@
-import type { ChatSession, DbSession, GroupedSessions } from '../types/chat'
+import type { ChatSession, GroupedSessions } from '../types/chat'
+import type { ChatSession as IpcChatSession } from '../../../preload/index.d'
 /**
  * 会话管理 Composable
  * 负责会话列表的加载、创建、切换、删除等操作
@@ -19,13 +20,13 @@ export function useSessionManager() {
   async function loadSessions() {
     try {
       const sessions = await window.api.chatGetSessions()
-      historyList.value = sessions.map((s: DbSession) => ({
+      historyList.value = sessions.map((s: IpcChatSession) => ({
         id: s.id,
         sessionId: s.session_id,
         title: s.title || '新对话',
         active: s.session_id === currentSessionId.value,
         messageCount: s.message_count,
-        lastMessageAt: s.last_message_at,
+        lastMessageAt: s.last_message_at ?? s.started_at,
       }))
 
       // 按天分组
@@ -77,7 +78,7 @@ export function useSessionManager() {
 
       // 查找今天的会话
       const sessions = await window.api.chatGetSessions()
-      const todaySession = sessions.find((s: DbSession) => s.session_id === sessionId)
+      const todaySession = sessions.find((s: IpcChatSession) => s.session_id === sessionId)
 
       if (!todaySession) {
         // 创建今天的会话

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import {
   NButton,
   NLayout,
@@ -30,7 +31,7 @@ import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
 
 type Key = 'system' | 'appearance' | 'emotion' | 'wake' | 'camera' | 'audio' | 'hotkey'
 const selected = ref<Key>('system')
-const withIcon = (Comp: any) => () => h(Comp, { class: 'w-4 h-4' })
+const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
 
 const menuOptions = [
   { label: '系统选项', key: 'system', icon: withIcon(IconCarbonSettings) },
@@ -40,7 +41,7 @@ const menuOptions = [
   { label: '摄像头', key: 'camera', icon: withIcon(IconCarbonCamera) },
   { label: '音频设备', key: 'audio', icon: withIcon(IconCarbonHeadphones) },
   { label: '快捷键', key: 'hotkey', icon: withIcon(IconCarbonKeyboard) },
-] satisfies { label: string, key: Key, icon: () => any }[]
+] satisfies { label: string, key: Key, icon: () => ReturnType<typeof h> }[]
 
 type MaybePromise<T> = T | Promise<T>
 export interface PanelExposed {
@@ -61,8 +62,8 @@ const panelRefs = ref<Record<Key, PanelExposed | null>>({
 
 // 设置面板引用的辅助函数
 function setPanelRef(key: Key) {
-  return (el: any) => {
-    panelRefs.value[key] = el
+  return (el: unknown) => {
+    panelRefs.value[key] = el as PanelExposed | null
   }
 }
 
@@ -92,8 +93,9 @@ async function onSaveClick() {
   try {
     await currentPanelRef.value.handleSave()
   }
-  catch (e: any) {
-    message.error(e?.message || '保存失败')
+  catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '保存失败'
+    message.error(errorMessage)
   }
   finally {
     saveLoading.value = false
@@ -107,8 +109,9 @@ async function onCustomClick() {
   try {
     await currentPanelRef.value.handleCustomButton()
   }
-  catch (e: any) {
-    message.error(e?.message || '操作失败')
+  catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '操作失败'
+    message.error(errorMessage)
   }
   finally {
     customLoading.value = false

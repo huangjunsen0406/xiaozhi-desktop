@@ -117,10 +117,11 @@ export function registerAppIpcChannels(context: IpcContext): void {
 
   // 注入表情广播回调（通过 UIPlugin）
   const pluginManager = context.application.getPluginManager()
-  const uiPlugin = pluginManager.getPlugin<any>('ui')
-  if (uiPlugin && typeof uiPlugin.broadcastEmotion === 'function') {
+  const uiPlugin = pluginManager.getPlugin('ui')
+  const uiPluginWithEmotion = uiPlugin as unknown as { broadcastEmotion?: (emotionType: string) => void }
+  if (uiPluginWithEmotion && typeof uiPluginWithEmotion.broadcastEmotion === 'function') {
     setEmotionBroadcastCallback((emotionType: string) => {
-      uiPlugin.broadcastEmotion(emotionType)
+      uiPluginWithEmotion.broadcastEmotion!(emotionType)
     })
     console.log('[IPC] ✓ 表情广播回调已注入到 emotionIpc')
   }

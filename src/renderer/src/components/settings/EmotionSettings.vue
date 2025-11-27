@@ -17,7 +17,7 @@ interface EmotionDisplay {
   isCustom: boolean // 是否为自定义图片
 }
 
-const emotionImages = ref<Record<EmotionType, EmotionDisplay>>({} as any)
+const emotionImages = ref<Record<EmotionType, EmotionDisplay>>({} as Record<EmotionType, EmotionDisplay>)
 
 /**
  * 获取默认图片 URL

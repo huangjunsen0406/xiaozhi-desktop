@@ -47,7 +47,7 @@ function ensureDockVisible(): void {
     return
 
   app.setName('小智')
-  ;(app as any).setActivationPolicy?.('regular')
+  ;(app as unknown as { setActivationPolicy?: (policy: string) => void }).setActivationPolicy?.('regular')
 
   if (hasDock()) {
     try {

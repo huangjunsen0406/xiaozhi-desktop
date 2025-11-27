@@ -1,4 +1,15 @@
 import type { Buffer } from 'node:buffer'
+import type {
+  AudioConfigUpdate,
+  DbAudioConfig,
+  DbCameraConfig,
+  DbChatMessage,
+  DbChatSession,
+  DbDeviceInfo,
+  DbNetworkConfig,
+  DbSessionStats,
+  DbWakeWordConfig,
+} from '../types/database'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -212,7 +223,7 @@ export class DatabaseManager {
     machine_id: string
     hostname?: string
     system?: string
-  }): any {
+  }): DbDeviceInfo {
     // 先尝试查找
     const existing = this.db.prepare('SELECT * FROM device_info WHERE serial_number = ?').get(data.serial_number)
 
@@ -220,7 +231,7 @@ export class DatabaseManager {
       // 更新时间戳
       this.db.prepare('UPDATE device_info SET updated_at = strftime(\'%s\', \'now\') WHERE serial_number = ?')
         .run(data.serial_number)
-      return existing
+      return existing as DbDeviceInfo
     }
 
     // 插入新记录
@@ -236,14 +247,14 @@ export class DatabaseManager {
       data.system || '',
     )
 
-    return this.db.prepare('SELECT * FROM device_info WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM device_info WHERE id = ?').get(result.lastInsertRowid) as DbDeviceInfo
   }
 
   /**
    * 获取设备信息
    */
-  getDeviceInfo(): any {
-    return this.db.prepare('SELECT * FROM device_info ORDER BY id DESC LIMIT 1').get()
+  getDeviceInfo(): DbDeviceInfo | undefined {
+    return this.db.prepare('SELECT * FROM device_info ORDER BY id DESC LIMIT 1').get() as DbDeviceInfo | undefined
   }
 
   /**
@@ -261,7 +272,7 @@ export class DatabaseManager {
    * 获取激活状态
    */
   getActivationStatus(serialNumber: string): boolean {
-    const result = this.db.prepare('SELECT activation_status FROM device_info WHERE serial_number = ?').get(serialNumber) as any
+    const result = this.db.prepare('SELECT activation_status FROM device_info WHERE serial_number = ?').get(serialNumber) as { activation_status: number } | undefined
     return result ? result.activation_status === 1 : false
   }
 
@@ -273,12 +284,12 @@ export class DatabaseManager {
   getOrCreateNetworkConfig(data: {
     client_id: string
     device_id?: string
-  }): any {
+  }): DbNetworkConfig {
     // 先尝试查找
     const existing = this.db.prepare('SELECT * FROM network_config WHERE client_id = ?').get(data.client_id)
 
     if (existing) {
-      return existing
+      return existing as DbNetworkConfig
     }
 
     // 插入新记录
@@ -287,20 +298,20 @@ export class DatabaseManager {
       VALUES (?, ?)
     `).run(data.client_id, data.device_id || null)
 
-    return this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid) as DbNetworkConfig
   }
 
   /**
    * 获取网络配置
    */
-  getNetworkConfig(): any {
-    return this.db.prepare('SELECT * FROM network_config ORDER BY id DESC LIMIT 1').get()
+  getNetworkConfig(): DbNetworkConfig | undefined {
+    return this.db.prepare('SELECT * FROM network_config ORDER BY id DESC LIMIT 1').get() as DbNetworkConfig | undefined
   }
 
   /**
    * 更新网络配置字段
    */
-  updateNetworkConfig(field: string, value: any): void {
+  updateNetworkConfig(field: string, value: string | null): void {
     // 确保配置记录存在
     let config = this.getNetworkConfig()
     if (!config) {
@@ -308,7 +319,7 @@ export class DatabaseManager {
       const result = this.db.prepare(`
         INSERT INTO network_config (client_id) VALUES ('default')
       `).run()
-      config = this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid)
+      config = this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid) as DbNetworkConfig
     }
 
     // 更新字段
@@ -322,14 +333,14 @@ export class DatabaseManager {
   /**
    * 批量更新网络配置
    */
-  updateNetworkConfigBatch(updates: Record<string, any>): void {
+  updateNetworkConfigBatch(updates: Record<string, string | null>): void {
     // 确保配置记录存在
     let config = this.getNetworkConfig()
     if (!config) {
       const result = this.db.prepare(`
         INSERT INTO network_config (client_id) VALUES ('default')
       `).run()
-      config = this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid)
+      config = this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid) as DbNetworkConfig
     }
 
     // 构建更新语句
@@ -349,7 +360,7 @@ export class DatabaseManager {
   /**
    * 获取所有网络配置（扁平格式）
    */
-  getAllConfig(): Record<string, any> {
+  getAllConfig(): Record<string, string | null> {
     const config = this.getNetworkConfig()
     if (!config) {
       return {
@@ -391,12 +402,12 @@ export class DatabaseManager {
   /**
    * 获取或创建音频配置
    */
-  getOrCreateAudioConfig(): any {
+  getOrCreateAudioConfig(): DbAudioConfig {
     // 先尝试查找
     const existing = this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get()
 
     if (existing) {
-      return existing
+      return existing as DbAudioConfig
     }
 
     // 插入默认配置（不包含音量）
@@ -405,26 +416,20 @@ export class DatabaseManager {
       VALUES (?, ?, ?)
     `).run(1, 1, 'auto')
 
-    return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioConfig
   }
 
   /**
    * 获取音频配置
    */
-  getAudioConfig(): any {
-    return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get()
+  getAudioConfig(): DbAudioConfig | undefined {
+    return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get() as DbAudioConfig | undefined
   }
 
   /**
    * 更新音频配置（批量）
    */
-  updateAudioConfig(updates: {
-    input_device_name?: string | null
-    output_device_name?: string | null
-    enable_noise_reduction?: boolean
-    enable_echo_cancellation?: boolean
-    conversation_mode?: string
-  }): void {
+  updateAudioConfig(updates: AudioConfigUpdate | Record<string, unknown>): void {
     // 确保配置记录存在
     let config = this.getAudioConfig()
     if (!config) {
@@ -432,13 +437,13 @@ export class DatabaseManager {
     }
 
     // 转换布尔值为整数
-    const dbUpdates: Record<string, any> = {}
+    const dbUpdates: Record<string, string | number | null> = {}
     for (const [key, value] of Object.entries(updates)) {
       if (typeof value === 'boolean') {
         dbUpdates[key] = value ? 1 : 0
       }
       else if (value !== undefined) {
-        dbUpdates[key] = value
+        dbUpdates[key] = value as string | number | null
       }
     }
 
@@ -484,12 +489,12 @@ export class DatabaseManager {
   /**
    * 获取或创建唤醒词配置
    */
-  getOrCreateWakeWordConfig(): any {
+  getOrCreateWakeWordConfig(): DbWakeWordConfig {
     // 先尝试查找
     const existing = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get()
 
     if (existing) {
-      return existing
+      return existing as DbWakeWordConfig
     }
 
     // 插入默认配置
@@ -502,14 +507,14 @@ export class DatabaseManager {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(1, 'zh', '你好小智', '你好小智', 'MOSS', 0.2, 1.8, 1500)
 
-    return this.db.prepare('SELECT * FROM wake_word_config WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM wake_word_config WHERE id = ?').get(result.lastInsertRowid) as DbWakeWordConfig
   }
 
   /**
    * 获取唤醒词配置
    */
-  getWakeWordConfig(): any {
-    return this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get()
+  getWakeWordConfig(): DbWakeWordConfig | undefined {
+    return this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as DbWakeWordConfig | undefined
   }
 
   /**
@@ -519,6 +524,8 @@ export class DatabaseManager {
     enabled?: boolean
     language?: string
     keyword?: string
+    keyword_zh?: string
+    keyword_en?: string
     threshold?: number
     score?: number
     cooldown_ms?: number
@@ -530,13 +537,13 @@ export class DatabaseManager {
     }
 
     // 转换布尔值为整数
-    const dbUpdates: Record<string, any> = {}
+    const dbUpdates: Record<string, string | number> = {}
     for (const [key, value] of Object.entries(updates)) {
       if (typeof value === 'boolean') {
         dbUpdates[key] = value ? 1 : 0
       }
       else if (value !== undefined) {
-        dbUpdates[key] = value
+        dbUpdates[key] = value as string | number
       }
     }
 
@@ -597,12 +604,12 @@ export class DatabaseManager {
   /**
    * 获取或创建摄像头配置
    */
-  getOrCreateCameraConfig(): any {
+  getOrCreateCameraConfig(): DbCameraConfig {
     // 先尝试查找
     const existing = this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get()
 
     if (existing) {
-      return existing
+      return existing as DbCameraConfig
     }
 
     // 插入默认配置
@@ -615,14 +622,14 @@ export class DatabaseManager {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(1, '', '', 0, '', '', 'glm-4v-plus', 1280, 720, 80, 320)
 
-    return this.db.prepare('SELECT * FROM camera_config WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM camera_config WHERE id = ?').get(result.lastInsertRowid) as DbCameraConfig
   }
 
   /**
    * 获取摄像头配置
    */
-  getCameraConfig(): any {
-    return this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get()
+  getCameraConfig(): DbCameraConfig | undefined {
+    return this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get() as DbCameraConfig | undefined
   }
 
   /**
@@ -648,13 +655,13 @@ export class DatabaseManager {
     }
 
     // 转换布尔值为整数
-    const dbUpdates: Record<string, any> = {}
+    const dbUpdates: Record<string, string | number> = {}
     for (const [key, value] of Object.entries(updates)) {
       if (typeof value === 'boolean') {
         dbUpdates[key] = value ? 1 : 0
       }
       else if (value !== undefined) {
-        dbUpdates[key] = value
+        dbUpdates[key] = value as string | number
       }
     }
 
@@ -716,7 +723,7 @@ export class DatabaseManager {
     session_id: string
     title?: string
     started_at?: number
-  }): any {
+  }): DbChatSession {
     const startedAt = data.started_at || Math.floor(Date.now() / 1000)
 
     const result = this.db.prepare(`
@@ -724,25 +731,25 @@ export class DatabaseManager {
       VALUES (?, ?, ?, ?)
     `).run(data.session_id, data.title || null, startedAt, startedAt)
 
-    return this.db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(result.lastInsertRowid) as DbChatSession
   }
 
   /**
    * 获取所有会话列表（按最后消息时间倒序）
    */
-  getChatSessions(limit = 50, offset = 0): any[] {
+  getChatSessions(limit = 50, offset = 0): DbChatSession[] {
     return this.db.prepare(`
       SELECT * FROM chat_sessions
       ORDER BY last_message_at DESC
       LIMIT ? OFFSET ?
-    `).all(limit, offset) as any[]
+    `).all(limit, offset) as DbChatSession[]
   }
 
   /**
    * 根据 session_id 获取会话
    */
-  getChatSession(sessionId: string): any {
-    return this.db.prepare('SELECT * FROM chat_sessions WHERE session_id = ?').get(sessionId)
+  getChatSession(sessionId: string): DbChatSession | undefined {
+    return this.db.prepare('SELECT * FROM chat_sessions WHERE session_id = ?').get(sessionId) as DbChatSession | undefined
   }
 
   /**
@@ -765,7 +772,7 @@ export class DatabaseManager {
       SELECT COUNT(*) as count, MAX(timestamp) as last_ts
       FROM chat_messages
       WHERE session_id = ?
-    `).get(sessionId) as any
+    `).get(sessionId) as DbSessionStats
 
     this.db.prepare(`
       UPDATE chat_sessions
@@ -803,7 +810,7 @@ export class DatabaseManager {
     source_type: string
     image_data?: Buffer
     timestamp?: number
-  }): any {
+  }): DbChatMessage {
     const timestamp = data.timestamp || Math.floor(Date.now() / 1000)
 
     const result = this.db.prepare(`
@@ -822,19 +829,19 @@ export class DatabaseManager {
     // 更新会话统计
     this.updateChatSessionStats(data.session_id)
 
-    return this.db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(result.lastInsertRowid)
+    return this.db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(result.lastInsertRowid) as DbChatMessage
   }
 
   /**
    * 获取指定会话的所有消息
    */
-  getChatMessages(sessionId: string, limit = 100, offset = 0): any[] {
+  getChatMessages(sessionId: string, limit = 100, offset = 0): DbChatMessage[] {
     return this.db.prepare(`
       SELECT * FROM chat_messages
       WHERE session_id = ?
       ORDER BY timestamp ASC
       LIMIT ? OFFSET ?
-    `).all(sessionId, limit, offset) as any[]
+    `).all(sessionId, limit, offset) as DbChatMessage[]
   }
 
   /**
@@ -845,7 +852,7 @@ export class DatabaseManager {
       SELECT COUNT(*) as count
       FROM chat_messages
       WHERE session_id = ?
-    `).get(sessionId) as any
+    `).get(sessionId) as { count: number }
     return result.count
   }
 
@@ -854,7 +861,7 @@ export class DatabaseManager {
    */
   deleteChatMessage(messageId: number): void {
     // 先获取消息所属的会话
-    const message = this.db.prepare('SELECT session_id FROM chat_messages WHERE id = ?').get(messageId) as any
+    const message = this.db.prepare('SELECT session_id FROM chat_messages WHERE id = ?').get(messageId) as { session_id: string } | undefined
 
     if (message) {
       this.db.prepare('DELETE FROM chat_messages WHERE id = ?').run(messageId)

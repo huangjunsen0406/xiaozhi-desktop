@@ -3,62 +3,98 @@
  */
 import { ipcRenderer } from 'electron'
 
+/**
+ * IPC 结果类型
+ */
+interface IpcResult<T = unknown> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
+/**
+ * 聊天消息类型
+ */
+interface ChatMessage {
+  id: number
+  session_id: string
+  role: 'user' | 'assistant'
+  content: string
+  emotion?: string
+  source_type: string
+  image_data?: Uint8Array | { type: string, data: number[] } | number[]
+  timestamp: number
+}
+
+/**
+ * 聊天会话类型
+ */
+interface ChatSession {
+  id: number
+  session_id: string
+  title?: string
+  message_count: number
+  started_at: number
+  last_message_at?: number
+}
+
 export const chatApi = {
   /**
    * 获取会话列表
    */
-  getSessions: async (limit = 50, offset = 0) => {
-    const result: any = await ipcRenderer.invoke('chat:get-sessions', limit, offset)
+  getSessions: async (limit = 50, offset = 0): Promise<ChatSession[]> => {
+    const result = await ipcRenderer.invoke('chat:get-sessions', limit, offset) as IpcResult<ChatSession[]>
     if (!result.success) {
       throw new Error(result.error || '获取会话列表失败')
     }
-    return result.data
+    return result.data || []
   },
 
   /**
    * 获取单个会话
    */
-  getSession: async (sessionId: string) => {
-    const result: any = await ipcRenderer.invoke('chat:get-session', sessionId)
+  getSession: async (sessionId: string): Promise<ChatSession | null> => {
+    const result = await ipcRenderer.invoke('chat:get-session', sessionId) as IpcResult<ChatSession>
     if (!result.success) {
       throw new Error(result.error || '获取会话失败')
     }
-    return result.data
+    return result.data || null
   },
 
   /**
    * 创建会话
    */
-  createSession: async (data: { session_id: string, title?: string, started_at?: number }) => {
-    const result: any = await ipcRenderer.invoke('chat:create-session', data)
+  createSession: async (data: { session_id: string, title?: string, started_at?: number }): Promise<ChatSession> => {
+    const result = await ipcRenderer.invoke('chat:create-session', data) as IpcResult<ChatSession>
     if (!result.success) {
       throw new Error(result.error || '创建会话失败')
     }
-    return result.data
+    return result.data!
   },
 
   /**
    * 获取消息列表
    */
-  getMessages: async (sessionId: string, limit = 100, offset = 0) => {
-    const result: any = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset)
+  getMessages: async (sessionId: string, limit = 100, offset = 0): Promise<ChatMessage[]> => {
+    const result = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset) as IpcResult<ChatMessage[]>
     if (!result.success) {
       throw new Error(result.error || '获取消息失败')
     }
     // 将 IPC 传输后的图片数据转换回 Uint8Array
-    const messages = result.data.map((msg: any) => {
+    const messages = (result.data || []).map((msg: ChatMessage) => {
       if (msg.image_data) {
+        const imageData = msg.image_data as { type?: string, data?: number[] } | number[]
         // IPC 传输后 Uint8Array 会变成 {type: 'Buffer', data: [...]} 或普通数组
-        if (msg.image_data.type === 'Buffer' && Array.isArray(msg.image_data.data)) {
+        if (typeof imageData === 'object' && 'type' in imageData && imageData.type === 'Buffer' && Array.isArray(imageData.data)) {
           return {
             ...msg,
-            image_data: new Uint8Array(msg.image_data.data),
+            image_data: new Uint8Array(imageData.data),
           }
         }
-        else if (Array.isArray(msg.image_data)) {
+        else if (Array.isArray(imageData)) {
           return {
             ...msg,
-            image_data: new Uint8Array(msg.image_data),
+            image_data: new Uint8Array(imageData),
           }
         }
       }
@@ -78,19 +114,19 @@ export const chatApi = {
     source_type: string
     image_data?: Uint8Array
     timestamp?: number
-  }) => {
-    const result: any = await ipcRenderer.invoke('chat:add-message', data)
+  }): Promise<ChatMessage> => {
+    const result = await ipcRenderer.invoke('chat:add-message', data) as IpcResult<ChatMessage>
     if (!result.success) {
       throw new Error(result.error || '添加消息失败')
     }
-    return result.data
+    return result.data!
   },
 
   /**
    * 更新会话标题
    */
-  updateSessionTitle: async (sessionId: string, title: string) => {
-    const result: any = await ipcRenderer.invoke('chat:update-session-title', sessionId, title)
+  updateSessionTitle: async (sessionId: string, title: string): Promise<void> => {
+    const result = await ipcRenderer.invoke('chat:update-session-title', sessionId, title) as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '更新标题失败')
     }
@@ -99,8 +135,8 @@ export const chatApi = {
   /**
    * 删除会话
    */
-  deleteSession: async (sessionId: string) => {
-    const result: any = await ipcRenderer.invoke('chat:delete-session', sessionId)
+  deleteSession: async (sessionId: string): Promise<void> => {
+    const result = await ipcRenderer.invoke('chat:delete-session', sessionId) as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '删除会话失败')
     }
@@ -109,8 +145,8 @@ export const chatApi = {
   /**
    * 清空消息
    */
-  clearMessages: async (sessionId: string) => {
-    const result: any = await ipcRenderer.invoke('chat:clear-messages', sessionId)
+  clearMessages: async (sessionId: string): Promise<void> => {
+    const result = await ipcRenderer.invoke('chat:clear-messages', sessionId) as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '清空消息失败')
     }

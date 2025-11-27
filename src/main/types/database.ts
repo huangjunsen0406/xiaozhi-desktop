@@ -1,0 +1,255 @@
+/**
+ * 数据库类型定义
+ * 定义所有数据库表的类型接口
+ */
+
+/**
+ * 设备信息表类型
+ */
+import type { Buffer } from 'node:buffer'
+
+export interface DbDeviceInfo {
+  id: number
+  mac_address: string
+  serial_number: string
+  hmac_key: string
+  machine_id: string | null
+  system: string | null
+  hostname: string | null
+  activation_status: number
+  created_at: number
+  updated_at: number
+}
+
+/**
+ * 网络配置表类型
+ */
+export interface DbNetworkConfig {
+  id: number
+  client_id: string
+  device_id: string | null
+  ota_version_url: string
+  activation_version: string
+  authorization_url: string
+  websocket_url: string | null
+  websocket_access_token: string | null
+  mqtt_endpoint: string | null
+  mqtt_client_id: string | null
+  mqtt_username: string | null
+  mqtt_password: string | null
+  mqtt_publish_topic: string | null
+  mqtt_subscribe_topic: string | null
+  created_at: number
+  updated_at: number
+}
+
+/**
+ * 音频配置表类型
+ */
+export interface DbAudioConfig {
+  id: number
+  input_device_name: string | null
+  output_device_name: string | null
+  enable_noise_reduction: number
+  enable_echo_cancellation: number
+  conversation_mode: string
+  created_at: number
+  updated_at: number
+}
+
+/**
+ * 唤醒词配置表类型
+ */
+export interface DbWakeWordConfig {
+  id: number
+  enabled: number
+  language: string
+  keywords_list: string
+  keyword_zh?: string
+  keyword_en?: string
+  keyword?: string
+  threshold: number
+  score: number
+  cooldown_ms: number
+  created_at: number
+  updated_at: number
+}
+
+/**
+ * 摄像头配置表类型
+ */
+export interface DbCameraConfig {
+  id: number
+  enabled: number
+  device_id: string
+  device_label: string
+  use_local_vision: number
+  vl_api_key: string
+  vl_url: string
+  vl_model: string
+  capture_width: number
+  capture_height: number
+  jpeg_quality: number
+  max_dimension: number
+  created_at: number
+  updated_at: number
+}
+
+/**
+ * 聊天会话表类型
+ */
+export interface DbChatSession {
+  id: number
+  session_id: string
+  title: string | null
+  message_count: number
+  started_at: number
+  last_message_at: number | null
+  created_at: number
+}
+
+/**
+ * 聊天消息表类型
+ */
+export interface DbChatMessage {
+  id: number
+  session_id: string
+  role: 'user' | 'assistant'
+  content: string
+  emotion: string | null
+  source_type: string
+  image_data: Buffer | null
+  timestamp: number
+  created_at: number
+}
+
+/**
+ * 会话统计类型
+ */
+export interface DbSessionStats {
+  count: number
+  last_ts: number | null
+}
+
+/**
+ * IPC 结果类型
+ */
+export interface IpcResultSuccess<T = unknown> {
+  success: true
+  data: T
+}
+
+export interface IpcResultError {
+  success: false
+  error: string
+}
+
+export type IpcResult<T = unknown> = IpcResultSuccess<T> | IpcResultError
+
+/**
+ * 服务器消息类型（来自 WebSocket）
+ */
+export interface ServerMessage {
+  type: string
+  state?: string
+  text?: string
+  emotion?: string
+  session_id?: string
+  [key: string]: unknown
+}
+
+/**
+ * OTA 配置响应类型
+ */
+export interface OtaConfigResponse {
+  websocket?: {
+    url?: string
+    token?: string
+  }
+  mqtt?: {
+    endpoint?: string
+    client_id?: string
+    username?: string
+    password?: string
+    publish_topic?: string
+    subscribe_topic?: string
+  }
+  activation?: {
+    challenge: string
+    code: string
+    message?: string
+  }
+}
+
+/**
+ * MQTT 信息类型
+ */
+export interface MqttInfo {
+  endpoint: string | null
+  client_id: string | null
+  username: string | null
+  password: string | null
+  publish_topic: string | null
+  subscribe_topic: string | null
+}
+
+/**
+ * 摄像头配置更新类型
+ */
+export interface CameraConfigUpdate {
+  enabled?: boolean
+  device_id?: string
+  device_label?: string
+  use_local_vision?: boolean
+  vl_api_key?: string
+  vl_url?: string
+  vl_model?: string
+  capture_width?: number
+  capture_height?: number
+  jpeg_quality?: number
+  max_dimension?: number
+}
+
+/**
+ * 唤醒词配置更新类型
+ */
+export interface WakeWordConfigUpdate {
+  enabled?: boolean
+  language?: string
+  keyword?: string
+  threshold?: number
+  score?: number
+  cooldown_ms?: number
+  keyword_zh?: string
+  keyword_en?: string
+}
+
+/**
+ * 音频配置更新类型
+ */
+export interface AudioConfigUpdate {
+  input_device_name?: string | null
+  output_device_name?: string | null
+  enable_noise_reduction?: boolean
+  enable_echo_cancellation?: boolean
+  conversation_mode?: string
+}
+
+/**
+ * sherpa-onnx KeywordSpotter 类型
+ */
+export interface KeywordSpotter {
+  createStream: () => KeywordSpotterStream
+  isReady: (stream: KeywordSpotterStream) => boolean
+  decode: (stream: KeywordSpotterStream) => void
+  getResult: (stream: KeywordSpotterStream) => KeywordSpotterResult
+  reset: (stream: KeywordSpotterStream) => void
+}
+
+export interface KeywordSpotterStream {
+  acceptWaveform: (config: { sampleRate: number, samples: Float32Array }) => void
+}
+
+export interface KeywordSpotterResult {
+  keyword: string
+}

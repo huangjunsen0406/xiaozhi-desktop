@@ -2,8 +2,10 @@
 import { onUnmounted, ref, watch } from 'vue'
 import { createObjectUrl, revokeObjectUrl } from '../utils/imageUtils'
 
+type ImageDataInput = Uint8Array | { type?: string, data?: number[] } | number[] | { buffer: ArrayBuffer } | ArrayBuffer
+
 const props = defineProps<{
-  imageData?: Uint8Array | any
+  imageData?: ImageDataInput
   alt?: string
   className?: string
 }>()

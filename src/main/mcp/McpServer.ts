@@ -364,9 +364,9 @@ export class McpServer {
         const allConfig = configManager.getAll()
 
         const cameraOptions = {
-          vlApiKey: allConfig.VLapi_key,
-          vlUrl: allConfig.Local_VL_url,
-          vlModel: allConfig.models,
+          vlApiKey: allConfig.VLapi_key as string | undefined,
+          vlUrl: allConfig.Local_VL_url as string | undefined,
+          vlModel: allConfig.models as string | undefined,
           explainUrl: url,
           explainToken: token,
           deviceId: configManager.getDeviceId(),

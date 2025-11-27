@@ -43,7 +43,15 @@ export function registerWakeWordIpc(context: IpcContext): void {
       console.log('IPC: 更新唤醒词配置', updates)
 
       // 转换前端字段名到数据库字段名
-      const dbUpdates: any = {}
+      const dbUpdates: {
+        enabled?: boolean
+        language?: string
+        threshold?: number
+        score?: number
+        cooldown_ms?: number
+        keyword_zh?: string
+        keyword_en?: string
+      } = {}
       if (updates.enabled !== undefined)
         dbUpdates.enabled = updates.enabled
       if (updates.language !== undefined)

@@ -184,11 +184,12 @@ export class WebSocketProtocol extends Protocol {
         })
       })
     }
-    catch (error: any) {
+    catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('[WebSocketProtocol] 连接失败:', error)
       await this.cleanup()
       if (this.onNetworkErrorCallback) {
-        this.onNetworkErrorCallback(`无法连接服务: ${error.message}`)
+        this.onNetworkErrorCallback(`无法连接服务: ${errorMessage}`)
       }
       return false
     }
@@ -355,7 +356,7 @@ export class WebSocketProtocol extends Protocol {
   /**
    * 处理服务器 hello 消息
    */
-  private handleServerHello(data: any): void {
+  private handleServerHello(data: { transport?: string, session_id?: string }): void {
     try {
       const transport = data.transport
       if (transport !== 'websocket') {
@@ -543,11 +544,12 @@ export class WebSocketProtocol extends Protocol {
         }
       }
     }
-    catch (error: any) {
+    catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('[WebSocketProtocol] 重连过程中出错:', error)
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         if (this.onNetworkErrorCallback) {
-          this.onNetworkErrorCallback(`重连异常: ${error.message}`)
+          this.onNetworkErrorCallback(`重连异常: ${errorMessage}`)
         }
       }
     }
@@ -617,9 +619,10 @@ export class WebSocketProtocol extends Protocol {
       this.ws.send(message)
       return true
     }
-    catch (error: any) {
+    catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('[WebSocketProtocol] 发送文本消息失败:', error)
-      this.handleConnectionLoss(`发送文本异常: ${error.message}`)
+      this.handleConnectionLoss(`发送文本异常: ${errorMessage}`)
       return false
     }
   }
@@ -636,9 +639,10 @@ export class WebSocketProtocol extends Protocol {
       this.ws!.send(data)
       return true
     }
-    catch (error: any) {
+    catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('[WebSocketProtocol] 发送音频数据失败:', error)
-      this.handleConnectionLoss(`发送音频异常: ${error.message}`)
+      this.handleConnectionLoss(`发送音频异常: ${errorMessage}`)
       return false
     }
   }

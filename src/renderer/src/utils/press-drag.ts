@@ -267,12 +267,12 @@ export const vPressDrag = {
       el.removeEventListener('lostpointercapture', onLostCapture)
     }
 
-    el[KEY as any] = st
+    ;(el as unknown as Record<symbol, Store>)[KEY] = st
   },
 
   updated(el: HTMLElement, binding: DirectiveBinding<Handlers>) {
     // 更新配置
-    const st: Store | undefined = el[KEY as any]
+    const st: Store | undefined = (el as unknown as Record<symbol, Store>)[KEY]
     if (!st)
       return
     st.opts = {
@@ -285,8 +285,8 @@ export const vPressDrag = {
   },
 
   unmounted(el: HTMLElement) {
-    const st: Store | undefined = el[KEY as any]
+    const st: Store | undefined = (el as unknown as Record<symbol, Store>)[KEY]
     st?.cleanup?.()
-    delete el[KEY as any]
+    delete (el as unknown as Record<symbol, Store>)[KEY]
   },
 }

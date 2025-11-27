@@ -244,7 +244,7 @@ export class AudioPlugin extends Plugin {
    */
   private shouldDropFrame(): boolean {
     // 获取 WebSocket 实例检查缓冲区
-    const ws = (this.protocol as any)?.ws
+    const ws = (this.protocol as unknown as { ws?: { bufferedAmount?: number } })?.ws
     if (!ws) {
       return false
     }

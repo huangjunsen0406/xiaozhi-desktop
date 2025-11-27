@@ -1,4 +1,5 @@
 import type { AudioListener } from '../types/audio'
+import type { KeywordSpotter, KeywordSpotterStream } from '../types/database'
 import path from 'node:path'
 
 /**
@@ -22,8 +23,8 @@ export interface WakeWordConfig {
 export class WakeWordDetector implements AudioListener {
   readonly name = 'WakeWordDetector'
 
-  private keywordSpotter: any = null
-  private stream: any = null
+  private keywordSpotter: KeywordSpotter | null = null
+  private stream: KeywordSpotterStream | null = null
   private enabled: boolean = false
   private shuttingDown: boolean = false
 
@@ -96,7 +97,7 @@ export class WakeWordDetector implements AudioListener {
         keywordsFile: keywordsPath,
       })
 
-      this.stream = this.keywordSpotter.createStream()
+      this.stream = this.keywordSpotter!.createStream()
       this.enabled = true
       this.shuttingDown = false
       console.log('[WakeWordDetector] KeywordSpotter 初始化成功')
@@ -199,21 +200,21 @@ export class WakeWordDetector implements AudioListener {
         }
 
         // 喂给 KeywordSpotter
-        this.stream.acceptWaveform({
+        this.stream!.acceptWaveform({
           sampleRate: 16000,
           samples,
         })
 
         // 检测
-        if (this.keywordSpotter.isReady(this.stream)) {
-          this.keywordSpotter.decode(this.stream)
-          const result = this.keywordSpotter.getResult(this.stream)
+        if (this.keywordSpotter!.isReady(this.stream!)) {
+          this.keywordSpotter!.decode(this.stream!)
+          const result = this.keywordSpotter!.getResult(this.stream!)
 
           // result.keyword 是检测到的关键词字符串
           if (result && result.keyword && result.keyword !== '') {
             this.handleDetection(result.keyword)
             // 重置流
-            this.keywordSpotter.reset(this.stream)
+            this.keywordSpotter!.reset(this.stream!)
           }
         }
       }

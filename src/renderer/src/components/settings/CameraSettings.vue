@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import type { CameraDevice } from '../../utils/camera'
 import { NButton, NForm, NFormItem, NInput, NSelect, NSpace, NSwitch, useMessage } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { CameraDevice } from '../../utils/camera'
 import { getCameraDevices } from '../../utils/camera'
 
 const message = useMessage()
@@ -141,18 +141,20 @@ async function startPreview() {
       console.log('[CameraSettings] 预览已启动')
     }
   }
-  catch (error: any) {
+  catch (error) {
     console.error('[CameraSettings] 启动预览失败:', error)
 
     let errorMessage = '启动摄像头预览失败'
-    if (error.name === 'NotAllowedError') {
-      errorMessage = '摄像头权限被拒绝，请允许访问摄像头'
-    }
-    else if (error.name === 'NotFoundError') {
-      errorMessage = '未找到摄像头设备'
-    }
-    else if (error.name === 'NotReadableError') {
-      errorMessage = '摄像头被其他应用占用'
+    if (error instanceof DOMException) {
+      if (error.name === 'NotAllowedError') {
+        errorMessage = '摄像头权限被拒绝，请允许访问摄像头'
+      }
+      else if (error.name === 'NotFoundError') {
+        errorMessage = '未找到摄像头设备'
+      }
+      else if (error.name === 'NotReadableError') {
+        errorMessage = '摄像头被其他应用占用'
+      }
     }
 
     message.error(errorMessage)

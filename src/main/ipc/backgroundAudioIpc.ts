@@ -28,7 +28,7 @@ export function registerBackgroundAudioIpc(): void {
   /**
    * 向后台音频窗口发送命令
    */
-  function sendAudioCommand(command: string, data?: any): void {
+  function sendAudioCommand(command: string, data?: Record<string, unknown>): void {
     const audioWindow = getBackgroundAudioWindow()
     if (audioWindow && !audioWindow.isDestroyed()) {
       // 只在 data 有值时才传递第三个参数，避免传递 undefined 导致 IPC 序列化错误
@@ -89,7 +89,7 @@ export function registerBackgroundAudioIpc(): void {
   /**
    * 接收来自后台音频窗口的状态更新
    */
-  ipcMain.on('audio:state', (_, state) => {
+  ipcMain.on('audio:state', (_, state: { capturing?: boolean, playing?: boolean, error?: string }) => {
     console.log('[BackgroundAudioIpc] 收到音频状态更新:', state)
 
     // 更新存储的状态

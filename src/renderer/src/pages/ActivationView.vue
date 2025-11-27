@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ActivationData } from '../../../preload/index.d'
 import { computed, onMounted, ref } from 'vue'
 
 // 设备信息
@@ -10,7 +11,7 @@ const statusColor = ref('#6c757d')
 const isActivating = ref(false)
 
 // 激活数据
-let activationData: any = null
+let activationData: ActivationData | null = null
 
 // 初始化
 onMounted(async () => {

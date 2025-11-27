@@ -4,6 +4,26 @@
 import { ipcRenderer } from 'electron'
 
 /**
+ * IPC 结果类型
+ */
+interface IpcResult<T = unknown> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
+/**
+ * 服务器消息类型
+ */
+export interface ServerMessage {
+  type: string
+  emotion?: string
+  text?: string
+  state?: string
+  [key: string]: unknown
+}
+
+/**
  * 应用状态快照类型
  */
 export interface AppStateSnapshot {
@@ -16,7 +36,7 @@ export interface AppStateSnapshot {
 export const appApi = {
   // 开始手动监听
   startListeningManual: async (): Promise<void> => {
-    const result: any = await ipcRenderer.invoke('app:start-listening-manual')
+    const result = await ipcRenderer.invoke('app:start-listening-manual') as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '开始手动监听失败')
     }
@@ -24,7 +44,7 @@ export const appApi = {
 
   // 停止手动监听
   stopListeningManual: async (): Promise<void> => {
-    const result: any = await ipcRenderer.invoke('app:stop-listening-manual')
+    const result = await ipcRenderer.invoke('app:stop-listening-manual') as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '停止手动监听失败')
     }
@@ -32,7 +52,7 @@ export const appApi = {
 
   // 开始自动对话
   startAutoConversation: async (): Promise<void> => {
-    const result: any = await ipcRenderer.invoke('app:start-auto-conversation')
+    const result = await ipcRenderer.invoke('app:start-auto-conversation') as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '开始自动对话失败')
     }
@@ -40,7 +60,7 @@ export const appApi = {
 
   // 停止自动对话
   stopAutoConversation: async (): Promise<void> => {
-    const result: any = await ipcRenderer.invoke('app:stop-auto-conversation')
+    const result = await ipcRenderer.invoke('app:stop-auto-conversation') as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '停止自动对话失败')
     }
@@ -48,7 +68,7 @@ export const appApi = {
 
   // 发送文本消息
   sendText: async (text: string): Promise<void> => {
-    const result: any = await ipcRenderer.invoke('app:send-text', text)
+    const result = await ipcRenderer.invoke('app:send-text', text) as IpcResult<void>
     if (!result.success) {
       throw new Error(result.error || '发送文本消息失败')
     }
@@ -68,7 +88,7 @@ export const appApi = {
   },
 
   // 监听服务器消息（用于接收表情、文本等数据）
-  onServerMessage: (callback: (message: any) => void): void => {
+  onServerMessage: (callback: (message: ServerMessage) => void): void => {
     ipcRenderer.on('server:message', (_, message) => callback(message))
   },
 

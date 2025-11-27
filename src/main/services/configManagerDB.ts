@@ -2,6 +2,18 @@ import { v4 as uuidv4 } from 'uuid'
 import { DatabaseManager } from './database'
 
 /**
+ * MQTT 配置信息类型
+ */
+export interface MqttInfo {
+  endpoint: string | null
+  client_id: string | null
+  username: string | null
+  password: string | null
+  publish_topic: string | null
+  subscribe_topic: string | null
+}
+
+/**
  * 配置管理器 (SQLite 版本) - 单例模式
  */
 export class ConfigManager {
@@ -64,7 +76,7 @@ export class ConfigManager {
   /**
    * 获取完整配置（扁平格式）
    */
-  getAll(): Record<string, any> {
+  getAll(): Record<string, unknown> {
     return this.db.getAllConfig()
   }
 
@@ -150,7 +162,7 @@ export class ConfigManager {
     }
   }
 
-  getMqttInfo(): any {
+  getMqttInfo(): MqttInfo | null {
     const config = this.db.getNetworkConfig()
     if (!config || !config.mqtt_endpoint) {
       return null
@@ -165,7 +177,7 @@ export class ConfigManager {
     }
   }
 
-  setMqttInfo(value: any): boolean {
+  setMqttInfo(value: MqttInfo | null): boolean {
     try {
       if (typeof value === 'object' && value !== null) {
         this.db.updateNetworkConfigBatch({
@@ -220,7 +232,7 @@ export class ConfigManager {
   /**
    * 批量更新配置
    */
-  updateBatch(updates: Record<string, any>): boolean {
+  updateBatch(updates: Record<string, string | null>): boolean {
     try {
       this.db.updateNetworkConfigBatch(updates)
       return true

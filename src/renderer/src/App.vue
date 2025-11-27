@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DeviceState, ListeningMode } from './stores/app'
 import { useColorMode } from '@vueuse/core'
 import { darkTheme, lightTheme, NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
 import { computed, onMounted, onUnmounted } from 'vue'
@@ -40,8 +41,8 @@ onMounted(async () => {
 
     // 更新 Store
     appStore.updateState({
-      deviceState: state.device_state,
-      listeningMode: state.listening_mode,
+      deviceState: state.device_state as DeviceState,
+      listeningMode: state.listening_mode as ListeningMode,
       channelOpen: state.audio_opened,
     })
 
@@ -49,8 +50,8 @@ onMounted(async () => {
     window.api.appOnStateChanged((state) => {
       console.log('[App] 状态更新:', state)
       appStore.updateState({
-        deviceState: state.deviceState,
-        listeningMode: state.listeningMode,
+        deviceState: state.deviceState as DeviceState,
+        listeningMode: state.listeningMode as ListeningMode,
         channelOpen: state.channelOpen,
       })
     })

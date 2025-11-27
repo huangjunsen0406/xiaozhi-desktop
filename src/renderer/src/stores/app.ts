@@ -1,4 +1,5 @@
-import type { ChatMessage as ChatMessageType, ChatSession, DbMessage, DbSession, ServerMessage } from '../types/chat'
+import type { ChatMessage as IpcChatMessage, ChatSession as IpcChatSession } from '../../../preload/index.d'
+import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from '../types/chat'
 /**
  * 全局应用 Store
  * 统一管理设备状态、通话状态、会话、消息等
@@ -11,7 +12,7 @@ import { generateSessionTitle, getTodaySessionId, isTodaySession } from '../util
 // ==================== 类型定义 ====================
 
 /** 设备状态类型 */
-export type DeviceState = 'idle' | 'listening' | 'speaking'
+export type DeviceState = 'idle' | 'connecting' | 'listening' | 'speaking'
 
 /** 监听模式类型 */
 export type ListeningMode = 'auto' | 'manual' | 'realtime'
@@ -65,9 +66,6 @@ export const useAppStore = defineStore('app', () => {
 
   /** 待保存的图片数据 */
   const pendingImageData = ref<string | null>(null)
-
-  /** 最后发送的文本（用于过滤重复的 STT 消息） */
-  const lastSentText = ref<string | null>(null)
 
   // ==================== 计算属性 ====================
 
@@ -141,6 +139,7 @@ export const useAppStore = defineStore('app', () => {
 
   /**
    * 发送文本消息
+   * 注意：消息保存和过滤由主进程 ChatPlugin 统一处理，前端通过 message-added 事件刷新
    */
   async function sendText(text: string): Promise<void> {
     const trimmedText = text.trim()
@@ -149,16 +148,11 @@ export const useAppStore = defineStore('app', () => {
     }
 
     try {
-      // 记录发送的文本，用于过滤 STT 重复消息
-      lastSentText.value = trimmedText
-      console.log('[AppStore] 设置 lastSentText:', lastSentText.value)
-
       await window.api.appSendText(trimmedText)
       console.log('[AppStore] 文本消息已发送:', trimmedText)
     }
     catch (error) {
       console.error('[AppStore] 发送文本失败:', error)
-      lastSentText.value = null // 发送失败时清空标记
       throw error
     }
   }
@@ -227,13 +221,13 @@ export const useAppStore = defineStore('app', () => {
   async function loadSessions() {
     try {
       const data = await window.api.chatGetSessions()
-      sessions.value = data.map((s: DbSession) => ({
+      sessions.value = data.map((s: IpcChatSession) => ({
         id: s.id,
         sessionId: s.session_id,
         title: s.title || '新对话',
         active: s.session_id === currentSessionId.value,
         messageCount: s.message_count,
-        lastMessageAt: s.last_message_at,
+        lastMessageAt: s.last_message_at ?? s.started_at,
       }))
 
       console.log('[AppStore] 会话列表已加载:', sessions.value.length)
@@ -251,7 +245,7 @@ export const useAppStore = defineStore('app', () => {
       console.log('[AppStore] 加载会话消息:', sessionId)
 
       const msgs = await window.api.chatGetMessages(sessionId)
-      messages.value = msgs.map((m: DbMessage) => ({
+      messages.value = msgs.map((m: IpcChatMessage) => ({
         id: m.id,
         role: m.role,
         content: m.content,
@@ -274,7 +268,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       const sessionId = getTodaySessionId()
       const data = await window.api.chatGetSessions()
-      const todaySession = data.find((s: DbSession) => s.session_id === sessionId)
+      const todaySession = data.find((s: IpcChatSession) => s.session_id === sessionId)
 
       if (!todaySession) {
         const title = generateSessionTitle(sessionId)
@@ -307,7 +301,7 @@ export const useAppStore = defineStore('app', () => {
 
       // 加载消息
       const msgs = await window.api.chatGetMessages(sessionId)
-      messages.value = msgs.map((m: DbMessage) => ({
+      messages.value = msgs.map((m: IpcChatMessage) => ({
         id: m.id,
         role: m.role,
         content: m.content,
@@ -397,27 +391,17 @@ export const useAppStore = defineStore('app', () => {
 
   /**
    * 处理 STT 消息（用户语音识别）
-   * ⚠️ 主进程负责保存和广播,前端通过 message-added 事件刷新
-   * 这里只是记录日志,不做任何界面更新
+   * ⚠️ 主进程 ChatPlugin 负责保存和过滤，前端通过 message-added 事件刷新
+   * 这里不做任何界面更新，避免状态同步问题
    */
   async function handleSttMessage(text: string) {
-    console.log('[AppStore] 处理 STT 消息:', text)
-    console.log('[AppStore] lastSentText.value:', lastSentText.value)
-
     // 过滤特殊提示
     if (text === '获取用户输入文本。') {
       return
     }
 
-    // 如果是通过 sendText 发送的文本,清空标记(后端已保存,会通过 message-added 刷新)
-    if (lastSentText.value && text === lastSentText.value) {
-      console.log('[AppStore] 这是 sendText 发送的文本,等待 message-added 事件刷新')
-      lastSentText.value = null
-      return
-    }
-
-    // 对于真正的语音 STT,也不在这里显示,等待后端保存后通过 message-added 刷新
-    console.log('[AppStore] 这是语音 STT,等待后端保存后通过 message-added 刷新')
+    // STT 消息由主进程统一处理保存和过滤，前端只等待 message-added 事件刷新
+    console.log('[AppStore] STT 消息已收到，等待 message-added 事件刷新:', text)
   }
 
   /**

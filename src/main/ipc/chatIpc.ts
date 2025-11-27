@@ -2,6 +2,7 @@
  * 聊天 IPC 通道
  * 提供聊天会话和消息的数据库操作接口
  */
+import type { DbChatMessage } from '../types/database'
 import { Buffer } from 'node:buffer'
 import { ipcMain } from 'electron'
 import { DatabaseManager } from '../services/database'
@@ -72,7 +73,7 @@ export function registerChatIpc(): void {
       const messages = db.getChatMessages(sessionId, limit, offset)
 
       // 将 Buffer 转换为 Uint8Array，以便正确传输到渲染进程
-      const processedMessages = messages.map((msg: any) => {
+      const processedMessages = messages.map((msg: DbChatMessage) => {
         if (msg.image_data && Buffer.isBuffer(msg.image_data)) {
           return {
             ...msg,

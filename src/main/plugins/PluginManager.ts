@@ -160,11 +160,11 @@ export class PluginManager {
         })
         console.log(`[PluginManager] ✓ ${plugin.name} 初始化完成 (${Date.now() - startTime}ms)`)
       }
-      catch (error: any) {
+      catch (error) {
         results.push({
           pluginName: plugin.name,
           success: false,
-          error,
+          error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
         console.error(`[PluginManager] ✗ ${plugin.name} 初始化失败:`, error)
@@ -205,11 +205,11 @@ export class PluginManager {
         })
         console.log(`[PluginManager] ✓ ${plugin.name} 启动完成 (${Date.now() - startTime}ms)`)
       }
-      catch (error: any) {
+      catch (error) {
         results.push({
           pluginName: plugin.name,
           success: false,
-          error,
+          error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
         console.error(`[PluginManager] ✗ ${plugin.name} 启动失败:`, error)
@@ -227,7 +227,7 @@ export class PluginManager {
    */
   private async broadcast(
     methodName: string,
-    args: any[] = [],
+    args: unknown[] = [],
     options: BroadcastOptions = {},
   ): Promise<PluginExecutionResult[]> {
     const opts = { ...this.defaultBroadcastOptions, ...options }
@@ -240,7 +240,7 @@ export class PluginManager {
     const executePlugin = async (plugin: Plugin): Promise<PluginExecutionResult> => {
       const startTime = Date.now()
       try {
-        const method = (plugin as any)[methodName]
+        const method = (plugin as unknown as Record<string, (...args: unknown[]) => Promise<void>>)[methodName]
         if (typeof method === 'function') {
           const promise = method.apply(plugin, args)
 
@@ -264,12 +264,12 @@ export class PluginManager {
           duration: Date.now() - startTime,
         }
       }
-      catch (error: any) {
+      catch (error) {
         console.error(`[PluginManager] 插件 ${plugin.name} 执行 ${methodName} 失败:`, error)
         return {
           pluginName: plugin.name,
           success: false,
-          error,
+          error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         }
       }
@@ -387,11 +387,11 @@ export class PluginManager {
         })
         console.log(`[PluginManager] ✓ ${plugin.name} 已停止`)
       }
-      catch (error: any) {
+      catch (error) {
         results.push({
           pluginName: plugin.name,
           success: false,
-          error,
+          error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
         console.error(`[PluginManager] ✗ ${plugin.name} 停止失败:`, error)
@@ -422,11 +422,11 @@ export class PluginManager {
         })
         console.log(`[PluginManager] ✓ ${plugin.name} 已关闭`)
       }
-      catch (error: any) {
+      catch (error) {
         results.push({
           pluginName: plugin.name,
           success: false,
-          error,
+          error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
         console.error(`[PluginManager] ✗ ${plugin.name} 关闭失败:`, error)

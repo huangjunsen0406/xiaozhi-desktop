@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import type { MqttInfo } from '../services/configManagerDB'
 import { getConfigManager } from '../services/configManagerDB'
 
 /**
@@ -27,7 +28,7 @@ export function registerConfigIpc(): void {
    */
   ipcMain.handle('config:get', (_, key: string) => {
     try {
-      let value: any
+      let value: string | null | MqttInfo = null
       // 根据 key 调用对应的方法
       switch (key) {
         case 'client_id':
@@ -69,34 +70,34 @@ export function registerConfigIpc(): void {
   /**
    * 设置单个配置值
    */
-  ipcMain.handle('config:set', (_, key: string, value: any) => {
+  ipcMain.handle('config:set', (_, key: string, value: string | MqttInfo | null) => {
     try {
       let success = false
       // 根据 key 调用对应的方法
       switch (key) {
         case 'client_id':
-          success = configManager.setClientId(value)
+          success = configManager.setClientId(value as string)
           break
         case 'device_id':
-          success = configManager.setDeviceId(value)
+          success = configManager.setDeviceId(value as string)
           break
         case 'ota_version_url':
-          success = configManager.setOtaVersionUrl(value)
+          success = configManager.setOtaVersionUrl(value as string)
           break
         case 'websocket_url':
-          success = configManager.setWebsocketUrl(value)
+          success = configManager.setWebsocketUrl(value as string)
           break
         case 'websocket_access_token':
-          success = configManager.setWebsocketAccessToken(value)
+          success = configManager.setWebsocketAccessToken(value as string)
           break
         case 'mqtt_info':
-          success = configManager.setMqttInfo(value)
+          success = configManager.setMqttInfo(value as MqttInfo | null)
           break
         case 'activation_version':
-          success = configManager.setActivationVersion(value)
+          success = configManager.setActivationVersion(value as string)
           break
         case 'authorization_url':
-          success = configManager.setAuthorizationUrl(value)
+          success = configManager.setAuthorizationUrl(value as string)
           break
         default:
           success = false
@@ -113,12 +114,12 @@ export function registerConfigIpc(): void {
   /**
    * 批量更新配置
    */
-  ipcMain.handle('config:update-all', (_, config: any) => {
+  ipcMain.handle('config:update-all', (_, config: Record<string, string | undefined>) => {
     try {
       console.log('IPC: 批量更新配置', config)
 
       // 直接使用扁平格式更新
-      const updates: Record<string, any> = {}
+      const updates: Record<string, string | null> = {}
 
       if (config.client_id !== undefined) {
         updates.client_id = config.client_id
@@ -144,12 +145,12 @@ export function registerConfigIpc(): void {
 
       // MQTT 配置需要特殊处理
       if (config.mqtt_endpoint !== undefined) {
-        updates.mqtt_endpoint = config.mqtt_endpoint
-        updates.mqtt_client_id = config.mqtt_client_id
-        updates.mqtt_username = config.mqtt_username
-        updates.mqtt_password = config.mqtt_password
-        updates.mqtt_publish_topic = config.mqtt_publish_topic
-        updates.mqtt_subscribe_topic = config.mqtt_subscribe_topic
+        updates.mqtt_endpoint = config.mqtt_endpoint ?? null
+        updates.mqtt_client_id = config.mqtt_client_id ?? null
+        updates.mqtt_username = config.mqtt_username ?? null
+        updates.mqtt_password = config.mqtt_password ?? null
+        updates.mqtt_publish_topic = config.mqtt_publish_topic ?? null
+        updates.mqtt_subscribe_topic = config.mqtt_subscribe_topic ?? null
       }
 
       // 批量更新

@@ -158,8 +158,8 @@ async function cleanup(): Promise<void> {
 }
 
 // 监听来自主进程的指令
-window.api.onAudioCommand((command: string, data?: any) => {
-  console.log('[BackgroundAudio] 收到指令:', command, data)
+window.api.onAudioCommand((command: string, _data?: Record<string, unknown>) => {
+  console.log('[BackgroundAudio] 收到指令:', command)
 
   switch (command) {
     case 'initialize':

@@ -101,7 +101,13 @@ async function loadConfig(): Promise<void> {
  */
 async function handleSave(): Promise<void> {
   try {
-    const config: any = {
+    const config: {
+      enableNoiseReduction: boolean
+      enableEchoCancellation: boolean
+      conversationMode: 'auto' | 'realtime'
+      inputDeviceName?: string
+      outputDeviceName?: string
+    } = {
       enableNoiseReduction: enableNoiseReduction.value,
       enableEchoCancellation: enableEchoCancellation.value,
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',

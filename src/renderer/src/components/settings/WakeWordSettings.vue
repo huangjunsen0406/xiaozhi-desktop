@@ -63,8 +63,8 @@ async function loadConfig() {
 
     if (result.success && result.data) {
       enableWakeWord.value = result.data.enabled
-      wakeWord.value = result.data.keyword
-      threshold.value = result.data.threshold
+      wakeWord.value = result.data.keyword ?? ''
+      threshold.value = result.data.threshold ?? 0.2
       language.value = result.data.language
     }
     else {

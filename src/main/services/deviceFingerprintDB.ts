@@ -1,3 +1,4 @@
+import type { DbDeviceInfo } from '../types/database'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { hostname, networkInterfaces } from 'node:os'
 import process from 'node:process'
@@ -18,7 +19,7 @@ interface DeviceFingerprint {
 export class DeviceFingerprintManager {
   private static instance: DeviceFingerprintManager | null = null
   private db: DatabaseManager
-  private deviceCache: any = null
+  private deviceCache: DbDeviceInfo | null = null
 
   private constructor() {
     this.db = DatabaseManager.getInstance()
