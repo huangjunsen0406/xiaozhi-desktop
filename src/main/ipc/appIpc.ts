@@ -1,3 +1,4 @@
+import type { ChatPlugin } from '../plugins/ChatPlugin'
 import type { IpcContext } from '../types/ipc'
 import { ipcMain } from 'electron'
 import { registerShortcutIpcChannels } from './shortcutIpc'
@@ -98,6 +99,21 @@ export function registerAppIpc(context: IpcContext): void {
     }
     catch (error) {
       console.error('[App IPC] 发送文本消息失败:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // 获取当前流式消息状态（用于新窗口补偿）
+  ipcMain.handle('chat:get-streaming-state', () => {
+    try {
+      const chatPlugin = application.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+      if (!chatPlugin)
+        return { success: true, data: null }
+
+      return { success: true, data: chatPlugin.getStreamingState() }
+    }
+    catch (error) {
+      console.error('[App IPC] 获取流式消息状态失败:', error)
       return { success: false, error: String(error) }
     }
   })

@@ -141,6 +141,14 @@ export interface ChatMessage {
   timestamp: number
 }
 
+export interface StreamingState {
+  sessionId: string
+  role: 'assistant'
+  content: string
+  emotion?: string
+  updatedAt: number
+}
+
 export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
@@ -269,6 +277,10 @@ export interface RendererApi {
   chatRemoveMessageAddedListener: () => void
   chatOnMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => void
   chatRemoveMessagesBatchAddedListener: () => void
+  chatGetStreamingState: () => Promise<StreamingState | null>
+  chatOnStreamingUpdate: (callback: (data: StreamingState) => void) => void
+  chatOnStreamingFinalize: (callback: (data: StreamingState) => void) => void
+  chatRemoveStreamingListeners: () => void
   // Shortcut APIs
   shortcutGetAll: () => Promise<ShortcutConfig[]>
   shortcutUpdate: (action: string, accelerator: string | null) => Promise<{ success: boolean }>

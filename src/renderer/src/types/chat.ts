@@ -23,6 +23,17 @@ export interface ChatMessage {
 }
 
 /**
+ * 流式消息状态（由主进程广播）
+ */
+export interface StreamingState {
+  sessionId: string
+  role: 'assistant'
+  content: string
+  emotion?: string
+  updatedAt: number
+}
+
+/**
  * 聊天会话
  */
 export interface ChatSession {

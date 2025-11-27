@@ -36,8 +36,14 @@ export class ChatPlugin extends Plugin {
     pendingImageData: null as { type: string, data: string } | null,
   }
 
-  // 记录最近一次通过 sendText 发送的文本（用于避免 STT 重复保存）
-  private lastSentText: string | null = null
+  // 当前流式消息状态（主进程作为唯一来源）
+  private streamingState: {
+    sessionId: string
+    role: 'assistant'
+    content: string
+    emotion?: string
+    updatedAt: number
+  } | null = null
 
   /**
    * 插件初始化
@@ -132,11 +138,19 @@ export class ChatPlugin extends Plugin {
   }
 
   /**
-   * 设置最近发送的文本（用于过滤 STT 重复）
-   * 由 Application.sendText() 调用
+   * 获取当前流式消息状态快照
    */
-  setLastSentText(text: string | null): void {
-    this.lastSentText = text
+  getStreamingState(): {
+    sessionId: string
+    role: 'assistant'
+    content: string
+    emotion?: string
+    updatedAt: number
+  } | null {
+    if (!this.streamingState)
+      return null
+
+    return { ...this.streamingState }
   }
 
   /**
@@ -178,20 +192,14 @@ export class ChatPlugin extends Plugin {
   }
 
   /**
-   * 处理 STT 消息（保存用户语音识别文本）
+   * 处理 STT 消息（保存用户输入）
+   * 统一处理所有用户输入，包括语音和文本输入框
    */
   private async handleSttMessage(text: string): Promise<void> {
     try {
-      // 过滤掉音频触发工具的提示消息（用户真实文本已在 sendTextViaAudio 中保存）
+      // 过滤掉音频触发工具的提示消息
       if (text === '获取用户输入文本。') {
         console.log('[ChatPlugin] 过滤掉工具触发提示消息，跳过保存')
-        return
-      }
-
-      // 过滤掉 sendText 发送后服务端返回的 STT 消息（用户文本已在 sendText 中保存）
-      if (this.lastSentText && text === this.lastSentText) {
-        console.log('[ChatPlugin] 过滤掉 sendText 返回的 STT 消息，跳过保存')
-        this.lastSentText = null // 清空标记
         return
       }
 
@@ -203,17 +211,17 @@ export class ChatPlugin extends Plugin {
         session_id: this.currentSessionId,
         role: 'user',
         content: text,
-        source_type: 'voice',
+        source_type: 'text',
         timestamp: Math.floor(Date.now() / 1000),
       })
 
-      console.log(`[ChatPlugin] 已保存 STT 消息 [${result.id}]: ${text.substring(0, 30)}...`)
+      console.log(`[ChatPlugin] 已保存用户消息 [${result.id}]: ${text.substring(0, 30)}...`)
 
       // 广播消息保存事件
       this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'user')
     }
     catch (error) {
-      console.error('[ChatPlugin] 保存 STT 消息失败:', error)
+      console.error('[ChatPlugin] 保存用户消息失败:', error)
     }
   }
 
@@ -226,21 +234,66 @@ export class ChatPlugin extends Plugin {
 
     if (state === 'start') {
       // TTS 开始，重置累积器
-      this.messageAccumulator.ttsContent = ''
-      console.log('[ChatPlugin] TTS 开始，重置累积器')
-    }
-    else if (state === 'sentence_end' && text) {
-      // 句子播放完成，累积内容（换行分隔）
-      if (this.messageAccumulator.ttsContent) {
-        this.messageAccumulator.ttsContent += `\n${text}`
+      await this.checkAndSwitchSession()
+
+      // 如果已经有未完成的流式内容，不要清空，继续在同一条里追加
+      const hasOngoingContent = !!this.streamingState?.content || !!this.messageAccumulator.ttsContent
+      if (!hasOngoingContent) {
+        this.messageAccumulator.ttsContent = ''
+        console.log('[ChatPlugin] TTS 开始，重置累积器')
+
+        this.streamingState = {
+          sessionId: this.currentSessionId,
+          role: 'assistant',
+          content: '',
+          emotion: this.messageAccumulator.currentEmotion || undefined,
+          updatedAt: Date.now(),
+        }
+
+        this.getUIPlugin()?.broadcastStreamingUpdate({ ...this.streamingState })
       }
       else {
-        this.messageAccumulator.ttsContent = text
+        console.log('[ChatPlugin] 检测到未完成的流式内容，继续追加，不重置')
+        // 确保会话 ID 对齐
+        if (this.streamingState) {
+          this.streamingState.sessionId = this.currentSessionId
+        }
+      }
+    }
+    else if ((state === 'sentence_start' || state === 'sentence_end') && text) {
+      // 过滤工具提示行（以 % 开头）
+      if (text.startsWith('% ')) {
+        console.log('[ChatPlugin] 过滤工具提示句子:', text)
+        return
+      }
+
+      // 以 sentence_start 为准累积内容，sentence_end 仅用作刷新
+      if (state === 'sentence_start') {
+        if (this.messageAccumulator.ttsContent) {
+          this.messageAccumulator.ttsContent += `\n${text}`
+        }
+        else {
+          this.messageAccumulator.ttsContent = text
+        }
+      }
+
+      if (this.streamingState) {
+        this.streamingState.content = this.messageAccumulator.ttsContent
+        this.streamingState.emotion = this.messageAccumulator.currentEmotion || undefined
+        this.streamingState.updatedAt = Date.now()
+        this.getUIPlugin()?.broadcastStreamingUpdate({ ...this.streamingState })
       }
     }
     else if (state === 'stop') {
       // TTS 结束，保存完整回复
       console.log('[ChatPlugin] TTS 结束，准备保存')
+
+      if (this.streamingState) {
+        this.streamingState.content = this.messageAccumulator.ttsContent
+        this.streamingState.emotion = this.messageAccumulator.currentEmotion || undefined
+        this.streamingState.updatedAt = Date.now()
+        this.getUIPlugin()?.broadcastStreamingFinalize({ ...this.streamingState })
+      }
       await this.saveTtsReply()
     }
   }
@@ -306,28 +359,7 @@ export class ChatPlugin extends Plugin {
     this.messageAccumulator.ttsContent = ''
     this.messageAccumulator.currentEmotion = ''
     this.messageAccumulator.pendingImageData = null
-  }
-
-  /**
-   * 保存用户文本消息（由 Application.sendText() 调用）
-   */
-  async saveUserTextMessage(text: string): Promise<void> {
-    try {
-      await this.checkAndSwitchSession()
-      const db = DatabaseManager.getInstance()
-      const result = db.addChatMessage({
-        session_id: this.currentSessionId,
-        role: 'user',
-        content: text,
-        source_type: 'text',
-        timestamp: Math.floor(Date.now() / 1000),
-      })
-      console.log(`[ChatPlugin] 已保存用户文本消息 [${result.id}]`)
-      this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'user')
-    }
-    catch (error) {
-      console.error('[ChatPlugin] 保存用户文本消息失败:', error)
-    }
+    this.streamingState = null
   }
 
   /**
@@ -370,7 +402,6 @@ export class ChatPlugin extends Plugin {
 
     // 重置状态
     this.resetMessageAccumulator()
-    this.lastSentText = null
 
     await super.shutdown()
 

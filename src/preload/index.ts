@@ -117,6 +117,10 @@ const api = {
   chatRemoveMessageAddedListener: chatApi.removeMessageAddedListener,
   chatOnMessagesBatchAdded: chatApi.onMessagesBatchAdded,
   chatRemoveMessagesBatchAddedListener: chatApi.removeMessagesBatchAddedListener,
+  chatGetStreamingState: chatApi.getStreamingState,
+  chatOnStreamingUpdate: chatApi.onStreamingUpdate,
+  chatOnStreamingFinalize: chatApi.onStreamingFinalize,
+  chatRemoveStreamingListeners: chatApi.removeStreamingListeners,
 
   // 快捷键 API
   shortcutGetAll: shortcutApi.getAll,

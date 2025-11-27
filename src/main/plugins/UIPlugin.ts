@@ -128,6 +128,32 @@ export class UIPlugin extends Plugin {
   }
 
   /**
+   * 广播流式消息增量更新
+   */
+  broadcastStreamingUpdate(data: {
+    sessionId: string
+    role: 'assistant'
+    content: string
+    emotion?: string
+    updatedAt: number
+  }): void {
+    this.broadcastToRenderer('chat:streaming-update', data)
+  }
+
+  /**
+   * 广播流式消息完成（用于原子切换到持久化消息）
+   */
+  broadcastStreamingFinalize(data: {
+    sessionId: string
+    role: 'assistant'
+    content: string
+    emotion?: string
+    updatedAt: number
+  }): void {
+    this.broadcastToRenderer('chat:streaming-finalize', data)
+  }
+
+  /**
    * 广播消息到渲染进程
    * @param channel - IPC 通道名称
    * @param data - 要发送的数据

@@ -1,5 +1,5 @@
 import type { ChatMessage as IpcChatMessage, ChatSession as IpcChatSession } from '../../../preload/index.d'
-import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from '../types/chat'
+import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage, StreamingState } from '../types/chat'
 /**
  * 全局应用 Store
  * 统一管理设备状态、通话状态、会话、消息等
@@ -65,7 +65,7 @@ export const useAppStore = defineStore('app', () => {
   const accumulatedContent = ref<string>('')
 
   /** 待保存的图片数据 */
-  const pendingImageData = ref<string | null>(null)
+  // 图片数据持久化由主进程负责，这里仅做 UI 展示
 
   // ==================== 计算属性 ====================
 
@@ -139,7 +139,7 @@ export const useAppStore = defineStore('app', () => {
 
   /**
    * 发送文本消息
-   * 注意：消息保存和过滤由主进程 ChatPlugin 统一处理，前端通过 message-added 事件刷新
+   * 不立即显示到界面，等待服务器返回 STT 消息后由 message-added 事件统一刷新
    */
   async function sendText(text: string): Promise<void> {
     const trimmedText = text.trim()
@@ -148,8 +148,9 @@ export const useAppStore = defineStore('app', () => {
     }
 
     try {
+      // 发送到服务器，等待 STT 返回后再显示
       await window.api.appSendText(trimmedText)
-      console.log('[AppStore] 文本消息已发送:', trimmedText)
+      console.log('[AppStore] 文本消息已发送，等待 STT 返回:', trimmedText)
     }
     catch (error) {
       console.error('[AppStore] 发送文本失败:', error)
@@ -244,6 +245,26 @@ export const useAppStore = defineStore('app', () => {
     try {
       console.log('[AppStore] 加载会话消息:', sessionId)
 
+      // 如果当前会话正处于流式输出，先暂存占位内容，避免被覆盖
+      const keepStreamingPlaceholder = (
+        isStreaming.value
+        && streamingMessageIndex.value >= 0
+        && sessionId === currentSessionId.value
+      )
+      const currentStreamingMsg = keepStreamingPlaceholder
+        ? messages.value[streamingMessageIndex.value]
+        : null
+      const streamingPlaceholder = currentStreamingMsg
+        ? { ...currentStreamingMsg }
+        : keepStreamingPlaceholder
+          ? {
+              role: 'assistant' as const,
+              content: accumulatedContent.value,
+              emotion: emotion.value,
+              isStreaming: true,
+            }
+          : null
+
       const msgs = await window.api.chatGetMessages(sessionId)
       messages.value = msgs.map((m: IpcChatMessage) => ({
         id: m.id,
@@ -253,6 +274,18 @@ export const useAppStore = defineStore('app', () => {
         imageData: m.image_data ?? undefined,
         timestamp: m.timestamp,
       }))
+
+      // 重新插入流式占位，防止被加载覆盖到用户气泡
+      if (keepStreamingPlaceholder && streamingPlaceholder) {
+        messages.value.push({
+          role: streamingPlaceholder.role ?? 'assistant',
+          content: streamingPlaceholder.content ?? accumulatedContent.value,
+          emotion: streamingPlaceholder.emotion ?? emotion.value,
+          isStreaming: true,
+        })
+        streamingMessageIndex.value = messages.value.length - 1
+        isStreaming.value = true
+      }
 
       console.log('[AppStore] 消息已加载，数量:', messages.value.length)
     }
@@ -299,6 +332,14 @@ export const useAppStore = defineStore('app', () => {
     try {
       console.log('[AppStore] 切换会话:', sessionId)
 
+      const isSameSession = currentSessionId.value === sessionId
+
+      // 如果当前正在流式同一会话，避免覆盖流式内容
+      if (isSameSession && isStreaming.value) {
+        console.log('[AppStore] 当前会话正在流式，跳过刷新消息列表')
+        return
+      }
+
       // 加载消息
       const msgs = await window.api.chatGetMessages(sessionId)
       messages.value = msgs.map((m: IpcChatMessage) => ({
@@ -314,7 +355,9 @@ export const useAppStore = defineStore('app', () => {
       currentSessionId.value = sessionId
 
       // 重置流式状态
-      resetStreamingState()
+      if (!isSameSession) {
+        resetStreamingState()
+      }
 
       // 更新会话列表的激活状态
       sessions.value.forEach((s) => {
@@ -334,6 +377,12 @@ export const useAppStore = defineStore('app', () => {
   async function deleteSession(sessionId: string) {
     try {
       console.log('[AppStore] 删除会话:', sessionId)
+
+      // 当天会话禁止删除，避免后续消息写入历史会话
+      if (isTodaySession(sessionId)) {
+        console.warn('[AppStore] 当天会话禁止删除，已忽略操作')
+        return
+      }
 
       await window.api.chatDeleteSession(sessionId)
 
@@ -382,7 +431,8 @@ export const useAppStore = defineStore('app', () => {
       emotion.value = message.emotion
     }
     else if (message.type === 'tts') {
-      await handleTtsMessage(message)
+      // 流式显示交给主进程广播的 streaming-update 事件
+      return
     }
     else if (message.type === 'mcp') {
       await handleMcpMessage(message)
@@ -402,134 +452,6 @@ export const useAppStore = defineStore('app', () => {
 
     // STT 消息由主进程统一处理保存和过滤，前端只等待 message-added 事件刷新
     console.log('[AppStore] STT 消息已收到，等待 message-added 事件刷新:', text)
-  }
-
-  /**
-   * 处理 TTS 消息（AI 回复）
-   */
-  async function handleTtsMessage(message: ServerMessage) {
-    const state = message.state
-    const text = message.text
-
-    // 过滤工具调用提示
-    if (text?.startsWith('% ')) {
-      return
-    }
-
-    if (state === 'start') {
-      console.log('[AppStore] TTS 开始')
-
-      // 如果之前有未完成的流式消息，先保存
-      if (isStreaming.value && accumulatedContent.value) {
-        console.log('[AppStore] 检测到新的 TTS start，保存之前的消息')
-        await handleTtsStop()
-      }
-
-      // 开始新的流式输出
-      isStreaming.value = true
-    }
-    else if (state === 'sentence_start' && text) {
-      handleSentenceStart(text)
-    }
-    else if (state === 'sentence_end' && text) {
-      handleSentenceEnd(text)
-    }
-    else if (state === 'stop') {
-      await handleTtsStop()
-    }
-  }
-
-  /**
-   * 处理 sentence_start
-   */
-  function handleSentenceStart(text: string) {
-    console.log('[AppStore] sentence_start:', text)
-
-    // 过滤工具调用提示（以 % 开头）
-    if (text.startsWith('% ')) {
-      console.log('[AppStore] 过滤工具调用提示:', text)
-      return
-    }
-
-    // 如果没有正在流式输出的消息，创建一个
-    if (streamingMessageIndex.value < 0) {
-      messages.value.push({
-        role: 'assistant',
-        content: '',
-        emotion: emotion.value,
-        isStreaming: true,
-      })
-      streamingMessageIndex.value = messages.value.length - 1
-    }
-
-    // 累积内容
-    if (accumulatedContent.value) {
-      accumulatedContent.value += `\n${text}`
-    }
-    else {
-      accumulatedContent.value = text
-    }
-
-    // 实时更新界面显示
-    if (streamingMessageIndex.value >= 0) {
-      messages.value[streamingMessageIndex.value].content = accumulatedContent.value
-    }
-
-    // 更新当前文本（MainView 显示用）
-    currentText.value = text
-  }
-
-  /**
-   * 处理 sentence_end
-   */
-  function handleSentenceEnd(text: string) {
-    console.log('[AppStore] sentence_end:', text)
-
-    // sentence_end 只是一个标记，表示句子播放完成
-    // 不需要再次累积内容，因为 sentence_start 已经添加过了
-    // 这里可以做一些其他的处理，比如记录日志等
-  }
-
-  /**
-   * 处理 TTS stop（完成显示）
-   * ⚠️ 主进程负责保存，这里只负责 UI 状态管理
-   */
-  async function handleTtsStop() {
-    console.log('[AppStore] TTS stop，完成显示')
-
-    if (!accumulatedContent.value && !pendingImageData.value) {
-      console.log('[AppStore] 没有需要显示的内容')
-      resetStreamingState()
-      return
-    }
-
-    // 检查是否已经处理过（防止重复）
-    const contentToSave = accumulatedContent.value
-    if (contentToSave && streamingMessageIndex.value >= 0) {
-      const currentMessage = messages.value[streamingMessageIndex.value]
-      // 如果当前消息已经不是 streaming 状态，说明已经处理过了
-      if (!currentMessage?.isStreaming) {
-        console.log('[AppStore] 消息已经处理过，跳过')
-        resetStreamingState()
-        return
-      }
-    }
-
-    // 标记流式消息为完成
-    if (streamingMessageIndex.value >= 0 && messages.value[streamingMessageIndex.value]) {
-      messages.value[streamingMessageIndex.value].isStreaming = false
-    }
-
-    // 清空待处理的图片数据（主进程已保存）
-    pendingImageData.value = null
-
-    console.log('[AppStore] 消息显示已完成')
-
-    // 重置状态
-    resetStreamingState()
-
-    // 刷新会话列表（显示最新的消息数量）
-    await loadSessions()
   }
 
   /**
@@ -582,39 +504,103 @@ export const useAppStore = defineStore('app', () => {
         imageData: bytes,
       }
     }
-    else {
-      messages.value.push({
-        role: 'assistant',
-        content: '[图片]',
-        imageData: bytes,
-      })
-    }
+    // 如果没有占位，等待主进程保存后通过 message-added 刷新，避免重复插入
+  }
 
-    // 保存图片数据待后续保存
-    pendingImageData.value = imageBase64
+  // ==================== 流式状态同步（主进程广播） ====================
+
+  /**
+   * 初次挂载时补偿当前的流式消息（如果存在）
+   */
+  async function hydrateStreamingState(snapshot: StreamingState | null): Promise<void> {
+    if (!snapshot)
+      return
+    await handleStreamingUpdate(snapshot)
   }
 
   /**
-   * 添加文本消息（用户手动输入）
-   * ⚠️ 主进程负责保存，这里只负责显示
-   * 注意：实际保存由 sendText() → appSendText() → Application.sendText() 完成
+   * 处理主进程的流式增量更新
    */
-  async function addTextMessage(text: string) {
-    console.log('[AppStore] 添加文本消息:', text)
+  async function handleStreamingUpdate(snapshot: StreamingState): Promise<void> {
+    if (!snapshot)
+      return
 
-    // 确保有会话
-    if (!currentSessionId.value) {
-      currentSessionId.value = await getTodaySession()
+    // 如果当前会话不同，切换并加载该会话，避免将流式消息插入旧会话
+    if (snapshot.sessionId !== currentSessionId.value) {
+      currentSessionId.value = snapshot.sessionId
+      sessions.value.forEach((s) => {
+        s.active = s.sessionId === snapshot.sessionId
+      })
+      await loadMessages(snapshot.sessionId)
+    }
+    else if (!currentSessionId.value) {
+      currentSessionId.value = snapshot.sessionId
     }
 
-    // 只显示到界面（主进程通过 sendText 保存）
-    messages.value.push({
-      role: 'user',
-      content: text,
-      timestamp: Math.floor(Date.now() / 1000),
-    })
+    isStreaming.value = true
+    accumulatedContent.value = snapshot.content || ''
 
-    console.log('[AppStore] 文本消息已显示')
+    // 创建或更新流式占位消息
+    if (streamingMessageIndex.value < 0) {
+      messages.value.push({
+        role: snapshot.role,
+        content: snapshot.content || '',
+        emotion: snapshot.emotion,
+        isStreaming: true,
+      })
+      streamingMessageIndex.value = messages.value.length - 1
+    }
+    else if (messages.value[streamingMessageIndex.value]) {
+      const currentMessage = messages.value[streamingMessageIndex.value]
+      currentMessage.content = snapshot.content || ''
+      currentMessage.emotion = snapshot.emotion ?? currentMessage.emotion
+      currentMessage.isStreaming = true
+    }
+
+    // 更新当前显示文本（取最后一句）
+    const lines = (snapshot.content || '').split('\n').filter(Boolean)
+    currentText.value = lines.length > 0 ? lines[lines.length - 1] : snapshot.content || ''
+  }
+
+  /**
+   * 处理流式完成事件（stop 前广播），保持内容直到 DB 刷新覆盖
+   */
+  async function handleStreamingFinalize(snapshot: StreamingState): Promise<void> {
+    if (!snapshot)
+      return
+
+    // 保证会话切换到流式所属会话
+    if (snapshot.sessionId !== currentSessionId.value) {
+      currentSessionId.value = snapshot.sessionId
+      sessions.value.forEach((s) => {
+        s.active = s.sessionId === snapshot.sessionId
+      })
+      await loadMessages(snapshot.sessionId)
+    }
+    else if (!currentSessionId.value) {
+      currentSessionId.value = snapshot.sessionId
+    }
+
+    accumulatedContent.value = snapshot.content || ''
+
+    if (streamingMessageIndex.value >= 0 && messages.value[streamingMessageIndex.value]) {
+      const currentMessage = messages.value[streamingMessageIndex.value]
+      currentMessage.content = snapshot.content || ''
+      currentMessage.emotion = snapshot.emotion ?? currentMessage.emotion
+      currentMessage.isStreaming = false
+    }
+    else if (snapshot.content) {
+      messages.value.push({
+        role: snapshot.role,
+        content: snapshot.content,
+        emotion: snapshot.emotion,
+        isStreaming: false,
+      })
+    }
+
+    isStreaming.value = false
+    streamingMessageIndex.value = -1
+    currentText.value = ''
   }
 
   /**
@@ -701,7 +687,9 @@ export const useAppStore = defineStore('app', () => {
     // 消息处理
     handleServerMessage,
     handleImageCaptured,
-    addTextMessage,
+    hydrateStreamingState,
+    handleStreamingUpdate,
+    handleStreamingFinalize,
     updateStreamingContent,
     clearMessages,
   }

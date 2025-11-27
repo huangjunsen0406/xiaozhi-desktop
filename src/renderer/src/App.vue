@@ -89,6 +89,18 @@ onMounted(async () => {
       appStore.handleServerMessage(message)
     })
 
+    // 补偿当前的流式状态（避免新窗口错过已播出的内容）
+    const streamingSnapshot = await window.api.chatGetStreamingState()
+    appStore.hydrateStreamingState(streamingSnapshot)
+
+    // 监听流式增量和完成事件
+    window.api.chatOnStreamingUpdate((data) => {
+      void appStore.handleStreamingUpdate(data)
+    })
+    window.api.chatOnStreamingFinalize((data) => {
+      void appStore.handleStreamingFinalize(data)
+    })
+
     // 监听图片捕获事件
     window.api.chatOnImageCaptured((data: { imageBase64: string }) => {
       appStore.handleImageCaptured(data.imageBase64)
@@ -97,21 +109,48 @@ onMounted(async () => {
     // 监听单条消息添加事件
     window.api.chatOnMessageAdded((data) => {
       console.log('[App] 收到消息添加事件:', data)
-      // 如果是当前会话的消息，刷新消息列表
-      if (data.sessionId === appStore.currentSessionId) {
-        appStore.loadMessages(data.sessionId)
+
+      // 仅在 AI 流式过程中跳过 AI 消息，用户消息仍需刷新
+      if (appStore.isStreaming && data.role === 'assistant') {
+        console.log('[App] AI 正在流式，跳过覆盖消息列表')
+        // 只刷新会话列表（更新消息计数）
+        appStore.loadSessions()
+        return
       }
-      // 无论如何都刷新会话列表（更新消息计数）
+
+      // 对齐当前会话到事件会话，避免忽略新会话
+      if (appStore.currentSessionId !== data.sessionId) {
+        appStore.currentSessionId = data.sessionId
+        appStore.sessions.forEach((s) => {
+          s.active = s.sessionId === data.sessionId
+        })
+      }
+
+      appStore.loadMessages(data.sessionId)
+      // 刷新会话列表（更新消息计数）
       appStore.loadSessions()
     })
 
     // 监听批量消息添加事件（图片+文本）
     window.api.chatOnMessagesBatchAdded((data) => {
       console.log('[App] 收到批量消息添加事件:', data)
-      // 如果是当前会话的消息，刷新消息列表
-      if (data.sessionId === appStore.currentSessionId) {
-        appStore.loadMessages(data.sessionId)
+
+      // 如果 AI 正在流式，等待 finalize 后的刷新
+      if (appStore.isStreaming) {
+        console.log('[App] AI 正在流式，跳过覆盖消息列表')
+        // 只刷新会话列表（更新消息计数）
+        appStore.loadSessions()
+        return
       }
+
+      if (appStore.currentSessionId !== data.sessionId) {
+        appStore.currentSessionId = data.sessionId
+        appStore.sessions.forEach((s) => {
+          s.active = s.sessionId === data.sessionId
+        })
+      }
+
+      appStore.loadMessages(data.sessionId)
       // 刷新会话列表
       appStore.loadSessions()
     })
@@ -124,6 +163,7 @@ onMounted(async () => {
       window.api.chatRemoveImageCapturedListener()
       window.api.chatRemoveMessageAddedListener()
       window.api.chatRemoveMessagesBatchAddedListener()
+      window.api.chatRemoveStreamingListeners()
     })
   }
   catch (error) {

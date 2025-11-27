@@ -442,6 +442,7 @@ export class Application {
    * 发送文本消息
    * 如果正在说话中，先中止语音输出
    * 然后发送文本作为唤醒词检测消息
+   * 不保存到数据库，等待服务器返回 STT 消息后统一保存
    */
   async sendText(text: string): Promise<void> {
     try {
@@ -460,21 +461,13 @@ export class Application {
         return
       }
 
-      // 通过 ChatPlugin 保存用户文本消息
-      const chatPlugin = this.plugins.getPlugin<ChatPlugin>('ChatPlugin')
-      if (chatPlugin) {
-        await chatPlugin.saveUserTextMessage(text)
-        // 记录发送的文本，用于避免 STT 重复保存
-        chatPlugin.setLastSentText(text)
-      }
-
       // 发送唤醒词检测消息（服务端会将文本作为用户输入处理）
+      // 服务器会返回 STT 消息，由 ChatPlugin 统一保存
       await this.protocol!.sendWakeWordDetected(text)
-      console.log('[Application] 文本消息已发送')
+      console.log('[Application] 文本消息已发送，等待服务器返回 STT')
     }
     catch (error) {
       console.error('[Application] 发送文本消息失败:', error)
-      this.plugins.getPlugin<ChatPlugin>('ChatPlugin')?.setLastSentText(null)
     }
   }
 

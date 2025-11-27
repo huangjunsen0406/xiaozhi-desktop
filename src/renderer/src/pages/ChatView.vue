@@ -45,21 +45,23 @@ onMounted(async () => {
   // 加载会话列表
   await appStore.loadSessions()
 
-  // 自动切换到当前会话（如果有的话）
-  if (appStore.currentSessionId) {
-    console.log('[ChatView] 自动选中当前会话:', appStore.currentSessionId)
-    await switchSession(appStore.currentSessionId)
-  }
-  else if (appStore.sessions.length > 0) {
-    // 如果没有当前会话，选中第一个
-    console.log('[ChatView] 自动选中第一个会话:', appStore.sessions[0].sessionId)
-    await switchSession(appStore.sessions[0].sessionId)
+  // 确保有当前会话
+  if (!appStore.currentSessionId) {
+    if (appStore.sessions.length > 0) {
+      // 如果没有当前会话但有会话列表，切换到第一个
+      console.log('[ChatView] 切换到第一个会话:', appStore.sessions[0].sessionId)
+      await switchSession(appStore.sessions[0].sessionId)
+    }
+    else {
+      // 如果没有任何会话，创建今天的会话
+      const sessionId = await appStore.getTodaySession()
+      console.log('[ChatView] 创建今天的会话:', sessionId)
+      appStore.currentSessionId = sessionId
+    }
   }
   else {
-    // 如果没有任何会话，创建今天的会话
-    const sessionId = await appStore.getTodaySession()
-    console.log('[ChatView] 创建今天的会话:', sessionId)
-    await appStore.switchSession(sessionId)
+    // 如果已经有当前会话，直接使用全局共享的 messages，不重新加载
+    console.log('[ChatView] 使用当前会话:', appStore.currentSessionId, '消息数:', appStore.messages.length)
   }
 
   // 滚动到底部
@@ -272,7 +274,7 @@ function handleKeydown(event: KeyboardEvent) {
             v-if="item.active && isSidebarOpen"
             trigger="click"
             :options="[
-              { label: '删除对话', key: 'delete' },
+              { label: '删除对话', key: 'delete', disabled: appStore.isCurrentSessionToday && item.sessionId === appStore.currentSessionId },
             ]"
             @select="(key: string) => key === 'delete' && deleteSession(item.sessionId)"
           >
