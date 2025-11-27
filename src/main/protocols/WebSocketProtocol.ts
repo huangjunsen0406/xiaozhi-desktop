@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
 import { getConfigManager } from '../services/configManagerDB'
 import { Protocol } from './Protocol'
+
 /**
  * WebSocket 协议实现
  */
@@ -28,6 +29,22 @@ export class WebSocketProtocol extends Protocol {
   private pingTimeout: NodeJS.Timeout | null = null
   private readonly PING_INTERVAL = 30000 // 30秒
   private readonly PING_TIMEOUT = 10000 // 10秒
+
+  // ========== 事件监听器引用（用于清理） ==========
+  private messageHandler: ((data: WebSocket.Data) => void) | null = null
+  private closeHandler: ((code: number, reason: Buffer) => void) | null = null
+  private errorHandler: ((error: Error) => void) | null = null
+  private pingHandler: (() => void) | null = null
+  private pongHandler: (() => void) | null = null
+
+  // ========== 连接过程中的定时器引用 ==========
+  private connectionTimeout: NodeJS.Timeout | null = null
+  private helloTimeout: NodeJS.Timeout | null = null
+  private helloCheckInterval: NodeJS.Timeout | null = null
+
+  // ========== 重连控制 ==========
+  private reconnectDelayTimeout: NodeJS.Timeout | null = null
+  private isHandlingConnectionLoss: boolean = false
 
   constructor() {
     super()
@@ -67,6 +84,11 @@ export class WebSocketProtocol extends Protocol {
     }
 
     try {
+      // 重连前先彻底清理旧连接
+      if (this.ws) {
+        await this.cleanup()
+      }
+
       // 重置状态
       this.helloReceived = false
 
@@ -94,51 +116,70 @@ export class WebSocketProtocol extends Protocol {
 
       // 等待连接建立
       return new Promise((resolve, reject) => {
-        const connectionTimeout = setTimeout(() => {
+        // 使用类成员保存定时器引用
+        this.connectionTimeout = setTimeout(() => {
+          this.clearConnectionTimers()
           reject(new Error('连接超时'))
         }, 10000)
 
         this.ws!.once('open', async () => {
-          clearTimeout(connectionTimeout)
+          // 清理连接超时定时器
+          if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout)
+            this.connectionTimeout = null
+          }
 
           try {
             // 发送 hello 消息
             await this.sendHelloMessage()
 
-            // 等待服务器 hello 响应
-            const helloTimeout = setTimeout(() => {
-              reject(new Error('等待服务器 hello 响应超时'))
-            }, 10000)
+            // 使用 Promise 等待 hello 响应（替代轮询）
+            await new Promise<void>((resolveHello, rejectHello) => {
+              // 设置超时
+              this.helloTimeout = setTimeout(() => {
+                this.helloTimeout = null
+                rejectHello(new Error('等待服务器 hello 响应超时'))
+              }, 10000)
 
-            const checkHello = setInterval(() => {
-              if (this.helloReceived) {
-                clearTimeout(helloTimeout)
-                clearInterval(checkHello)
-
-                this.connected = true
-                this.reconnectAttempts = 0
-                console.log('[WebSocketProtocol] 已连接到 WebSocket 服务器')
-
-                // 启动心跳
-                this.startHeartbeat()
-
-                // 通知连接状态变化
-                if (this.onConnectionStateChangedCallback) {
-                  this.onConnectionStateChangedCallback(true, '连接成功')
+              // 轮询检查（保留兼容性，但减少频率）
+              this.helloCheckInterval = setInterval(() => {
+                if (this.helloReceived) {
+                  if (this.helloTimeout) {
+                    clearTimeout(this.helloTimeout)
+                    this.helloTimeout = null
+                  }
+                  if (this.helloCheckInterval) {
+                    clearInterval(this.helloCheckInterval)
+                    this.helloCheckInterval = null
+                  }
+                  resolveHello()
                 }
+              }, 50) // 减少轮询间隔到 50ms
+            })
 
-                resolve(true)
-              }
-            }, 100)
+            // hello 握手成功
+            this.connected = true
+            this.reconnectAttempts = 0
+            console.log('[WebSocketProtocol] 已连接到 WebSocket 服务器')
+
+            // 启动心跳
+            this.startHeartbeat()
+
+            // 通知连接状态变化
+            if (this.onConnectionStateChangedCallback) {
+              this.onConnectionStateChangedCallback(true, '连接成功')
+            }
+
+            resolve(true)
           }
           catch (error) {
-            clearTimeout(connectionTimeout)
+            this.clearConnectionTimers()
             reject(error)
           }
         })
 
         this.ws!.once('error', (error) => {
-          clearTimeout(connectionTimeout)
+          this.clearConnectionTimers()
           reject(error)
         })
       })
@@ -160,36 +201,93 @@ export class WebSocketProtocol extends Protocol {
     if (!this.ws)
       return
 
-    this.ws.on('message', (data: WebSocket.Data) => {
-      this.handleMessage(data)
-    })
+    // 先移除旧监听器（防止重复注册）
+    this.removeEventListeners()
 
-    this.ws.on('close', (code: number, reason: Buffer) => {
+    // 创建并保存监听器引用
+    this.messageHandler = (data: WebSocket.Data) => {
+      this.handleMessage(data)
+    }
+
+    this.closeHandler = (code: number, reason: Buffer) => {
       if (!this.isClosing) {
         console.log(`[WebSocketProtocol] 连接已关闭: ${code} ${reason.toString()}`)
         this.handleConnectionLoss(`连接关闭: ${code} ${reason.toString()}`)
       }
-    })
+    }
 
-    this.ws.on('error', (error: Error) => {
+    this.errorHandler = (error: Error) => {
       console.error('[WebSocketProtocol] WebSocket 错误:', error)
       if (!this.isClosing) {
         this.handleConnectionLoss(`连接错误: ${error.message}`)
       }
-    })
+    }
 
-    this.ws.on('ping', () => {
-      // 收到服务器 ping,自动回复 pong
-      this.ws?.pong()
-    })
+    this.pingHandler = () => {
+      // ws 库会自动回复 pong，这里仅用于日志或扩展
+    }
 
-    this.ws.on('pong', () => {
-      // 收到 pong 响应,清除超时
+    this.pongHandler = () => {
+      // 收到 pong 响应，清除超时
       if (this.pingTimeout) {
         clearTimeout(this.pingTimeout)
         this.pingTimeout = null
       }
-    })
+    }
+
+    // 注册监听器
+    this.ws.on('message', this.messageHandler)
+    this.ws.on('close', this.closeHandler)
+    this.ws.on('error', this.errorHandler)
+    this.ws.on('ping', this.pingHandler)
+    this.ws.on('pong', this.pongHandler)
+  }
+
+  /**
+   * 移除事件监听器
+   */
+  private removeEventListeners(): void {
+    if (!this.ws)
+      return
+
+    if (this.messageHandler) {
+      this.ws.off('message', this.messageHandler)
+      this.messageHandler = null
+    }
+    if (this.closeHandler) {
+      this.ws.off('close', this.closeHandler)
+      this.closeHandler = null
+    }
+    if (this.errorHandler) {
+      this.ws.off('error', this.errorHandler)
+      this.errorHandler = null
+    }
+    if (this.pingHandler) {
+      this.ws.off('ping', this.pingHandler)
+      this.pingHandler = null
+    }
+    if (this.pongHandler) {
+      this.ws.off('pong', this.pongHandler)
+      this.pongHandler = null
+    }
+  }
+
+  /**
+   * 清理所有连接相关的定时器
+   */
+  private clearConnectionTimers(): void {
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout)
+      this.connectionTimeout = null
+    }
+    if (this.helloTimeout) {
+      clearTimeout(this.helloTimeout)
+      this.helloTimeout = null
+    }
+    if (this.helloCheckInterval) {
+      clearInterval(this.helloCheckInterval)
+      this.helloCheckInterval = null
+    }
   }
 
   /**
@@ -301,10 +399,17 @@ export class WebSocketProtocol extends Protocol {
       }
 
       try {
+        // 发送新 ping 前先清理旧的 timeout（防止覆盖导致泄漏）
+        if (this.pingTimeout) {
+          clearTimeout(this.pingTimeout)
+          this.pingTimeout = null
+        }
+
         this.ws.ping()
 
         // 设置 pong 超时
         this.pingTimeout = setTimeout(() => {
+          this.pingTimeout = null
           console.warn('[WebSocketProtocol] 心跳 pong 响应超时')
           this.handleConnectionLoss('心跳超时')
         }, this.PING_TIMEOUT)
@@ -334,6 +439,13 @@ export class WebSocketProtocol extends Protocol {
    * 处理连接丢失
    */
   private async handleConnectionLoss(reason: string): Promise<void> {
+    // 防止重复调用
+    if (this.isHandlingConnectionLoss) {
+      console.log(`[WebSocketProtocol] 已在处理连接丢失，忽略: ${reason}`)
+      return
+    }
+    this.isHandlingConnectionLoss = true
+
     console.warn(`[WebSocketProtocol] 连接丢失: ${reason}`)
 
     const wasConnected = this.connected
@@ -377,6 +489,8 @@ export class WebSocketProtocol extends Protocol {
         }
       }
     }
+
+    this.isHandlingConnectionLoss = false
   }
 
   /**
@@ -397,9 +511,20 @@ export class WebSocketProtocol extends Protocol {
 
     console.log(`[WebSocketProtocol] 尝试自动重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
 
-    // 指数退避,最大 30 秒
+    // 指数退避,最大 30 秒（使用可取消的延迟）
     const delay = Math.min(this.reconnectAttempts * 2000, 30000)
-    await new Promise(resolve => setTimeout(resolve, delay))
+    await new Promise<void>((resolve) => {
+      this.reconnectDelayTimeout = setTimeout(() => {
+        this.reconnectDelayTimeout = null
+        resolve()
+      }, delay)
+    })
+
+    // 如果在等待期间被取消，直接返回
+    if (this.isClosing) {
+      console.log('[WebSocketProtocol] 重连被取消')
+      return
+    }
 
     try {
       const success = await this.connect()
@@ -430,17 +555,39 @@ export class WebSocketProtocol extends Protocol {
 
   /**
    * 清理连接资源
+   *
+   * 清理顺序：
+   * 1. 重置状态标志
+   * 2. 清理所有定时器（连接定时器 + 心跳定时器）
+   * 3. 移除所有事件监听器
+   * 4. 关闭 WebSocket 连接
    */
   private async cleanup(): Promise<void> {
     this.connected = false
     this.helloReceived = false
+    this.isHandlingConnectionLoss = false
 
-    // 停止心跳
+    // 清理连接过程中的定时器
+    this.clearConnectionTimers()
+
+    // 停止心跳定时器
     this.stopHeartbeat()
+
+    // 取消重连延迟
+    if (this.reconnectDelayTimeout) {
+      clearTimeout(this.reconnectDelayTimeout)
+      this.reconnectDelayTimeout = null
+    }
+
+    // 移除事件监听器
+    this.removeEventListeners()
 
     // 关闭 WebSocket
     if (this.ws) {
       try {
+        // 移除所有剩余的监听器
+        this.ws.removeAllListeners()
+
         if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
           this.ws.close()
         }
