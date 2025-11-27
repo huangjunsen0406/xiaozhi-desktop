@@ -4,7 +4,8 @@ import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { AudioListener } from '../types/audio'
-import { ipcMain, webContents } from 'electron'
+import type { UIPlugin } from './UIPlugin'
+import { ipcMain } from 'electron'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
 import { Plugin } from './Plugin'
 
@@ -18,7 +19,7 @@ import { Plugin } from './Plugin'
  * - 编码 PCM → Opus，发送到协议层
  * - 接收协议层的 Opus 数据
  * - 解码 Opus → PCM，发送到渲染进程（IPC）
- * - 同步设备状态到渲染进程
+ * - 控制后台音频窗口采集
  */
 export class AudioPlugin extends Plugin {
   readonly name = 'AudioPlugin'
@@ -88,10 +89,10 @@ export class AudioPlugin extends Plugin {
   async onAudioChannelOpened(): Promise<void> {
     console.log('[AudioPlugin] 音频通道已打开')
 
-    // 强制广播状态更新（确保 channelOpen 状态同步）
+    // 通知 UIPlugin 广播状态更新（确保 channelOpen 状态同步）
     if (this.app) {
       const currentState = this.app.getDeviceState()
-      this.broadcastStateChanged(currentState)
+      this.getUIPlugin()?.broadcastState(currentState)
     }
   }
 
@@ -101,10 +102,10 @@ export class AudioPlugin extends Plugin {
   async onAudioChannelClosed(): Promise<void> {
     console.log('[AudioPlugin] 音频通道已关闭')
 
-    // 强制广播状态更新（即使设备状态没变，channelOpen 已经变化）
+    // 通知 UIPlugin 广播状态更新（即使设备状态没变，channelOpen 已经变化）
     if (this.app) {
       const currentState = this.app.getDeviceState()
-      this.broadcastStateChanged(currentState)
+      this.getUIPlugin()?.broadcastState(currentState)
     }
   }
 
@@ -118,6 +119,7 @@ export class AudioPlugin extends Plugin {
 
   /**
    * 设备状态变化回调
+   * 控制后台音频窗口的采集行为
    */
   async onDeviceStateChanged(state: DeviceState): Promise<void> {
     console.log(`[AudioPlugin] 设备状态变化: ${state}`)
@@ -137,52 +139,13 @@ export class AudioPlugin extends Plugin {
         this.backgroundAudioWindow.webContents.send('audio:command', 'start')
       }
     }
-
-    // 广播状态变化到所有渲染进程窗口（用于 UI 显示）
-    this.broadcastStateChanged(state)
   }
 
   /**
-   * 广播状态变化到所有渲染进程窗口
+   * 获取 UIPlugin 实例
    */
-  private broadcastStateChanged(state: DeviceState): void {
-    // 获取完整的状态快照(包含 listeningMode)
-    const snapshot = this.app?.getStateSnapshot() || {
-      device_state: state,
-      listening_mode: 'manual',
-      keep_listening: false,
-      audio_opened: this.protocol?.isAudioChannelOpened() || false,
-    }
-
-    const stateData = {
-      deviceState: snapshot.device_state,
-      listeningMode: snapshot.listening_mode,
-      channelOpen: snapshot.audio_opened,
-    }
-
-    // 获取所有 webContents（排除后台音频窗口）
-    const allWebContents = webContents.getAllWebContents()
-
-    allWebContents.forEach((wc) => {
-      // 跳过后台音频窗口（它不需要状态更新）
-      if (this.backgroundAudioWindow && wc.id === this.backgroundAudioWindow.webContents.id) {
-        return
-      }
-
-      // 跳过已销毁的窗口
-      if (wc.isDestroyed()) {
-        return
-      }
-
-      try {
-        wc.send('app:state-changed', stateData)
-      }
-      catch (error) {
-        console.error(`[AudioPlugin] 向窗口 ${wc.id} 广播状态失败:`, error)
-      }
-    })
-
-    console.log(`[AudioPlugin] 已广播状态到 ${allWebContents.length} 个窗口`)
+  private getUIPlugin(): UIPlugin | undefined {
+    return this.app?.getPluginManager().getPlugin<UIPlugin>('ui')
   }
 
   /**
@@ -301,69 +264,6 @@ export class AudioPlugin extends Plugin {
     await super.stop()
 
     console.log('[AudioPlugin] ✓ 已停止')
-  }
-
-  /**
-   * 发送预生成的 Opus 音频文件
-   * 用于发送系统提示音或预录音频
-   * @param opusFilePath - Opus 文件路径（带帧长度前缀格式）
-   * @returns 发送的帧数
-   */
-  async sendPreGeneratedAudio(opusFilePath: string): Promise<number> {
-    try {
-      const fs = await import('node:fs')
-
-      // 检查文件是否存在
-      if (!fs.existsSync(opusFilePath)) {
-        console.error(`[AudioPlugin] 音频文件不存在: ${opusFilePath}`)
-        throw new Error(`音频文件不存在: ${opusFilePath}`)
-      }
-
-      // 检查协议是否已连接
-      if (!this.protocol || !this.protocol.isAudioChannelOpened()) {
-        console.error('[AudioPlugin] 音频通道未打开')
-        throw new Error('音频通道未打开')
-      }
-
-      // 读取 Opus 文件
-      const opusData = fs.readFileSync(opusFilePath)
-      console.log(`[AudioPlugin] 读取音频文件: ${opusFilePath}, 大小: ${opusData.length} 字节`)
-
-      // 分帧发送
-      // 文件格式: [2字节帧长度][帧数据][2字节帧长度][帧数据]...
-      let offset = 0
-      let frameCount = 0
-
-      while (offset < opusData.length) {
-        // 读取帧长度 (2字节, little-endian)
-        if (offset + 2 > opusData.length) {
-          break
-        }
-        const frameLength = opusData.readUInt16LE(offset)
-        offset += 2
-
-        // 读取帧数据
-        if (offset + frameLength > opusData.length) {
-          break
-        }
-        const frameData = opusData.subarray(offset, offset + frameLength)
-        offset += frameLength
-
-        // 发送帧
-        await this.protocol.sendAudio(frameData)
-        frameCount++
-
-        // 模拟 20ms 帧间隔
-        await new Promise(resolve => setTimeout(resolve, 20))
-      }
-
-      console.log(`[AudioPlugin] 音频发送完成: ${frameCount} 帧`)
-      return frameCount
-    }
-    catch (error) {
-      console.error('[AudioPlugin] 发送预生成音频失败:', error)
-      throw error
-    }
   }
 
   /**

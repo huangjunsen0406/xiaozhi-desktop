@@ -1,10 +1,17 @@
+import type { DeviceState } from '../constants/DeviceState'
 import type { JsonMessage } from '../types/protocol'
 import { webContents } from 'electron'
 import { Plugin } from './Plugin'
 
 /**
  * UI 插件
- * 负责将服务器消息广播到渲染进程，用于 UI 更新（表情、对话内容等）
+ * 负责将服务器消息和状态变化广播到渲染进程
+ *
+ * 职责：
+ * - 广播服务器消息（server:message）
+ * - 广播设备状态变化（app:state-changed）
+ * - 广播消息添加事件（chat:message-added）
+ * - 广播图片、主题、表情等 UI 相关事件
  */
 export class UIPlugin extends Plugin {
   readonly name = 'ui'
@@ -13,7 +20,7 @@ export class UIPlugin extends Plugin {
   readonly metadata = {
     name: 'UIPlugin',
     version: '1.0.0',
-    description: '视图处理插件，负责文本、表情、图片渲染',
+    description: '视图处理插件，负责统一广播到渲染进程',
     author: 'Junsen',
   }
 
@@ -23,6 +30,37 @@ export class UIPlugin extends Plugin {
   async onIncomingJson(message: JsonMessage): Promise<void> {
     // 广播服务器消息到所有渲染进程（排除后台音频窗口）
     this.broadcastToRenderer('server:message', message)
+  }
+
+  /**
+   * 设备状态变化回调
+   * 广播状态变化到所有渲染进程窗口
+   */
+  async onDeviceStateChanged(state: DeviceState): Promise<void> {
+    this.broadcastState(state)
+  }
+
+  /**
+   * 广播设备状态到渲染进程
+   * @param state - 当前设备状态
+   */
+  broadcastState(state: DeviceState): void {
+    // 获取完整的状态快照(包含 listeningMode)
+    const snapshot = this.app?.getStateSnapshot() || {
+      device_state: state,
+      listening_mode: 'manual',
+      keep_listening: false,
+      audio_opened: false,
+    }
+
+    const stateData = {
+      deviceState: snapshot.device_state,
+      listeningMode: snapshot.listening_mode,
+      channelOpen: snapshot.audio_opened,
+    }
+
+    this.broadcastToRenderer('app:state-changed', stateData)
+    console.log(`[UIPlugin] 已广播状态变化: ${state}`)
   }
 
   /**

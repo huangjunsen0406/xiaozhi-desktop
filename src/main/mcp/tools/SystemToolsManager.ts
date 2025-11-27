@@ -1,4 +1,5 @@
 import type OpenAI from 'openai'
+import type { ChatPlugin } from '../../plugins/ChatPlugin'
 import type { PropertyList, PropertyType } from '../types'
 import { Buffer } from 'node:buffer'
 import { getApplication } from '../../services/Application'
@@ -680,7 +681,8 @@ Examples:
 
         // 保存图片到数据库
         const app = getApplication()
-        await app.saveImage(imageBase64, 'camera')
+        const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+        await chatPlugin?.saveImage(imageBase64, 'camera')
       }
 
       // 分析图片
@@ -731,7 +733,8 @@ Examples:
 
       // 保存图片到数据库
       const app = getApplication()
-      await app.saveImage(result.base64, 'screenshot')
+      const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+      await chatPlugin?.saveImage(result.base64, 'screenshot')
 
       const visionConfig = mcpServer.getVisionConfig()
 
