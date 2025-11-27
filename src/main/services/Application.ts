@@ -13,6 +13,7 @@ import { UIPlugin } from '../plugins/UIPlugin'
 import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
+import { isAlertMessage, isTtsMessage } from '../types/protocol'
 import { ShortcutManager } from './ShortcutManager'
 /**
  * 应用核心类 (单例模式)
@@ -20,7 +21,6 @@ import { ShortcutManager } from './ShortcutManager'
  */
 export class Application {
   private static instance: Application | null = null
-  private static initializationLock = false
 
   // 状态
   private running: boolean = false
@@ -34,9 +34,6 @@ export class Application {
   private plugins = new PluginManager()
   private audioPlugin: AudioPlugin | null = null
   private wakeWordPlugin: WakeWordPlugin | null = null
-  private uiPlugin: UIPlugin | null = null
-  private mcpPlugin: McpPlugin | null = null
-  private chatPlugin: ChatPlugin | null = null
 
   // 快捷键管理器
   private shortcutManager: ShortcutManager | null = null
@@ -56,38 +53,12 @@ export class Application {
 
   /**
    * 获取单例实例
-   *
-   * 注意：当前实现依赖以下假设：
-   * 1. 构造函数是同步的（无异步操作）
-   * 2. 首次调用发生在 index.ts 启动时
-   * 3. 其他地方都是后续使用已创建的实例
-   *
-   * 如果需要异步初始化，应使用 getInstanceAsync() 模式
    */
   static getInstance(): Application {
-    if (Application.instance) {
-      return Application.instance
-    }
-
-    if (Application.initializationLock) {
-      // 理论上不会触发（构造函数是同步的）
-      // 但保留此检查作为防御性编程
-      throw new Error('Application 正在初始化中，这通常表示存在并发初始化问题')
-    }
-
-    Application.initializationLock = true
-    try {
+    if (!Application.instance) {
       Application.instance = new Application()
-      return Application.instance
     }
-    catch (error) {
-      // 确保初始化失败时释放锁
-      console.error('[Application] 初始化失败:', error)
-      throw error
-    }
-    finally {
-      Application.initializationLock = false
-    }
+    return Application.instance
   }
 
   // ========== 任务管理 ==========
@@ -105,19 +76,15 @@ export class Application {
    * @returns 原始 Promise（如果 shutdown 中则返回 resolved Promise）
    */
   spawn<T>(promise: Promise<T>, name: string): Promise<T> {
-    // shutdown 期间拒绝新任务
     if (this.isShuttingDown || !this.running) {
-      console.log(`[Application] 跳过任务创建（应用正在关闭）: ${name}`)
       return Promise.resolve(undefined as T)
     }
 
     const taskId = `${name}:${++this.taskIdCounter}`
-
-    // 包装 Promise 以追踪完成状态
     const trackedPromise = promise
       .catch((error) => {
         console.error(`[Application] 任务 ${taskId} 异常:`, error)
-        throw error // 重新抛出，让调用者处理
+        throw error
       })
       .finally(() => {
         this.activeTasks.delete(taskId)
@@ -161,20 +128,6 @@ export class Application {
     this.activeTasks.clear()
   }
 
-  /**
-   * 获取当前活跃任务数量（调试用）
-   */
-  getActiveTaskCount(): number {
-    return this.activeTasks.size
-  }
-
-  /**
-   * 获取活跃任务名称列表（调试用）
-   */
-  getActiveTaskNames(): string[] {
-    return Array.from(this.activeTasks.keys())
-  }
-
   // ========== 生命周期 ==========
 
   /**
@@ -192,19 +145,15 @@ export class Application {
 
     // 注册插件（按优先级顺序）
     this.audioPlugin = new AudioPlugin()
-    this.plugins.register(this.audioPlugin)
-
-    this.mcpPlugin = new McpPlugin()
-    this.plugins.register(this.mcpPlugin)
-
-    this.chatPlugin = new ChatPlugin()
-    this.plugins.register(this.chatPlugin)
-
     this.wakeWordPlugin = new WakeWordPlugin()
-    this.plugins.register(this.wakeWordPlugin)
 
-    this.uiPlugin = new UIPlugin()
-    this.plugins.register(this.uiPlugin)
+    this.plugins.register(
+      this.audioPlugin,
+      new McpPlugin(),
+      new ChatPlugin(),
+      this.wakeWordPlugin,
+      new UIPlugin(),
+    )
 
     // 初始化插件
     await this.plugins.setupAll(this)
@@ -296,36 +245,34 @@ export class Application {
       return true
     }
 
-    // 使用锁避免并发连接
-    if (this.connectLock) {
-      return await this.connectLock
-    }
+    // 使用锁避免并发连接（原子性检查和赋值）
+    if (!this.connectLock) {
+      this.connectLock = (async () => {
+        try {
+          // 再次检查（可能在等待锁期间已连接）
+          if (this.protocol!.isAudioChannelOpened()) {
+            return true
+          }
 
-    this.connectLock = (async () => {
-      try {
-        // 再次检查（可能在等待锁期间已连接）
-        if (this.protocol!.isAudioChannelOpened()) {
+          const opened = await this.protocol!.openAudioChannel()
+          if (!opened) {
+            console.error('[Application] 协议连接失败')
+            return false
+          }
+
+          console.log('[Application] 协议连接已建立')
+          await this.plugins.notifyProtocolConnected(this.protocol!)
           return true
         }
-
-        const opened = await this.protocol!.openAudioChannel()
-        if (!opened) {
-          console.error('[Application] 协议连接失败')
+        catch (error) {
+          console.error('[Application] 连接协议时出错:', error)
           return false
         }
-
-        console.log('[Application] 协议连接已建立')
-        await this.plugins.notifyProtocolConnected(this.protocol!)
-        return true
-      }
-      catch (error) {
-        console.error('[Application] 连接协议时出错:', error)
-        return false
-      }
-      finally {
-        this.connectLock = null
-      }
-    })()
+        finally {
+          this.connectLock = null
+        }
+      })()
+    }
 
     return await this.connectLock
   }
@@ -514,10 +461,11 @@ export class Application {
       }
 
       // 通过 ChatPlugin 保存用户文本消息
-      if (this.chatPlugin) {
-        await this.chatPlugin.saveUserTextMessage(text)
+      const chatPlugin = this.plugins.getPlugin<ChatPlugin>('ChatPlugin')
+      if (chatPlugin) {
+        await chatPlugin.saveUserTextMessage(text)
         // 记录发送的文本，用于避免 STT 重复保存
-        this.chatPlugin.setLastSentText(text)
+        chatPlugin.setLastSentText(text)
       }
 
       // 发送唤醒词检测消息（服务端会将文本作为用户输入处理）
@@ -526,7 +474,7 @@ export class Application {
     }
     catch (error) {
       console.error('[Application] 发送文本消息失败:', error)
-      this.chatPlugin?.setLastSentText(null)
+      this.plugins.getPlugin<ChatPlugin>('ChatPlugin')?.setLastSentText(null)
     }
   }
 
@@ -556,16 +504,16 @@ export class Application {
       }
 
       // 处理 Alert 消息（错误/警告）
-      if (msgType === 'alert') {
-        const message = (jsonData as { message?: string }).message || '未知错误'
-        const code = (jsonData as { code?: string }).code
+      if (isAlertMessage(jsonData)) {
+        const message = jsonData.message || '未知错误'
+        const code = jsonData.code
         console.warn(`[Application] 收到服务端警告: ${message}${code ? ` (code: ${code})` : ''}`)
         console.warn('[Application] 完整 alert 消息:', JSON.stringify(jsonData, null, 2))
       }
 
       // 处理 TTS 消息
-      if (msgType === 'tts') {
-        const state = (jsonData as { state?: string }).state
+      if (isTtsMessage(jsonData)) {
+        const { state } = jsonData
 
         if (state === 'start') {
           // TTS 开始：根据是否持续监听决定状态
@@ -668,70 +616,26 @@ export class Application {
   }
 
   /**
-   * 只读访问器：是否空闲
-   */
-  isIdle(): boolean {
-    return this.deviceState === DeviceState.IDLE
-  }
-
-  /**
-   * 只读访问器：是否监听中
-   */
-  isListening(): boolean {
-    return this.deviceState === DeviceState.LISTENING
-  }
-
-  /**
-   * 只读访问器：是否说话中
-   */
-  isSpeaking(): boolean {
-    return this.deviceState === DeviceState.SPEAKING
-  }
-
-  /**
-   * 只读访问器：是否持续监听
-   */
-  isKeepListening(): boolean {
-    return this.keepListening
-  }
-
-  /**
    * 只读访问器：音频通道是否打开
    */
   isAudioChannelOpened(): boolean {
-    try {
-      return this.protocol?.isAudioChannelOpened() || false
-    }
-    catch {
-      return false
-    }
+    return this.protocol?.isAudioChannelOpened() ?? false
   }
 
   /**
    * 判断是否应该采集麦克风音频
-   *
-   * 采集规则：
-   * 1. LISTENING 状态：始终采集（未被中止时）
-   * 2. SPEAKING 状态：仅在实时模式下采集
-   *    - 需要同时满足：keepListening = true 且 listeningMode = REALTIME
+   * - LISTENING 状态：始终采集（未被中止时）
+   * - SPEAKING 状态：仅在实时模式下采集（全双工）
    */
   shouldCaptureAudio(): boolean {
-    try {
-      // LISTENING 状态：始终采集（未被中止时）
-      if (this.deviceState === DeviceState.LISTENING && !this.aborted) {
-        return true
-      }
-
-      // SPEAKING 状态：仅在实时模式下采集（全双工）
-      return (
-        this.deviceState === DeviceState.SPEAKING
-        && this.keepListening
-        && this.listeningMode === ListeningMode.REALTIME
-      )
+    if (this.deviceState === DeviceState.LISTENING && !this.aborted) {
+      return true
     }
-    catch {
-      return false
-    }
+    return (
+      this.deviceState === DeviceState.SPEAKING
+      && this.keepListening
+      && this.listeningMode === ListeningMode.REALTIME
+    )
   }
 
   /**
@@ -820,7 +724,7 @@ export class Application {
     this.running = false
 
     try {
-      // 等待活跃任务完成（最多等待 3 秒��
+      // 等待活跃任务完成（最多等待 3 秒）
       await this.waitForTasks(3000)
 
       // 等待状态变更完成
@@ -855,9 +759,6 @@ export class Application {
       // 清理插件引用
       this.audioPlugin = null
       this.wakeWordPlugin = null
-      this.uiPlugin = null
-      this.mcpPlugin = null
-      this.chatPlugin = null
 
       // 重置状态
       this.deviceState = DeviceState.IDLE

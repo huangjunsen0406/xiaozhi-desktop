@@ -56,7 +56,7 @@ export class McpPlugin extends Plugin {
       // 设置图片广播回调：通过 UIPlugin 广播图片到渲染进程
       const imageBroadcastCallback = (imageBase64: string, sourceType: 'screenshot' | 'camera'): void => {
         const pluginManager = this.app?.getPluginManager()
-        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('ui')
+        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('UIPlugin')
         if (uiPlugin) {
           uiPlugin.broadcastImage(imageBase64, sourceType)
         }
@@ -70,7 +70,7 @@ export class McpPlugin extends Plugin {
       // 设置主题广播回调：通过 UIPlugin 广播主题到渲染进程
       const themeBroadcastCallback = (theme: 'light' | 'dark' | 'auto'): void => {
         const pluginManager = this.app?.getPluginManager()
-        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('ui')
+        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('UIPlugin')
         if (uiPlugin) {
           uiPlugin.broadcastTheme(theme)
         }

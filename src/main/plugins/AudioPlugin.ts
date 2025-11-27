@@ -4,7 +4,6 @@ import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { AudioListener } from '../types/audio'
-import type { UIPlugin } from './UIPlugin'
 import { ipcMain } from 'electron'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
 import { Plugin } from './Plugin'
@@ -56,6 +55,9 @@ export class AudioPlugin extends Plugin {
   // 音频监听器（观察者模式）
   private audioListeners: Set<AudioListener> = new Set()
 
+  // IPC 监听器引用（用于精确移除）
+  private pcmHandler: ((_event: Electron.IpcMainEvent, pcmData: Int16Array) => void) | null = null
+
   // ========== 背压控制 ==========
   /** 最大允许的 WebSocket 缓冲区大小（字节） */
   private readonly MAX_BUFFER_SIZE = 64 * 1024 // 64KB
@@ -91,10 +93,11 @@ export class AudioPlugin extends Plugin {
       initOpusCodec()
       console.log('[AudioPlugin] ✓ OpusCodec 已初始化')
 
-      // 监听来自后台音频窗口的 PCM 数据
-      ipcMain.on('audio:pcm', (_event, pcmData: Int16Array) => {
+      // 监听来自后台音频窗口的 PCM 数据（保存引用以便精确移除）
+      this.pcmHandler = (_event, pcmData: Int16Array) => {
         this.handlePCMFromRenderer(pcmData)
-      })
+      }
+      ipcMain.on('audio:pcm', this.pcmHandler)
 
       console.log('[AudioPlugin] ✓ 初始化完成')
     }
@@ -120,32 +123,6 @@ export class AudioPlugin extends Plugin {
   async onProtocolConnected(protocol: Protocol): Promise<void> {
     console.log('[AudioPlugin] 协议已连接')
     this.protocol = protocol
-  }
-
-  /**
-   * 音频通道打开回调
-   */
-  async onAudioChannelOpened(): Promise<void> {
-    console.log('[AudioPlugin] 音频通道已打开')
-
-    // 通知 UIPlugin 广播状态更新（确保 channelOpen 状态同步）
-    if (this.app) {
-      const currentState = this.app.getDeviceState()
-      this.getUIPlugin()?.broadcastState(currentState)
-    }
-  }
-
-  /**
-   * 音频通道关闭回调
-   */
-  async onAudioChannelClosed(): Promise<void> {
-    console.log('[AudioPlugin] 音频通道已关闭')
-
-    // 通知 UIPlugin 广播状态更新（即使设备状态没变，channelOpen 已经变化）
-    if (this.app) {
-      const currentState = this.app.getDeviceState()
-      this.getUIPlugin()?.broadcastState(currentState)
-    }
   }
 
   /**
@@ -178,13 +155,6 @@ export class AudioPlugin extends Plugin {
         this.backgroundAudioWindow.webContents.send('audio:command', 'start')
       }
     }
-  }
-
-  /**
-   * 获取 UIPlugin 实例
-   */
-  private getUIPlugin(): UIPlugin | undefined {
-    return this.app?.getPluginManager().getPlugin<UIPlugin>('ui')
   }
 
   /**
@@ -446,8 +416,11 @@ export class AudioPlugin extends Plugin {
       this.backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
     }
 
-    // 清理 IPC 监听器
-    ipcMain.removeAllListeners('audio:pcm')
+    // 清理 IPC 监听器（精确移除，避免误删其他模块的监听器）
+    if (this.pcmHandler) {
+      ipcMain.removeListener('audio:pcm', this.pcmHandler)
+      this.pcmHandler = null
+    }
 
     // 清理引用
     this.protocol = null

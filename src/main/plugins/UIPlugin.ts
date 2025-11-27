@@ -14,7 +14,7 @@ import { Plugin } from './Plugin'
  * - 广播图片、主题、表情等 UI 相关事件
  */
 export class UIPlugin extends Plugin {
-  readonly name = 'ui'
+  readonly name = 'UIPlugin'
   readonly priority = 60 // UI 插件在其他插件之后初始化
 
   readonly metadata = {

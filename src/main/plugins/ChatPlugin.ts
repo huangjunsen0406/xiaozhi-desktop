@@ -143,7 +143,7 @@ export class ChatPlugin extends Plugin {
    * 获取 UIPlugin 实例
    */
   private getUIPlugin(): UIPlugin | undefined {
-    return this.app?.getPluginManager().getPlugin<UIPlugin>('ui')
+    return this.app?.getPluginManager().getPlugin<UIPlugin>('UIPlugin')
   }
 
   /**

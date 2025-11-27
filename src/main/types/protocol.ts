@@ -116,6 +116,15 @@ export interface LlmJsonMessage extends JsonMessage {
 }
 
 /**
+ * Alert 消息（服务端警告/错误）
+ */
+export interface AlertJsonMessage extends JsonMessage {
+  type: 'alert'
+  message?: string
+  code?: string
+}
+
+/**
  * 所有支持的 JSON 消息类型联合
  */
 export type ProtocolJsonMessage =
@@ -127,7 +136,52 @@ export type ProtocolJsonMessage =
   | McpJsonMessage
   | SttJsonMessage
   | LlmJsonMessage
+  | AlertJsonMessage
   | JsonMessage
+
+// ==================== 类型守卫函数 ====================
+
+/**
+ * 检查是否为 TTS 消息
+ */
+export function isTtsMessage(msg: JsonMessage): msg is TtsJsonMessage {
+  return msg.type === 'tts' && typeof (msg as TtsJsonMessage).state === 'string'
+}
+
+/**
+ * 检查是否为 STT 消息
+ */
+export function isSttMessage(msg: JsonMessage): msg is SttJsonMessage {
+  return msg.type === 'stt' && typeof (msg as SttJsonMessage).text === 'string'
+}
+
+/**
+ * 检查是否为 LLM 消息
+ */
+export function isLlmMessage(msg: JsonMessage): msg is LlmJsonMessage {
+  return msg.type === 'llm'
+}
+
+/**
+ * 检查是否为 MCP 消息
+ */
+export function isMcpMessage(msg: JsonMessage): msg is McpJsonMessage {
+  return msg.type === 'mcp' && (msg as McpJsonMessage).payload !== undefined
+}
+
+/**
+ * 检查是否为 Alert 消息
+ */
+export function isAlertMessage(msg: JsonMessage): msg is AlertJsonMessage {
+  return msg.type === 'alert'
+}
+
+/**
+ * 检查是否为 IoT 消息
+ */
+export function isIotMessage(msg: JsonMessage): msg is IotJsonMessage {
+  return msg.type === 'iot'
+}
 
 /**
  * MQTT 配置信息
