@@ -87,7 +87,7 @@ export class McpServer {
    * 3. 添加常用工具（如音量控制、摄像头等）到前面
    * 4. 将原有工具追加到后面
    */
-  addCommonTools(): void {
+  async addCommonTools(): Promise<void> {
     console.log('[MCP] Adding common tools...')
 
     try {
@@ -97,7 +97,7 @@ export class McpServer {
 
       // 注册系统工具（常用工具将被优先添加）
       const systemManager = SystemToolsManager.getInstance()
-      systemManager.init(
+      await systemManager.init(
         this.addTool.bind(this),
         PropertyList,
         PropertyType,
@@ -476,5 +476,13 @@ export class McpServer {
     else {
       console.warn('[MCP] 主题广播回调未设置，无法广播主题')
     }
+  }
+
+  /**
+   * 查找工具
+   * 供 Timer 等工具调用
+   */
+  findTool(name: string): McpTool | undefined {
+    return this.tools.find(t => t.name === name)
   }
 }

@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron'
 import type { MqttInfo } from '../services/configManagerDB'
+import { ipcMain } from 'electron'
 import { getConfigManager } from '../services/configManagerDB'
 
 /**

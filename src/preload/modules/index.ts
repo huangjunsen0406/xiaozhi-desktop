@@ -1,10 +1,9 @@
+export type { IoTDeviceDescriptor, IoTDeviceState, IoTResponse } from '../index.d'
 /**
  * Preload API 模块索引
  */
 export { activationApi } from './activation'
-export type { ActivationData, ActivationResult, ActivationStatus, DeviceInfo, InitResult } from './activation'
 export { appApi } from './app'
-export type { AppStateSnapshot } from './app'
 export { audioApi } from './audio'
 export type { AudioConfig } from './audio'
 export { backgroundAudioApi } from './backgroundAudio'
@@ -15,6 +14,8 @@ export type { CameraConfig } from './cameraConfigApi'
 export { chatApi } from './chat'
 export { emotionApi } from './emotion'
 export { hoverApi } from './hover'
+export { iotApi } from './iot'
+export { musicApi } from './music'
 export { shortcutApi } from './shortcut'
 export { systemApi } from './system'
 export type { ConfigResult, SystemConfig } from './system'

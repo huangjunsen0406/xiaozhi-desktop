@@ -11,6 +11,8 @@ import { registerCameraConfigIpc } from './cameraConfigIpc'
 import { registerChatIpc } from './chatIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
+import { IoTIpc } from './iotIpc'
+import { registerMusicIpc } from './musicIpc'
 import { registerThemeIpc } from './themeIpc'
 
 /**
@@ -29,6 +31,10 @@ export function registerBasicIpcChannels(): void {
   registerCameraConfigIpc()
   registerThemeIpc()
   registerChatIpc()
+  registerMusicIpc()
+
+  // 注册 IoT IPC
+  new IoTIpc()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()

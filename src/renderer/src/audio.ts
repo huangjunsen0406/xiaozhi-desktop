@@ -5,8 +5,13 @@
 import { AudioCapture } from './utils/audio/AudioCapture'
 import { AudioPlayback } from './utils/audio/AudioPlayback'
 import { getDeviceIdsFromConfig } from './utils/audio/deviceUtils'
+import { initMusicPlayer } from './utils/music/MusicPlayer'
 
 console.log('[BackgroundAudio] 初始化后台音频系统...')
+
+// 初始化音乐播放器
+initMusicPlayer()
+console.log('[BackgroundAudio] 音乐播放器已初始化')
 
 // 音频系统实例
 const capture = new AudioCapture()

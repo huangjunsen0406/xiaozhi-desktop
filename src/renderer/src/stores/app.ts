@@ -432,7 +432,7 @@ export const useAppStore = defineStore('app', () => {
     }
     else if (message.type === 'tts') {
       // 流式显示交给主进程广播的 streaming-update 事件
-      return
+
     }
     else if (message.type === 'mcp') {
       await handleMcpMessage(message)

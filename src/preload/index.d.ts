@@ -175,7 +175,7 @@ export interface RendererApi {
   // Activation APIs
   activationInitialize: () => Promise<{ success: boolean, error?: string }>
   activationGetDeviceInfo: () => Promise<ActivationDeviceInfo>
-  activationGetActivationData: () => Promise<ActivationData>
+  activationGetActivationData: () => Promise<ActivationData | null>
   activationStart: (data: ActivationData) => Promise<ActivationResult>
   activationCancel: () => Promise<{ success: boolean, error?: string }>
   activationCheckStatus: () => Promise<ActivationStatus>
@@ -286,6 +286,41 @@ export interface RendererApi {
   shortcutUpdate: (action: string, accelerator: string | null) => Promise<{ success: boolean }>
   shortcutCheckConflict: (accelerator: string, excludeAction?: string) => Promise<{ conflict: boolean, name: string | null }>
   shortcutReset: () => Promise<{ success: boolean }>
+  // Music APIs
+  musicOnCommand: (callback: (message: { command: string, args?: Record<string, unknown> }) => void) => void
+  musicStatusUpdate: (status: Record<string, unknown>) => void
+  // IoT APIs
+  iotGetDevices: () => Promise<IoTResponse<IoTDeviceDescriptor[]>>
+  iotGetStates: () => Promise<IoTResponse<IoTDeviceState[]>>
+  iotGetDeviceState: (deviceName: string) => Promise<IoTResponse<IoTDeviceState>>
+  iotInvokeMethod: (deviceName: string, method: string, parameters?: Record<string, unknown>) => Promise<IoTResponse<unknown>>
+}
+
+/**
+ * IoT 设备描述符
+ */
+export interface IoTDeviceDescriptor {
+  name: string
+  description: string
+  properties: Record<string, { description: string, type: string }>
+  methods: Record<string, { description: string, parameters: Record<string, { description: string, type: string }> }>
+}
+
+/**
+ * IoT 设备状态
+ */
+export interface IoTDeviceState {
+  name: string
+  state: Record<string, unknown>
+}
+
+/**
+ * IoT API 响应
+ */
+export interface IoTResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
 }
 
 export interface ShortcutConfig {

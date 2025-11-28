@@ -9,7 +9,10 @@ import { McpServer } from '../McpServer'
 import { AppLauncher } from './app/AppLauncher'
 import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
+import { IoTToolsManager } from './iot'
+import { MusicToolsManager } from './music'
 import { ScreenshotTool } from './screenshot'
+import { TimerService } from './timer'
 /**
  * 系统工具管理器
  * 负责注册系统相关的 MCP 工具（音量控制、应用管理等）
@@ -36,11 +39,11 @@ export class SystemToolsManager {
    * @param PropertyListClass - 属性列表类
    * @param PropertyTypeEnum - 属性类型枚举
    */
-  init(
+  async init(
     addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
     PropertyListClass: typeof PropertyList,
     PropertyTypeEnum: typeof PropertyType,
-  ): void {
+  ): Promise<void> {
     try {
       console.log('[SystemToolsManager] 开始注册系统工具')
 
@@ -76,6 +79,15 @@ export class SystemToolsManager {
 
       // 注册系统信息工具
       this.registerSystemInfo(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册倒计时器工具
+      this.registerTimerTools(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册音乐播放工具
+      this.registerMusicTools(addTool, PropertyListClass, PropertyTypeEnum)
+
+      // 注册 IoT 工具
+      await this.registerIoTTools(addTool, PropertyListClass, PropertyTypeEnum)
 
       this.initialized = true
       console.log('[SystemToolsManager] 系统工具注册完成')
@@ -1143,6 +1155,208 @@ Examples:
   }
 
   /**
+   * 注册倒计时器工具
+   */
+  private registerTimerTools(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    // 1. 启动倒计时
+    const startCountdownProps = new PropertyListClass([
+      {
+        name: 'command',
+        type: PropertyTypeEnum.STRING,
+      },
+      {
+        name: 'delay',
+        type: PropertyTypeEnum.INTEGER,
+        defaultValue: 5,
+        minValue: 1,
+        maxValue: 3600,
+      },
+      {
+        name: 'description',
+        type: PropertyTypeEnum.STRING,
+        defaultValue: '',
+      },
+    ])
+
+    const startCountdownDescription = `Start a countdown timer that will execute an MCP tool after a specified delay.
+The command should be a JSON string containing MCP tool name and arguments.
+For example: '{"name": "self.audio_speaker.set_volume", "arguments": {"volume": 50}}'
+
+Use this when the user wants to:
+1. Set a timer to control system settings (volume, device status, etc.)
+2. Schedule delayed MCP tool executions
+3. Create reminders with automatic tool calls
+
+Parameters:
+- command: JSON string with MCP tool name and arguments (required)
+- delay: Delay time in seconds (1-3600, default: 5)
+- description: Task description (optional)
+
+The timer will return a timer_id that can be used to cancel it later.
+
+Examples:
+- "5秒后把音量调到50" -> command='{"name":"self.audio_speaker.set_volume","arguments":{"volume":50}}', delay=5
+- "1分钟后截个屏" -> command='{"name":"self.screenshot.take","arguments":{}}', delay=60
+- "30秒后打开QQ" -> command='{"name":"self.application.launch","arguments":{"app_name":"QQ"}}', delay=30`
+
+    addTool(
+      'self.timer.start_countdown',
+      startCountdownDescription,
+      startCountdownProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.startCountdown(args)
+      },
+    )
+
+    // 2. 取消倒计时
+    const cancelCountdownProps = new PropertyListClass([
+      {
+        name: 'timer_id',
+        type: PropertyTypeEnum.INTEGER,
+      },
+    ])
+
+    const cancelCountdownDescription = `Cancel an active countdown timer by its ID.
+
+Use this when the user wants to:
+1. Cancel a previously set timer
+2. Stop a scheduled action before it executes
+
+Parameters:
+- timer_id: The ID of the timer to cancel (returned when starting a countdown)
+
+Examples:
+- "取消倒计时 1" -> timer_id=1
+- "Cancel timer 2" -> timer_id=2`
+
+    addTool(
+      'self.timer.cancel_countdown',
+      cancelCountdownDescription,
+      cancelCountdownProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.cancelCountdown(args)
+      },
+    )
+
+    // 3. 获取活动倒计时
+    const getActiveTimersProps = new PropertyListClass([])
+
+    const getActiveTimersDescription = `Get information about all currently active countdown timers.
+Returns details including timer IDs, remaining time, commands to execute, and progress for each active timer.
+
+Use this when the user wants to:
+1. Check what timers are currently running
+2. See remaining time for active timers
+3. Get timer IDs for cancellation
+4. Monitor timer progress and status
+
+Examples:
+- "有哪些倒计时正在运行?" -> Get all active timers
+- "Show me active timers" -> Get all active timers
+- "查看所有定时任务" -> Get all active timers`
+
+    addTool(
+      'self.timer.get_active_timers',
+      getActiveTimersDescription,
+      getActiveTimersProps,
+      async (args: Record<string, unknown>): Promise<string> => {
+        return await this.getActiveTimers(args)
+      },
+    )
+
+    console.log('[SystemToolsManager] 注册倒计时器工具成功')
+  }
+
+  /**
+   * 注册音乐播放工具
+   */
+  private registerMusicTools(
+    addTool: (name: string, description: string, properties: PropertyList, callback: (args: Record<string, unknown>) => Promise<string>) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): void {
+    const musicManager = MusicToolsManager.getInstance()
+    musicManager.register(addTool, PropertyListClass, PropertyTypeEnum)
+    console.log('[SystemToolsManager] 注册音乐工具成功')
+  }
+
+  /**
+   * 启动倒计时（工具实现）
+   */
+  private async startCountdown(args: Record<string, unknown>): Promise<string> {
+    try {
+      const command = args.command as string
+      const delay = args.delay as number | undefined
+      const description = (args.description as string) || ''
+
+      console.log(`[SystemToolsManager] 启动倒计时 - 命令: ${command}, 延迟: ${delay}秒`)
+
+      const timerService = TimerService.getInstance()
+      const result = await timerService.startCountdown(command, delay, description)
+
+      console.log(`[SystemToolsManager] 倒计时启动结果:`, result)
+      return JSON.stringify(result, null, 2)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 启动倒计时失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '启动倒计时失败',
+      })
+    }
+  }
+
+  /**
+   * 取消倒计时（工具实现）
+   */
+  private async cancelCountdown(args: Record<string, unknown>): Promise<string> {
+    try {
+      const timerId = args.timer_id as number
+
+      console.log(`[SystemToolsManager] 取消倒计时 ${timerId}`)
+
+      const timerService = TimerService.getInstance()
+      const result = await timerService.cancelCountdown(timerId)
+
+      console.log(`[SystemToolsManager] 倒计时取消结果:`, result)
+      return JSON.stringify(result, null, 2)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 取消倒计时失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '取消倒计时失败',
+      })
+    }
+  }
+
+  /**
+   * 获取活动倒计时（工具实现）
+   */
+  private async getActiveTimers(_args: Record<string, unknown>): Promise<string> {
+    try {
+      console.log('[SystemToolsManager] 获取活动倒计时列表')
+
+      const timerService = TimerService.getInstance()
+      const result = await timerService.getActiveTimers()
+
+      console.log(`[SystemToolsManager] 当前活动倒计时数量: ${result.totalActiveTimers}`)
+      return JSON.stringify(result, null, 2)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 获取活动倒计时失败:', error)
+      return JSON.stringify({
+        success: false,
+        message: error instanceof Error ? error.message : '获取活动倒计时失败',
+      })
+    }
+  }
+
+  /**
    * 获取系统信息（工具实现）
    */
   private async getSystemInfo(_args: Record<string, unknown>): Promise<string> {
@@ -1283,12 +1497,52 @@ Examples:
       'self.ui.set_theme',
       'self.ui.get_theme',
       'self.system.get_info',
+      'self.timer.start_countdown',
+      'self.timer.cancel_countdown',
+      'self.timer.get_active_timers',
+      'self.music.search',
+      'self.music.play',
+      'self.music.pause',
+      'self.music.resume',
+      'self.music.stop',
+      'self.music.set_volume',
+      'self.music.seek',
+      'self.music.set_loop',
+      'self.music.set_playback_rate',
+      'self.music.get_status',
+      'self.music.get_lyrics',
+      'self.iot.get_devices',
+      'self.iot.get_device_state',
+      'self.iot.invoke_method',
     ]
 
     return {
       initialized: this.initialized,
       toolsCount: availableTools.length,
       availableTools,
+    }
+  }
+
+  /**
+   * 注册 IoT 工具
+   */
+  private async registerIoTTools(
+    addTool: (
+      name: string,
+      description: string,
+      properties: PropertyList,
+      callback: (args: Record<string, unknown>) => Promise<string>,
+    ) => void,
+    PropertyListClass: typeof PropertyList,
+    PropertyTypeEnum: typeof PropertyType,
+  ): Promise<void> {
+    try {
+      const iotManager = IoTToolsManager.getInstance()
+      await iotManager.init(addTool, PropertyListClass, PropertyTypeEnum)
+    }
+    catch (error) {
+      console.error('[SystemToolsManager] 注册 IoT 工具失败:', error)
+      // 不抛出错误，允许其他工具继续注册
     }
   }
 }

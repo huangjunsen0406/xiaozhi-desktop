@@ -19,15 +19,22 @@ export interface DeviceInfo {
   serialNumber: string
   macAddress: string
   activationStatus: boolean
+  deviceFingerprint: {
+    system: string
+    hostname: string
+    mac_address: string
+    machine_id: string
+  }
 }
 
 /**
  * 激活数据类型
  */
 export interface ActivationData {
-  challenge: string
-  code: string
-  message?: string
+  client_id: string
+  otp: string
+  mac_address: string
+  code?: string
 }
 
 /**
@@ -42,7 +49,8 @@ export interface ActivationResult {
  * 激活状态类型
  */
 export interface ActivationStatus {
-  isActivated: boolean
+  activated: boolean
+  message?: string
 }
 
 export const activationApi = {

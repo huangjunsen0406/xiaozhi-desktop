@@ -127,17 +127,17 @@ export interface AlertJsonMessage extends JsonMessage {
 /**
  * 所有支持的 JSON 消息类型联合
  */
-export type ProtocolJsonMessage =
-  | HelloJsonMessage
-  | TtsJsonMessage
-  | ListenJsonMessage
-  | AbortJsonMessage
-  | IotJsonMessage
-  | McpJsonMessage
-  | SttJsonMessage
-  | LlmJsonMessage
-  | AlertJsonMessage
-  | JsonMessage
+export type ProtocolJsonMessage
+  = | HelloJsonMessage
+    | TtsJsonMessage
+    | ListenJsonMessage
+    | AbortJsonMessage
+    | IotJsonMessage
+    | McpJsonMessage
+    | SttJsonMessage
+    | LlmJsonMessage
+    | AlertJsonMessage
+    | JsonMessage
 
 // ==================== 类型守卫函数 ====================
 

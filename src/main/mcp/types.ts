@@ -7,6 +7,7 @@
 export enum PropertyType {
   BOOLEAN = 'boolean',
   INTEGER = 'integer',
+  NUMBER = 'number',
   STRING = 'string',
 }
 
@@ -30,8 +31,8 @@ export class PropertyList {
   /** 获取必需参数列表 */
   getRequired(): string[] {
     return this.properties
-      .filter((p) => p.defaultValue === undefined)
-      .map((p) => p.name)
+      .filter(p => p.defaultValue === undefined)
+      .map(p => p.name)
   }
 
   /** 转换为 JSON Schema */
@@ -42,9 +43,11 @@ export class PropertyList {
       if (prop.defaultValue !== undefined) {
         schema.default = prop.defaultValue
       }
-      if (prop.type === PropertyType.INTEGER) {
-        if (prop.minValue !== undefined) schema.minimum = prop.minValue
-        if (prop.maxValue !== undefined) schema.maximum = prop.maxValue
+      if (prop.type === PropertyType.INTEGER || prop.type === PropertyType.NUMBER) {
+        if (prop.minValue !== undefined)
+          schema.minimum = prop.minValue
+        if (prop.maxValue !== undefined)
+          schema.maximum = prop.maxValue
       }
       result[prop.name] = schema
     }
@@ -71,6 +74,16 @@ export class PropertyList {
             throw new Error(`Value ${value} exceeds maximum ${prop.maxValue}`)
           }
           result[prop.name] = Math.floor(value)
+        }
+        else if (prop.type === PropertyType.NUMBER && typeof value === 'number') {
+          // 范围校验
+          if (prop.minValue !== undefined && value < prop.minValue) {
+            throw new Error(`Value ${value} is below minimum ${prop.minValue}`)
+          }
+          if (prop.maxValue !== undefined && value > prop.maxValue) {
+            throw new Error(`Value ${value} exceeds maximum ${prop.maxValue}`)
+          }
+          result[prop.name] = value // 保持小数，不取整
         }
         else if (prop.type === PropertyType.STRING && typeof value === 'string') {
           result[prop.name] = value
@@ -134,6 +147,6 @@ export interface JsonRpcResponse {
 
 /** MCP 工具调用结果 */
 export interface McpToolResult {
-  content: Array<{ type: 'text'; text: string }>
+  content: Array<{ type: 'text', text: string }>
   isError: boolean
 }

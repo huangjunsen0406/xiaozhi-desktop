@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, iotApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -127,6 +127,16 @@ const api = {
   shortcutUpdate: shortcutApi.update,
   shortcutCheckConflict: shortcutApi.checkConflict,
   shortcutReset: shortcutApi.reset,
+
+  // 音乐 API
+  musicOnCommand: musicApi.onCommand,
+  musicStatusUpdate: musicApi.statusUpdate,
+
+  // IoT API
+  iotGetDevices: iotApi.getDevices,
+  iotGetStates: iotApi.getStates,
+  iotGetDeviceState: iotApi.getDeviceState,
+  iotInvokeMethod: iotApi.invokeMethod,
 }
 
 // 使用 contextBridge 暴露 API
@@ -141,8 +151,7 @@ if (process.contextIsolated) {
   }
 }
 else {
-  // @ts-expect-error (define in dts)
   window.electron = electronAPI
-  // @ts-expect-error (define in dts)
+  // @ts-expect-error (type mismatch in activation/app modules)
   window.api = api
 }

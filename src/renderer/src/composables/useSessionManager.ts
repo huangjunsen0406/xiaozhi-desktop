@@ -1,5 +1,5 @@
-import type { ChatSession, GroupedSessions } from '../types/chat'
 import type { ChatSession as IpcChatSession } from '../../../preload/index.d'
+import type { ChatSession, GroupedSessions } from '../types/chat'
 /**
  * 会话管理 Composable
  * 负责会话列表的加载、创建、切换、删除等操作
