@@ -1,16 +1,10 @@
 /**
  * 截图工具 - 支持截取桌面屏幕并分析
+ * 使用 node-screenshots 实现跨平台统一截图
  */
 
 import { Buffer } from 'node:buffer'
-import { exec } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { promisify } from 'node:util'
-import { screen } from 'electron'
-
-const execAsync = promisify(exec)
+import { Monitor } from 'node-screenshots'
 
 export interface ScreenshotOptions {
   /**
@@ -55,26 +49,52 @@ export class ScreenshotTool {
   }
 
   /**
-   * 截取桌面屏幕
+   * 截取桌面屏幕（跨平台统一实现）
    */
   public async capture(options: ScreenshotOptions = {}): Promise<ScreenshotResult> {
     try {
-      const platform = os.platform()
+      const { display = null } = options
 
-      if (platform === 'darwin') {
-        return await this.captureMacOS(options)
-      }
-      else if (platform === 'win32') {
-        return await this.captureWindows(options)
-      }
-      else if (platform === 'linux') {
-        return await this.captureLinux(options)
-      }
-      else {
+      // 获取所有显示器
+      const monitors = Monitor.all()
+
+      if (monitors.length === 0) {
         return {
           success: false,
-          message: `Unsupported platform: ${platform}`,
+          message: 'No monitors found',
         }
+      }
+
+      // 解析显示器参数
+      const targetMonitor = this.parseMonitor(display, monitors)
+
+      if (!targetMonitor) {
+        return {
+          success: false,
+          message: `Invalid display parameter: ${display}`,
+        }
+      }
+
+      console.log(`[ScreenshotTool] Capturing monitor ${targetMonitor.id}, size: ${targetMonitor.width}x${targetMonitor.height}`)
+
+      // 截图（Electron 环境需要传 true 避免崩溃）
+      const image = await targetMonitor.captureImage()
+
+      // 转换为 PNG（Electron 环境传 true）
+      const pngBuffer = await image.toPng(true)
+
+      // 转换为 Node.js Buffer
+      const data = Buffer.from(pngBuffer)
+      const base64 = data.toString('base64')
+
+      console.log(`[ScreenshotTool] Screenshot captured: ${targetMonitor.width}x${targetMonitor.height}, ${data.length} bytes`)
+
+      return {
+        success: true,
+        data,
+        base64,
+        width: targetMonitor.width,
+        height: targetMonitor.height,
       }
     }
     catch (error) {
@@ -87,195 +107,63 @@ export class ScreenshotTool {
   }
 
   /**
-   * macOS 截图实现
+   * 解析显示器参数，返回对应的 Monitor 实例
    */
-  private async captureMacOS(options: ScreenshotOptions): Promise<ScreenshotResult> {
-    const { display = null } = options
-    let tempFile: string | null = null
-
-    try {
-      // 创建临时文件
-      tempFile = path.join(os.tmpdir(), `screenshot-${Date.now()}.png`)
-
-      // 解析显示器参数
-      const displayId = this.parseDisplayId(display)
-
-      let command: string
-
-      if (displayId === null) {
-        // 截取所有显示器
-        command = `screencapture -x -t png "${tempFile}"`
-      }
-      else {
-        // 截取指定显示器
-        command = `screencapture -D ${displayId} -x -t png "${tempFile}"`
-      }
-
-      console.log('[ScreenshotTool] Executing command:', command)
-
-      // 执行截图命令
-      await execAsync(command)
-
-      // 检查文件是否存在
-      if (!fs.existsSync(tempFile)) {
-        return {
-          success: false,
-          message: 'Screenshot file not created',
-        }
-      }
-
-      // 读取截图数据
-      const data = fs.readFileSync(tempFile)
-
-      // 转换为 base64
-      const base64 = data.toString('base64')
-
-      // 获取图片尺寸（简单解析PNG头）
-      const dimensions = this.getPNGDimensions(data)
-
-      console.log(
-        `[ScreenshotTool] Screenshot captured: ${dimensions.width}x${dimensions.height}, ${data.length} bytes`,
-      )
-
-      return {
-        success: true,
-        data,
-        base64,
-        width: dimensions.width,
-        height: dimensions.height,
-      }
+  private parseMonitor(
+    display: string | number | null | undefined,
+    monitors: Monitor[],
+  ): Monitor | null {
+    if (monitors.length === 0) {
+      return null
     }
-    catch (error) {
-      console.error('[ScreenshotTool] macOS capture failed:', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'macOS capture failed',
-      }
-    }
-    finally {
-      // 清理临时文件
-      if (tempFile && fs.existsSync(tempFile)) {
-        try {
-          fs.unlinkSync(tempFile)
-        }
-        catch (err) {
-          console.error('[ScreenshotTool] Failed to cleanup temp file:', err)
-        }
-      }
-    }
-  }
 
-  /**
-   * Windows 截图实现
-   */
-  private async captureWindows(_options: ScreenshotOptions): Promise<ScreenshotResult> {
-    // TODO: 实现 Windows 截图
-    return {
-      success: false,
-      message: 'Windows screenshot not implemented yet',
-    }
-  }
-
-  /**
-   * Linux 截图实现
-   */
-  private async captureLinux(_options: ScreenshotOptions): Promise<ScreenshotResult> {
-    // TODO: 实现 Linux 截图
-    return {
-      success: false,
-      message: 'Linux screenshot not implemented yet',
-    }
-  }
-
-  /**
-   * 解析显示器 ID
-   */
-  private parseDisplayId(display: string | number | null | undefined): number | null {
+    // 默认返回第一个显示器（通常是主显示器）
     if (display === null || display === undefined) {
-      return null // 所有显示器
+      return monitors[0]
     }
 
-    const displays = screen.getAllDisplays()
-
+    // 数字索引（从1开始）
     if (typeof display === 'number') {
-      // 如果是数字，可能是索引或真实ID
-      // 先尝试作为索引（从1开始）
-      if (display > 0 && display <= displays.length) {
-        const targetDisplay = displays[display - 1]
-        console.log(`[ScreenshotTool] Display index ${display} -> ID ${targetDisplay.id}`)
-        return targetDisplay.id
+      if (display > 0 && display <= monitors.length) {
+        const targetMonitor = monitors[display - 1]
+        console.log(`[ScreenshotTool] Display index ${display} -> Monitor ID ${targetMonitor.id}`)
+        return targetMonitor
       }
-      // 否则直接返回（可能是真实ID）
-      console.log(`[ScreenshotTool] Using display ID directly: ${display}`)
-      return display
+      console.warn(`[ScreenshotTool] Invalid display index: ${display}`)
+      return monitors[0]
     }
 
+    // 字符串参数
     if (typeof display === 'string') {
       const normalized = display.toLowerCase().trim()
 
       // 主显示器
       if (['main', '主屏', '主显示器', '笔记本', '内屏'].includes(normalized)) {
-        const primaryDisplay = screen.getPrimaryDisplay()
-        console.log(`[ScreenshotTool] Primary display ID: ${primaryDisplay.id}`)
-        return primaryDisplay.id
+        console.log('[ScreenshotTool] Using primary display')
+        return monitors[0]
       }
 
       // 副显示器
       if (['secondary', '副屏', '副显示器', '外接', '外屏', '第二屏'].includes(normalized)) {
-        if (displays.length > 1) {
-          // 找到非主显示器
-          const primaryId = screen.getPrimaryDisplay().id
-          const secondaryDisplay = displays.find(d => d.id !== primaryId)
-          if (secondaryDisplay) {
-            console.log(`[ScreenshotTool] Secondary display ID: ${secondaryDisplay.id}`)
-            return secondaryDisplay.id
-          }
+        if (monitors.length > 1) {
+          console.log('[ScreenshotTool] Using secondary display')
+          return monitors[1]
         }
-        console.log('[ScreenshotTool] No secondary display found')
-        return null
+        console.warn('[ScreenshotTool] No secondary display found, using primary')
+        return monitors[0]
       }
 
       // 尝试解析为数字索引
       const num = Number.parseInt(display, 10)
-      if (Number.isNaN(num) === false && num > 0 && num <= displays.length) {
-        const targetDisplay = displays[num - 1]
-        console.log(`[ScreenshotTool] Display index ${num} -> ID ${targetDisplay.id}`)
-        return targetDisplay.id
+      if (!Number.isNaN(num) && num > 0 && num <= monitors.length) {
+        const targetMonitor = monitors[num - 1]
+        console.log(`[ScreenshotTool] Display index ${num} -> Monitor ID ${targetMonitor.id}`)
+        return targetMonitor
       }
     }
 
-    return null
-  }
-
-  /**
-   * 获取 PNG 图片尺寸
-   */
-  private getPNGDimensions(data: Buffer): { width: number, height: number } {
-    try {
-      // PNG 文件格式：前8字节是签名，然后是 IHDR 块
-      // IHDR 块包含宽度和高度信息（各4字节，大端序）
-      if (data.length < 24) {
-        return { width: 0, height: 0 }
-      }
-
-      // 检查 PNG 签名
-      const signature = data.subarray(0, 8)
-      const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
-
-      if (!signature.equals(pngSignature)) {
-        return { width: 0, height: 0 }
-      }
-
-      // 读取 IHDR 块中的宽度和高度
-      const width = data.readUInt32BE(16)
-      const height = data.readUInt32BE(20)
-
-      return { width, height }
-    }
-    catch (error) {
-      console.error('[ScreenshotTool] Failed to parse PNG dimensions:', error)
-      return { width: 0, height: 0 }
-    }
+    console.warn(`[ScreenshotTool] Unknown display parameter: ${display}, using primary`)
+    return monitors[0]
   }
 
   /**
@@ -284,24 +172,21 @@ export class ScreenshotTool {
   public getDisplaysInfo(): Array<{
     id: number
     index: number
-    bounds: { x: number, y: number, width: number, height: number }
-    workArea: { x: number, y: number, width: number, height: number }
-    scaleFactor: number
-    rotation: number
-    internal: boolean
-    primary: boolean
+    width: number
+    height: number
+    x: number
+    y: number
+    isPrimary: boolean
   }> {
-    const displays = screen.getAllDisplays()
-    const primaryId = screen.getPrimaryDisplay().id
-    return displays.map((display, index) => ({
-      id: display.id, // 使用真实的显示器 ID
-      index: index + 1, // 添加索引信息（从1开始）
-      bounds: display.bounds,
-      workArea: display.workArea,
-      scaleFactor: display.scaleFactor,
-      rotation: display.rotation,
-      internal: display.internal,
-      primary: display.id === primaryId, // 标记是否为主显示器
+    const monitors = Monitor.all()
+    return monitors.map((monitor, index) => ({
+      id: monitor.id,
+      index: index + 1,
+      width: monitor.width,
+      height: monitor.height,
+      x: monitor.x,
+      y: monitor.y,
+      isPrimary: index === 0, // 第一个通常是主显示器
     }))
   }
 }
