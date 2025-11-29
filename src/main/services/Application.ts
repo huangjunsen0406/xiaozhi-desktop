@@ -334,11 +334,6 @@ export class Application {
    */
   async startAutoConversation(): Promise<void> {
     try {
-      const ok = await this.connectProtocol()
-      if (!ok) {
-        return
-      }
-
       // 读取用户配置的对话模式
       const audioConfig = getAudioConfig()
       const conversationMode = audioConfig.conversationMode || 'auto'
@@ -350,14 +345,29 @@ export class Application {
 
       console.log(`[Application] 启动自动对话，模式: ${conversationMode} (${mode})`)
 
+      // 先设置监听模式和持续监听标志，确保 isAutoMode 正确
       this.listeningMode = mode
       this.keepListening = true
+
+      // 立即切换到连接中状态，提供即时的 UI 反馈
+      await this.setDeviceState(DeviceState.CONNECTING)
+
+      const ok = await this.connectProtocol()
+      if (!ok) {
+        // 连接失败，恢复到空闲状态
+        this.keepListening = false
+        await this.setDeviceState(DeviceState.IDLE)
+        return
+      }
 
       await this.protocol!.sendStartListening(mode)
       await this.setDeviceState(DeviceState.LISTENING)
     }
     catch (error) {
       console.error('[Application] 开始自动对话失败:', error)
+      // 出错时恢复到空闲状态
+      this.keepListening = false
+      await this.setDeviceState(DeviceState.IDLE)
     }
   }
 

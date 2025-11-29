@@ -99,7 +99,7 @@ async function toggleCall() {
       <div class="flex items-center gap-2">
         <!-- 电话按钮：点击拨打/挂断 -->
         <NButton quaternary circle @click="toggleCall">
-          <icon-carbon-phone v-if="!appStore.isAutoMode" class="w-5 h-5 text-green-500" />
+          <icon-carbon-phone v-if="appStore.deviceState === 'idle'" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
         </NButton>
         <NButton quaternary circle @click="togglePanel">

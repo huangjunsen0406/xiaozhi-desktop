@@ -72,6 +72,9 @@ export const useAppStore = defineStore('app', () => {
   /** 是否正在通话（设备非空闲或通道打开） */
   const isCalling = computed(() => deviceState.value !== 'idle' || channelOpen.value)
 
+  /** 是否正在连接 */
+  const isConnecting = computed(() => deviceState.value === 'connecting')
+
   /** 是否空闲 */
   const isIdle = computed(() => deviceState.value === 'idle')
 
@@ -658,6 +661,7 @@ export const useAppStore = defineStore('app', () => {
 
     // 计算属性
     isCalling,
+    isConnecting,
     isIdle,
     isListening,
     isSpeaking,
