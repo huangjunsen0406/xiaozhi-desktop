@@ -1,3 +1,4 @@
+import type { ActivationData } from '@shared/types'
 import type { AxiosError } from 'axios'
 import axios from 'axios'
 import { showActivation } from '../windows/windowManager'
@@ -5,22 +6,13 @@ import { getConfigManager } from './configManagerDB'
 import { DeviceFingerprintManager } from './deviceFingerprintDB'
 
 /**
- * 激活结果接口
+ * 激活结果接口（本地扩展）
  */
 export interface ActivationResult {
   success: boolean
   needActivationUI: boolean
   message: string
   error?: string
-}
-
-/**
- * 激活数据接口
- */
-export interface ActivationData {
-  challenge: string
-  code: string
-  message?: string
 }
 
 /**
@@ -52,32 +44,20 @@ export class ActivationService {
     return ActivationService.instance
   }
 
-  /**
-   * 应用启动时的完整初始化流程
-   */
   async handleStartup(): Promise<ActivationResult> {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('[激活服务] 开始初始化')
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
     try {
-      // 1. 初始化设备指纹
       await this.initializeDeviceFingerprint()
-
-      // 2. 初始化配置
       await this.initializeConfig()
-
-      // 3. 获取 OTA 配置
       const otaConfig = await this.fetchOtaConfig()
-
-      // 4. 检查激活版本
       const activationVersion = this.configManager.getActivationVersion() || 'v1'
       console.log(`[激活服务] 激活版本: ${activationVersion}`)
 
-      // v1 协议：无需激活
       if (activationVersion === 'v1') {
         console.log('[激活服务] v1 协议，无需激活')
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
         return {
           success: true,
           needActivationUI: false,
@@ -85,15 +65,12 @@ export class ActivationService {
         }
       }
 
-      // v2 协议：分析激活状态
       const result = this.analyzeActivationStatus(otaConfig)
 
-      // 如果需要显示激活界面
       if (result.needActivationUI) {
         showActivation()
       }
 
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       return result
     }
     catch (error) {
@@ -107,9 +84,6 @@ export class ActivationService {
     }
   }
 
-  /**
-   * 初始化设备指纹
-   */
   private async initializeDeviceFingerprint(): Promise<void> {
     if (!this.initialized) {
       this.deviceFingerprint = await DeviceFingerprintManager.getInstanceAsync()
@@ -126,9 +100,6 @@ export class ActivationService {
     }
   }
 
-  /**
-   * 初始化配置
-   */
   private async initializeConfig(): Promise<void> {
     await this.configManager.initializeDeviceIdAsync()
 
@@ -137,9 +108,6 @@ export class ActivationService {
     console.log(`  Device ID: ${this.configManager.getDeviceId()}`)
   }
 
-  /**
-   * 获取 OTA 配置
-   */
   private async fetchOtaConfig(): Promise<{
     mqtt?: Record<string, string>
     websocket?: { url?: string, token?: string }
@@ -225,14 +193,10 @@ export class ActivationService {
     }
   }
 
-  /**
-   * 分析激活状态
-   */
   private analyzeActivationStatus(otaConfig: { activation?: { challenge: string, code: string, message?: string } }): ActivationResult {
     const localActivated = this.deviceFingerprint.isActivated()
-    const serverActivated = !otaConfig.activation // 服务器没返回激活码 = 已授权
+    const serverActivated = !otaConfig.activation
 
-    // 缓存激活数据
     if (otaConfig.activation) {
       this.cachedActivationData = otaConfig.activation
     }
@@ -241,7 +205,6 @@ export class ActivationService {
     console.log(`  本地: ${localActivated ? '已激活' : '未激活'}`)
     console.log(`  服务器: ${serverActivated ? '已授权' : '需要激活'}`)
 
-    // 情况 1: 都未激活 - 需要激活
     if (!localActivated && !serverActivated) {
       console.log('  → 设备需要激活')
       return {
@@ -251,7 +214,6 @@ export class ActivationService {
       }
     }
 
-    // 情况 2: 都已激活 - 正常
     if (localActivated && serverActivated) {
       console.log('  → 设备已激活')
       return {
@@ -261,7 +223,6 @@ export class ActivationService {
       }
     }
 
-    // 情况 3: 本地未激活但服务器已授权 - 自动修复
     if (!localActivated && serverActivated) {
       console.log('  → 自动修复本地激活状态')
       this.deviceFingerprint.setActivationStatus(true)
@@ -272,7 +233,6 @@ export class ActivationService {
       }
     }
 
-    // 情况 4: 本地已激活但服务器需要激活 - 可能被撤销
     if (localActivated && !serverActivated) {
       console.log('  → 服务器取消授权，需要重新激活')
       return {
@@ -289,9 +249,6 @@ export class ActivationService {
     }
   }
 
-  /**
-   * 执行激活流程
-   */
   async activate(activationData: ActivationData): Promise<boolean> {
     const { challenge, code } = activationData
 
@@ -310,7 +267,6 @@ export class ActivationService {
         return false
       }
 
-      // 计算 HMAC 签名
       const hmacSignature = this.deviceFingerprint.generateHmacSignature(challenge)
 
       const payload = {
@@ -338,7 +294,6 @@ export class ActivationService {
 
       console.log(`[激活服务] 开始激活: ${activateUrl}`)
 
-      // 重试逻辑（最多 5 分钟）
       const maxRetries = 60
       const retryInterval = 5000
 
@@ -406,10 +361,6 @@ export class ActivationService {
     }
   }
 
-  /**
-   * 开始激活流程（IPC 入口）
-   * 如果没有传入激活数据，则使用缓存的激活数据
-   */
   async startActivation(activationData?: ActivationData): Promise<boolean> {
     const data = activationData || this.cachedActivationData
     if (!data) {
@@ -419,9 +370,6 @@ export class ActivationService {
     return this.activate(data)
   }
 
-  /**
-   * 取消激活
-   */
   cancelActivation(): void {
     if (this.abortController) {
       console.log('[激活服务] 取消激活流程')
@@ -431,52 +379,31 @@ export class ActivationService {
     this.isActivating = false
   }
 
-  /**
-   * 获取激活数据（用于 IPC）
-   */
   getActivationData(): ActivationData | null {
     return this.cachedActivationData
   }
 
-  /**
-   * 检查是否已激活
-   */
   isActivated(): boolean {
     return this.deviceFingerprint?.isActivated() || false
   }
 
-  /**
-   * 检查是否正在激活
-   */
   isActivatingNow(): boolean {
     return this.isActivating
   }
 
-  /**
-   * 获取设备信息
-   */
   getDeviceInfo() {
     return this.deviceFingerprint?.getDeviceInfo()
   }
 
-  /**
-   * 获取设备指纹实例（用于高级访问）
-   */
   getDeviceFingerprint(): DeviceFingerprintManager | null {
     return this.deviceFingerprint || null
   }
 
-  /**
-   * 延迟辅助函数
-   */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
 
-/**
- * 获取激活服务单例
- */
 export function getActivationService(): ActivationService {
   return ActivationService.getInstance()
 }

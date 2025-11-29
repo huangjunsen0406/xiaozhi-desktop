@@ -5,7 +5,6 @@ import { onMounted, ref, watch } from 'vue'
 const message = useMessage()
 const loading = ref(false)
 
-// 防止 watch 循环的标志
 const isUpdatingLanguage = ref(false)
 
 // 配置项
@@ -138,7 +137,6 @@ async function handleCustomButton() {
   }
 }
 
-// 组件挂载时加载配置
 onMounted(() => {
   loadConfig()
 })

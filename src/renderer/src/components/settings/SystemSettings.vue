@@ -2,7 +2,6 @@
 import { NForm, NFormItem, NInput, NSelect, useMessage } from 'naive-ui'
 import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
 
-/* ======================= Types ======================= */
 interface SystemConfig {
   client_id: string
   device_id: string
@@ -19,12 +18,10 @@ interface SystemConfig {
   authorization_url: string
 }
 
-/** 脏检查（父组件可用来点亮"保存"） */
 const emit = defineEmits<{ (e: 'dirty-change', dirty: boolean): void }>()
 
 const message = useMessage()
 
-/* ======================= Defaults ======================= */
 const DEFAULTS: SystemConfig = {
   client_id: '',
   device_id: '',
@@ -41,18 +38,14 @@ const DEFAULTS: SystemConfig = {
   authorization_url: 'https://xiaozhi.me/',
 }
 
-/* ======================= State ======================= */
-/** 从数据库加载的配置基线 */
 const persisted = ref<SystemConfig>(cloneDeep(DEFAULTS))
 
-/** 工作副本：编辑时改这里，点击"保存"再写回 persisted */
 const form = reactive(cloneDeep(DEFAULTS))
 
 const isDirty = computed(() => JSON.stringify(form) !== JSON.stringify(persisted.value))
 // eslint-disable-next-line vue/custom-event-name-casing
 watch(isDirty, v => emit('dirty-change', v), { immediate: true })
 
-/* ======================= Utils ======================= */
 function cloneDeep<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj)) as T
 }
@@ -93,19 +86,15 @@ onMounted(() => {
   loadConfig()
 })
 
-/* ======================= Exposed API ======================= */
-
 async function handleSave() {
   const err = validate()
   if (err)
     throw new Error(err)
 
   try {
-    // 保存到数据库
     const result = await window.api.systemUpdateConfig(toRaw(form))
 
     if (result?.success) {
-      // 写回存储作为新基线
       persisted.value = cloneDeep(toRaw(form))
       // eslint-disable-next-line vue/custom-event-name-casing
       emit('dirty-change', false)
@@ -124,7 +113,6 @@ async function handleSave() {
 }
 
 async function handleCustomButton() {
-  // 重置工作副本为默认值（不立即写盘；等父组件点保存）
   const snap = cloneDeep(DEFAULTS)
   Object.assign(form, snap)
 }
@@ -133,7 +121,6 @@ defineExpose({ handleSave, handleCustomButton })
 </script>
 
 <template>
-  <!-- 关键：根容器可收缩，避免把父级滚动区顶开 -->
   <div class="min-h-0">
     <NForm label-placement="left" :label-width="160">
       <!-- 基本标识 -->

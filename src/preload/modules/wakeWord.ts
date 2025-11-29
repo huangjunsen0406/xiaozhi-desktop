@@ -1,16 +1,8 @@
+import type { WakeWordConfig } from '@shared/types'
 import { ipcRenderer } from 'electron'
 
-/**
- * 唤醒词配置接口
- */
-export interface WakeWordConfig {
-  enabled: boolean
-  language: string
-  keyword: string
-  threshold: number
-  score: number
-  cooldownMs: number
-}
+// 导出共享类型
+export type { WakeWordConfig }
 
 /**
  * 唤醒词 API

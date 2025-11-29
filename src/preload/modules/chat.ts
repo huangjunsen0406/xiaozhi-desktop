@@ -1,42 +1,8 @@
+import type { ChatMessage, ChatSession, IpcResult } from '@shared/types'
 /**
  * 聊天 API 模块
  */
 import { ipcRenderer } from 'electron'
-
-/**
- * IPC 结果类型
- */
-interface IpcResult<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
-/**
- * 聊天消息类型
- */
-interface ChatMessage {
-  id: number
-  session_id: string
-  role: 'user' | 'assistant'
-  content: string
-  emotion?: string
-  source_type: string
-  image_data?: Uint8Array | { type: string, data: number[] } | number[]
-  timestamp: number
-}
-
-/**
- * 聊天会话类型
- */
-interface ChatSession {
-  id: number
-  session_id: string
-  title?: string
-  message_count: number
-  started_at: number
-  last_message_at?: number
-}
 
 export const chatApi = {
   /**

@@ -1,26 +1,13 @@
+import type { MqttInfo } from '@shared/types'
 import { v4 as uuidv4 } from 'uuid'
 import { DatabaseManager } from './database'
 
-/**
- * MQTT 配置信息类型
- */
-export interface MqttInfo {
-  endpoint: string | null
-  client_id: string | null
-  username: string | null
-  password: string | null
-  publish_topic: string | null
-  subscribe_topic: string | null
-}
+export type { MqttInfo }
 
-/**
- * 配置管理器 (SQLite 版本) - 单例模式
- */
 export class ConfigManager {
   private static instance: ConfigManager | null = null
   private db: DatabaseManager
 
-  // 默认配置
   private static DEFAULT_CONFIG = {
     OTA_VERSION_URL: 'https://api.tenclass.net/xiaozhi/ota/',
     ACTIVATION_VERSION: 'v2',
@@ -39,11 +26,7 @@ export class ConfigManager {
     return ConfigManager.instance
   }
 
-  /**
-   * 初始化默认配置
-   */
   private initializeDefaultConfig(): void {
-    // 确保 CLIENT_ID 存在
     let clientId = this.getClientId()
     if (!clientId) {
       clientId = uuidv4()
@@ -51,7 +34,6 @@ export class ConfigManager {
       console.log(`[ConfigManager] 已生成 CLIENT_ID: ${clientId}`)
     }
 
-    // 确保网络配置记录存在
     const config = this.db.getNetworkConfig()
     if (!config) {
       this.db.getOrCreateNetworkConfig({ client_id: clientId })
@@ -59,9 +41,6 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * 初始化 DEVICE_ID（从设备指纹获取 MAC 地址）
-   */
   async initializeDeviceIdAsync(): Promise<void> {
     const { DeviceFingerprintManager } = await import('./deviceFingerprintDB')
     const deviceFingerprint = await DeviceFingerprintManager.getInstanceAsync()
@@ -73,14 +52,9 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * 获取完整配置（扁平格式）
-   */
   getAll(): Record<string, unknown> {
     return this.db.getAllConfig()
   }
-
-  /* ==================== 类型安全的配置访问方法 ==================== */
 
   getClientId(): string {
     const config = this.db.getNetworkConfig()
@@ -229,9 +203,6 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * 批量更新配置
-   */
   updateBatch(updates: Record<string, string | null>): boolean {
     try {
       this.db.updateNetworkConfigBatch(updates)
@@ -244,7 +215,6 @@ export class ConfigManager {
   }
 }
 
-// 导出单例获取函数
 export function getConfigManager(): ConfigManager {
   return ConfigManager.getInstance()
 }

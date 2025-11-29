@@ -1,4 +1,4 @@
-import type { AnalyzeResult, CameraConfig, CaptureResult } from './types'
+import type { AnalyzeResult, CameraToolConfig, CaptureResult } from './types'
 
 /**
  * Web 摄像头实现
@@ -16,12 +16,12 @@ export class WebCamera extends BaseCamera {
   private deviceId = ''
   private clientId = ''
 
-  private constructor(config?: Partial<CameraConfig>) {
+  private constructor(config?: Partial<CameraToolConfig>) {
     super(config)
     console.log('[WebCamera] 初始化 Web 摄像头')
   }
 
-  static getInstance(config?: Partial<CameraConfig>): WebCamera {
+  static getInstance(config?: Partial<CameraToolConfig>): WebCamera {
     if (!WebCamera.instance) {
       WebCamera.instance = new WebCamera(config)
     }

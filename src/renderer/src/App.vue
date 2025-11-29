@@ -89,11 +89,6 @@ onMounted(async () => {
       appStore.handleServerMessage(message)
     })
 
-    // 监听图片捕获事件
-    window.api.chatOnImageCaptured((data: { imageBase64: string }) => {
-      appStore.handleImageCaptured(data.imageBase64)
-    })
-
     // 监听单条消息添加事件
     window.api.chatOnMessageAdded((data) => {
       console.log('[App] 收到消息添加事件:', data)

@@ -1,10 +1,15 @@
+import type {
+  AudioConfig,
+  CameraConfig,
+  IpcResult,
+  MqttInfo,
+  OtaConfigResponse,
+  ServerMessage,
+  WakeWordConfig,
+} from '@shared/types'
 /**
  * 数据库类型定义
  * 定义所有数据库表的类型接口
- */
-
-/**
- * 设备信息表类型
  */
 import type { Buffer } from 'node:buffer'
 
@@ -131,109 +136,23 @@ export interface DbSessionStats {
   last_ts: number | null
 }
 
-/**
- * IPC 结果类型
- */
-export interface IpcResultSuccess<T = unknown> {
-  success: true
-  data: T
-}
-
-export interface IpcResultError {
-  success: false
-  error: string
-}
-
-export type IpcResult<T = unknown> = IpcResultSuccess<T> | IpcResultError
-
-/**
- * 服务器消息类型（来自 WebSocket）
- */
-export interface ServerMessage {
-  type: string
-  state?: string
-  text?: string
-  emotion?: string
-  session_id?: string
-  [key: string]: unknown
-}
-
-/**
- * OTA 配置响应类型
- */
-export interface OtaConfigResponse {
-  websocket?: {
-    url?: string
-    token?: string
-  }
-  mqtt?: {
-    endpoint?: string
-    client_id?: string
-    username?: string
-    password?: string
-    publish_topic?: string
-    subscribe_topic?: string
-  }
-  activation?: {
-    challenge: string
-    code: string
-    message?: string
-  }
-}
-
-/**
- * MQTT 信息类型
- */
-export interface MqttInfo {
-  endpoint: string | null
-  client_id: string | null
-  username: string | null
-  password: string | null
-  publish_topic: string | null
-  subscribe_topic: string | null
-}
+// 导出共享类型
+export type { IpcResult, MqttInfo, OtaConfigResponse, ServerMessage }
 
 /**
  * 摄像头配置更新类型
  */
-export interface CameraConfigUpdate {
-  enabled?: boolean
-  device_id?: string
-  device_label?: string
-  use_local_vision?: boolean
-  vl_api_key?: string
-  vl_url?: string
-  vl_model?: string
-  capture_width?: number
-  capture_height?: number
-  jpeg_quality?: number
-  max_dimension?: number
-}
+export type CameraConfigUpdate = Partial<CameraConfig>
 
 /**
  * 唤醒词配置更新类型
  */
-export interface WakeWordConfigUpdate {
-  enabled?: boolean
-  language?: string
-  keyword?: string
-  threshold?: number
-  score?: number
-  cooldown_ms?: number
-  keyword_zh?: string
-  keyword_en?: string
-}
+export type WakeWordConfigUpdate = Partial<WakeWordConfig>
 
 /**
  * 音频配置更新类型
  */
-export interface AudioConfigUpdate {
-  input_device_name?: string | null
-  output_device_name?: string | null
-  enable_noise_reduction?: boolean
-  enable_echo_cancellation?: boolean
-  conversation_mode?: string
-}
+export type AudioConfigUpdate = Partial<AudioConfig>
 
 /**
  * sherpa-onnx KeywordSpotter 类型

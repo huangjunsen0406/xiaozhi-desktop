@@ -1,3 +1,4 @@
+import type { BackgroundAudioStatus } from '@shared/types'
 /**
  * 后台音频窗口 API 模块
  */
@@ -12,17 +13,7 @@ export interface AudioState {
   error?: string
 }
 
-/**
- * 后台音频详细状态
- */
-export interface BackgroundAudioStatus {
-  initialized: boolean
-  capturing: boolean
-  playing: boolean
-  currentInputDeviceId?: string
-  currentOutputDeviceId?: string
-  error?: string
-}
+export type { BackgroundAudioStatus }
 
 export const backgroundAudioApi = {
   // 监听音频命令

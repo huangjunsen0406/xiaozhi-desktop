@@ -1,28 +1,11 @@
+import type { AudioConfig, IpcResult } from '@shared/types'
 /**
  * 音频 API 模块
  */
 import type { Buffer } from 'node:buffer'
 import { ipcRenderer } from 'electron'
 
-/**
- * IPC 结果类型
- */
-interface IpcResult<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
-/**
- * 音频配置类型
- */
-export interface AudioConfig {
-  inputDeviceName?: string
-  outputDeviceName?: string
-  enableNoiseReduction: boolean
-  enableEchoCancellation: boolean
-  conversationMode: 'auto' | 'realtime'
-}
+export type { AudioConfig }
 
 export const audioApi = {
   // PCM 数据发送
@@ -42,7 +25,10 @@ export const audioApi = {
   getConfig: async (): Promise<AudioConfig> => {
     const result = await ipcRenderer.invoke('audio:get-config') as IpcResult<AudioConfig>
     // 解包中间件响应格式 { success: true, data: AudioConfig }
-    return result.data !== undefined ? result.data : (result as unknown as AudioConfig)
+    if (result.success && 'data' in result) {
+      return result.data
+    }
+    return result as unknown as AudioConfig
   },
 
   // 更新音频配置
@@ -58,14 +44,20 @@ export const audioApi = {
   getDefaultDeviceId: async (kind: 'input' | 'output'): Promise<string | null> => {
     const result = await ipcRenderer.invoke('audio:get-default-device-id', kind) as IpcResult<string | null>
     // 解包中间件响应格式 { success: true, data: string | null }
-    return result.data !== undefined ? result.data : null
+    if (result.success && 'data' in result) {
+      return result.data
+    }
+    return null
   },
 
   // 获取系统音量
   systemGetVolume: async (): Promise<number> => {
     const result = await ipcRenderer.invoke('audio:system-get-volume') as IpcResult<number>
     // 解包中间件响应格式 { success: true, data: number }
-    return result.data !== undefined ? result.data : 0
+    if (result.success && 'data' in result) {
+      return result.data
+    }
+    return 0
   },
 
   // 设置系统音量
@@ -81,6 +73,9 @@ export const audioApi = {
   systemVolumeSupported: async (): Promise<boolean> => {
     const result = await ipcRenderer.invoke('audio:system-volume-supported') as IpcResult<boolean>
     // 解包中间件响应格式 { success: true, data: boolean }
-    return result.data !== undefined ? result.data : false
+    if (result.success && 'data' in result) {
+      return result.data
+    }
+    return false
   },
 }

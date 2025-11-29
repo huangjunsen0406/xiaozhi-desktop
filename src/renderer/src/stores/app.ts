@@ -1,4 +1,4 @@
-import type { ChatMessage as IpcChatMessage, ChatSession as IpcChatSession } from '../../../preload/index.d'
+import type { ChatSession as IpcChatSession } from '../../../preload/index.d'
 import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from '../types/chat'
 /**
  * 全局应用 Store
@@ -8,8 +8,7 @@ import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { generateSessionTitle, getTodaySessionId, isTodaySession } from '../utils/dateUtils'
-
-// ==================== 类型定义 ====================
+import { mapIpcMessageToChatMessage, mapIpcSessionToChatSession } from '../utils/transformers'
 
 /** 设备状态类型 */
 export type DeviceState = 'idle' | 'connecting' | 'listening' | 'speaking'
@@ -24,11 +23,7 @@ export interface AppStateSnapshot {
   channelOpen: boolean
 }
 
-// ==================== Store 定义 ====================
-
 export const useAppStore = defineStore('app', () => {
-  // ==================== 设备 & 通话状态 ====================
-
   /** 设备状态 */
   const deviceState = ref<DeviceState>('idle')
 
@@ -44,8 +39,6 @@ export const useAppStore = defineStore('app', () => {
   /** 当前显示的文本（用于实时更新，如 MainView） */
   const currentText = ref<string>('')
 
-  // ==================== 会话 & 消息状态 ====================
-
   /** 会话列表 */
   const sessions = ref<ChatSession[]>([])
 
@@ -54,11 +47,6 @@ export const useAppStore = defineStore('app', () => {
 
   /** 当前会话的消息列表（UI 显示用） */
   const messages = ref<ChatMessageType[]>([])
-
-  /** 待保存的图片数据 */
-  // 图片数据持久化由主进程负责，这里仅做 UI 展示
-
-  // ==================== 计算属性 ====================
 
   /** 是否正在通话（设备非空闲或通道打开） */
   const isCalling = computed(() => deviceState.value !== 'idle' || channelOpen.value)
@@ -93,8 +81,6 @@ export const useAppStore = defineStore('app', () => {
     return deviceState.value === 'listening' && listeningMode.value === 'manual'
   })
 
-  // ==================== 设备 & 通话状态管理 ====================
-
   /**
    * 更新设备状态
    */
@@ -128,8 +114,6 @@ export const useAppStore = defineStore('app', () => {
     emotion.value = 'neutral'
     currentText.value = ''
   }
-
-  // ==================== 通话控制方法 ====================
 
   /**
    * 发送文本消息
@@ -208,22 +192,15 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  // ==================== 会话管理 ====================
-
   /**
    * 加载会话列表
    */
   async function loadSessions() {
     try {
       const data = await window.api.chatGetSessions()
-      sessions.value = data.map((s: IpcChatSession) => ({
-        id: s.id,
-        sessionId: s.session_id,
-        title: s.title || '新对话',
-        active: s.session_id === currentSessionId.value,
-        messageCount: s.message_count,
-        lastMessageAt: s.last_message_at ?? s.started_at,
-      }))
+      sessions.value = data.map((s: IpcChatSession) =>
+        mapIpcSessionToChatSession(s, s.session_id === currentSessionId.value),
+      )
 
       console.log('[AppStore] 会话列表已加载:', sessions.value.length)
     }
@@ -240,14 +217,7 @@ export const useAppStore = defineStore('app', () => {
       console.log('[AppStore] 加载会话消息:', sessionId)
 
       const msgs = await window.api.chatGetMessages(sessionId)
-      messages.value = msgs.map((m: IpcChatMessage) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        emotion: m.emotion ?? undefined,
-        imageData: m.image_data ?? undefined,
-        timestamp: m.timestamp,
-      }))
+      messages.value = msgs.map(mapIpcMessageToChatMessage)
 
       console.log('[AppStore] 消息已加载，数量:', messages.value.length)
     }
@@ -296,14 +266,7 @@ export const useAppStore = defineStore('app', () => {
 
       // 加载消息
       const msgs = await window.api.chatGetMessages(sessionId)
-      messages.value = msgs.map((m: IpcChatMessage) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        emotion: m.emotion ?? undefined,
-        imageData: m.image_data ?? undefined,
-        timestamp: m.timestamp,
-      }))
+      messages.value = msgs.map(mapIpcMessageToChatMessage)
 
       // 更新当前会话 ID
       currentSessionId.value = sessionId
@@ -357,63 +320,19 @@ export const useAppStore = defineStore('app', () => {
       console.error('[AppStore] 删除会话失败:', error)
     }
   }
-
-  // ==================== 消息处理（核心逻辑） ====================
-
   /**
    * 处理服务器消息（所有窗口统一调用）
    */
   async function handleServerMessage(message: ServerMessage) {
     console.log('[AppStore] 处理服务器消息:', message.type, message.text || '')
 
-    // 确保有当前会话
     if (!currentSessionId.value) {
       currentSessionId.value = await getTodaySession()
       console.log('[AppStore] 自动创建会话:', currentSessionId.value)
     }
-
-    // 处理不同类型的消息
-    if (message.type === 'stt' && message.text) {
-      await handleSttMessage(message.text)
-    }
     else if (message.type === 'llm' && message.emotion) {
       emotion.value = message.emotion
     }
-    else if (message.type === 'mcp') {
-      await handleMcpMessage(message)
-    }
-  }
-
-  /**
-   * 处理 STT 消息（用户语音识别）
-   * ⚠️ 主进程 ChatPlugin 负责保存和过滤，前端通过 message-added 事件刷新
-   * 这里不做任何界面更新，避免状态同步问题
-   */
-  async function handleSttMessage(text: string) {
-    // 过滤特殊提示
-    if (text === '获取用户输入文本。') {
-      return
-    }
-
-    // STT 消息由主进程统一处理保存和过滤，前端只等待 message-added 事件刷新
-    console.log('[AppStore] STT 消息已收到，等待 message-added 事件刷新:', text)
-  }
-
-  /**
-   * 处理 MCP 消息（工具调用）
-   */
-  async function handleMcpMessage(_message: ServerMessage) {
-    // MCP 工具调用不需要前端处理
-    // 图片等资源由后端保存到数据库后通过 chat:message-added 事件通知前端刷新
-  }
-
-  /**
-   * 处理图片捕获
-   */
-  async function handleImageCaptured(_imageBase64: string) {
-    // 图片由后端直接保存到数据库
-    // 前端通过 chat:message-added 事件接收通知后重新加载消息列表即可显示
-    console.log('[AppStore] 图片由后端保存，等待 message-added 事件刷新')
   }
 
   /**
@@ -422,8 +341,6 @@ export const useAppStore = defineStore('app', () => {
   function clearMessages() {
     messages.value = []
   }
-
-  // ==================== 返回 ====================
 
   return {
     // 设备 & 通话状态
@@ -469,12 +386,6 @@ export const useAppStore = defineStore('app', () => {
 
     // 消息处理
     handleServerMessage,
-    handleImageCaptured,
     clearMessages,
   }
 })
-
-// ==================== 兼容性导出 ====================
-
-/** @deprecated 使用 useAppStore 代替 */
-export const useCallStore = useAppStore

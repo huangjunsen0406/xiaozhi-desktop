@@ -1,87 +1,41 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
+import type {
+  ActivationData,
+  ActivationResult,
+  ActivationStatus,
+  AppStateSnapshot,
+  AppStateSnapshotRaw,
+  AudioConfig,
+  BackgroundAudioStatus,
+  ChatMessage,
+  ChatSession,
+  DeviceInfo,
+  ServerMessage,
+  ShortcutConfig,
+  WakeWordConfig,
+} from '@shared/types'
 import type { Buffer } from 'node:buffer'
 
 /**
- * 激活相关类型
+ * 激活设备信息
  */
-export interface ActivationDeviceInfo {
-  serialNumber: string
-  macAddress: string
-  activationStatus: boolean
-  deviceFingerprint: {
-    system: string
-    hostname: string
-    mac_address: string
-    machine_id: string
-  }
-}
+export type ActivationDeviceInfo = DeviceInfo
 
-export interface ActivationData {
-  client_id: string
-  otp: string
-  mac_address: string
-  code?: string
-}
-
-export interface ActivationResult {
-  success: boolean
-  message?: string
-  websocket_url?: string
-  access_token?: string
-  error?: string
-}
-
-export interface ActivationStatus {
-  activated: boolean
-  message?: string
-}
-
-/**
- * 音频配置类型
- */
-export interface AudioConfig {
-  inputDeviceName?: string
-  outputDeviceName?: string
-  enableNoiseReduction: boolean
-  enableEchoCancellation: boolean
-  conversationMode: 'auto' | 'realtime'
-}
-
-/**
- * 应用状态类型（IPC 返回的原始格式，使用 snake_case）
- */
-export interface AppStateSnapshotRaw {
-  device_state: string
-  listening_mode: string
-  keep_listening: boolean
-  audio_opened: boolean
-}
-
-/**
- * 应用状态类型（事件通知格式，使用 camelCase）
- */
-export interface AppStateSnapshot {
-  deviceState: string
-  listeningMode: string
-  channelOpen: boolean
-}
-
-/**
- * 服务器消息类型
- */
-export interface ServerMessage {
-  type: 'llm' | 'tts' | 'stt' | 'mcp'
-  state?: 'start' | 'stop' | 'sentence_start' | 'sentence_end'
-  text?: string
-  emotion?: string
-  payload?: {
-    params?: {
-      name?: string
-      [key: string]: unknown
-    }
-    [key: string]: unknown
-  }
-  [key: string]: unknown
+// 导出共享类型供渲染进程使用
+export type {
+  ActivationData,
+  ActivationResult,
+  ActivationStatus,
+  AppStateSnapshot,
+  AppStateSnapshotRaw,
+  AudioConfig,
+  BackgroundAudioStatus,
+  ChatMessage,
+  ChatSession,
+  DeviceInfo,
+  ServerMessage,
+  ShortcutConfig,
+  WakeWordConfig,
 }
 
 /**
@@ -92,53 +46,6 @@ export interface SystemConfig {
   theme?: string
   autoStart?: boolean
   [key: string]: unknown
-}
-
-/**
- * 唤醒词配置类型
- */
-export interface WakeWordConfig {
-  enabled: boolean
-  language: string
-  keyword?: string
-  sensitivity?: number
-  threshold?: number
-}
-
-/**
- * 后台音频状态类型
- */
-export interface BackgroundAudioStatus {
-  initialized: boolean
-  capturing: boolean
-  inputDeviceId?: string
-  outputDeviceId?: string
-}
-
-/**
- * 聊天会话类型
- */
-export interface ChatSession {
-  id: number
-  session_id: string
-  title?: string | null
-  message_count: number
-  started_at: number
-  last_message_at?: number | null
-}
-
-/**
- * 聊天消息类型
- */
-export interface ChatMessage {
-  id: number
-  session_id: string
-  role: 'user' | 'assistant'
-  content: string
-  emotion?: string | null
-  source_type: string
-  image_data?: Uint8Array
-  timestamp: number
 }
 
 export interface RendererApi {
@@ -286,15 +193,7 @@ export interface RendererApi {
   live2dRemoveAudioVolumeListener: () => void
 }
 
-export interface ShortcutConfig {
-  id: number
-  action: string
-  name: string
-  category: string
-  accelerator: string | null
-  enabled: number
-  is_global: number
-}
+// ShortcutConfig 从共享类型导入
 
 declare global {
   interface Window {

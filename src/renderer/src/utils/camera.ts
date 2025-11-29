@@ -95,28 +95,6 @@ export async function captureFromWebcam(
 }
 
 /**
- * 检查摄像头权限
- */
-export async function checkCameraPermission(): Promise<boolean> {
-  try {
-    // 尝试获取摄像头列表
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    const hasCamera = devices.some(device => device.kind === 'videoinput')
-
-    if (!hasCamera) {
-      console.warn('[Camera] 未找到摄像头设备')
-      return false
-    }
-
-    return true
-  }
-  catch (error) {
-    console.error('[Camera] 检查摄像头权限失败:', error)
-    return false
-  }
-}
-
-/**
  * 摄像头设备信息
  */
 export interface CameraDevice {
@@ -152,64 +130,3 @@ export async function getCameraDevices(): Promise<CameraDevice[]> {
   }
 }
 
-/**
- * 测试摄像头设备
- */
-export async function testCameraDevice(deviceId?: string): Promise<{
-  success: boolean
-  message?: string
-  imageUrl?: string
-}> {
-  try {
-    const constraints: MediaStreamConstraints = {
-      video: deviceId ? { deviceId: { exact: deviceId } } : true,
-      audio: false,
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia(constraints)
-
-    // 创建 video 元素
-    const video = document.createElement('video')
-    video.srcObject = stream
-    video.autoplay = true
-
-    // 等待视频加载
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => {
-        video.play().then(() => resolve()).catch(reject)
-      }
-      video.onerror = reject
-    })
-
-    // 等待一帧
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    // 捕获图像
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new Error('无法创建 canvas context')
-    }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-    // 转换为 Data URL
-    const imageUrl = canvas.toDataURL('image/jpeg', 0.8)
-
-    // 停止所有轨道
-    stream.getTracks().forEach(track => track.stop())
-
-    return {
-      success: true,
-      imageUrl,
-    }
-  }
-  catch (error) {
-    console.error('[Camera] 测试摄像头失败:', error)
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : '测试摄像头失败',
-    }
-  }
-}

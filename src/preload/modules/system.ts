@@ -1,10 +1,11 @@
+import type { IpcResult } from '@shared/types'
 /**
  * 系统配置 API 模块
  */
 import { ipcRenderer } from 'electron'
 
 /**
- * 系统配置类型
+ * 系统配置类型（网络配置的扩展）
  */
 export interface SystemConfig {
   client_id: string
@@ -22,14 +23,8 @@ export interface SystemConfig {
   authorization_url: string
 }
 
-/**
- * 配置操作结果
- */
-export interface ConfigResult<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-}
+// 配置操作结果使用共享的 IpcResult
+export type ConfigResult<T = unknown> = IpcResult<T>
 
 export const systemApi = {
   // 获取系统配置

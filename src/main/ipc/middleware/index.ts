@@ -1,36 +1,42 @@
-/**
- * IPC 中间件模块
- * 提供统一的参数校验、错误处理和日志记录
- */
+import type { IpcResult } from '@shared/types'
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
 
 /**
- * 参数校验规则
+ * IPC 参数验证规则
+ * 支持类型检查、必填校验、长度/范围限制、正则匹配、自定义校验
  */
 export interface ValidationRule {
+  /** 参数类型 */
   type: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  /** 是否必填 */
   required?: boolean
+  /** 字符串最小长度 */
   minLength?: number
+  /** 字符串最大长度 */
   maxLength?: number
+  /** 数字最小值 */
   min?: number
+  /** 数字最大值 */
   max?: number
+  /** 正则表达式匹配模式（用于字符串） */
   pattern?: RegExp
+  /** 自定义校验函数，返回 true 表示通过，返回 string 表示错误信息 */
   custom?: (value: unknown) => boolean | string
 }
 
 /**
- * 参数校验配置
+ * 验证规则集合
+ * key 为参数名称，value 为对应的验证规则
  */
 export type ValidationSchema = Record<string, ValidationRule>
 
 /**
- * IPC 处理结果
+ * IPC 响应数据结构
+ * 继承自 IpcResult，额外添加错误代码字段
  */
-export interface IpcResponse<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
+export type IpcResponse<T = unknown> = IpcResult<T> & {
+  /** 错误代码，用于区分不同的错误类型 */
   code?: string
 }
 
@@ -38,18 +44,29 @@ export interface IpcResponse<T = unknown> {
  * IPC 处理器配置
  */
 export interface IpcHandlerConfig {
-  /** 通道名称 */
+  /** IPC 通道名称 */
   channel: string
-  /** 参数校验规则 */
+  /** 参数验证规则（可选） */
   schema?: ValidationSchema
-  /** 是否记录详细日志 */
+  /** 是否输出详细日志 */
   verbose?: boolean
-  /** 处理器函数 */
+  /** 处理函数 */
   handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<unknown> | unknown
 }
 
 /**
- * 验证参数
+ * 验证 IPC 参数
+ *
+ * 验证流程：
+ * 1. 检查必填项
+ * 2. 检查类型是否匹配
+ * 3. 对于字符串：检查长度和正则匹配
+ * 4. 对于数字：检查范围
+ * 5. 执行自定义校验函数
+ *
+ * @param args 要验证的参数数组
+ * @param schema 验证规则集合
+ * @returns string | null 返回错误信息，如果验证通过则返回 null
  */
 function validateArgs(args: unknown[], schema: ValidationSchema): string | null {
   const keys = Object.keys(schema)
@@ -59,28 +76,26 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
     const rule = schema[key]
     const value = args[i]
 
-    // 检查必填
+    // 检查必填项
     if (rule.required && (value === undefined || value === null)) {
       return `参数 ${key} 不能为空`
     }
 
-    // 如果值为空且非必填，跳过后续验证
+    // 如果值为空且非必填，跳过后续校验
     if (value === undefined || value === null) {
       continue
     }
 
-    // 检查类型
+    // 类型校验
     if (rule.type === 'array') {
       if (!Array.isArray(value)) {
         return `参数 ${key} 必须是数组`
       }
     }
     else {
-      // 类型检查 - 使用类型保护确保符合 typeof 的返回值
       const actualType = typeof value
       const expectedType = rule.type
 
-      // 验证期望类型是否为 typeof 支持的类型
       const validTypes = ['string', 'number', 'boolean', 'object'] as const
       if (!validTypes.includes(expectedType as typeof validTypes[number])) {
         return `参数 ${key} 类型配置错误`
@@ -91,7 +106,7 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
       }
     }
 
-    // 字符串特定验证
+    // 字符串特定校验
     if (rule.type === 'string' && typeof value === 'string') {
       if (rule.minLength !== undefined && value.length < rule.minLength) {
         return `参数 ${key} 长度不能少于 ${rule.minLength}`
@@ -104,7 +119,7 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
       }
     }
 
-    // 数字特定验证
+    // 数字特定校验
     if (rule.type === 'number' && typeof value === 'number') {
       if (rule.min !== undefined && value < rule.min) {
         return `参数 ${key} 不能小于 ${rule.min}`
@@ -114,7 +129,7 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
       }
     }
 
-    // 自定义验证
+    // 自定义校验
     if (rule.custom) {
       const result = rule.custom(value)
       if (result !== true) {
@@ -127,7 +142,10 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
 }
 
 /**
- * 格式化错误消息
+ * 格式化错误信息
+ * 将各种类型的错误统一转换为字符串
+ * @param error 错误对象
+ * @returns string 错误信息字符串
  */
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -137,7 +155,15 @@ function formatError(error: unknown): string {
 }
 
 /**
- * 创建带中间件的 IPC 处理器
+ * 创建 IPC 处理器
+ *
+ * 功能特性：
+ * 1. 参数校验：根据 schema 自动验证参数
+ * 2. 错误处理：自动捕获异常并返回标准错误响应
+ * 3. 性能监控：记录处理时长，超过 1 秒自动输出警告
+ * 4. 日志输出：支持详细日志模式
+ *
+ * @param config IPC 处理器配置
  */
 export function createIpcHandler(config: IpcHandlerConfig): void {
   const { channel, schema, verbose = false, handler } = config
@@ -160,14 +186,15 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
         }
       }
 
-      // 执行处理器
+      // 详细日志：输出请求参数
       if (verbose) {
         console.log(`${prefix} 开始处理`, args)
       }
 
+      // 执行处理函数
       const result = await handler(event, ...args)
 
-      // 记录执行时间
+      // 性能监控：记录处理时长
       const duration = Date.now() - startTime
       if (verbose || duration > 1000) {
         console.log(`${prefix} 处理完成 (${duration}ms)`)
@@ -176,6 +203,7 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
       return result
     }
     catch (error) {
+      // 错误处理：捕获异常并返回标准错误响应
       const duration = Date.now() - startTime
       console.error(`${prefix} 处理失败 (${duration}ms):`, error)
 
@@ -190,6 +218,10 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
 
 /**
  * 创建简单的 IPC 处理器（无参数校验）
+ * 适用于不需要参数校验的简单场景
+ *
+ * @param channel IPC 通道名称
+ * @param handler 处理函数
  */
 export function createSimpleHandler<T>(
   channel: string,
@@ -203,6 +235,9 @@ export function createSimpleHandler<T>(
 
 /**
  * 批量注册 IPC 处理器
+ * 用于一次性注册多个 IPC 通道处理器
+ *
+ * @param configs IPC 处理器配置数组
  */
 export function registerIpcHandlers(configs: IpcHandlerConfig[]): void {
   for (const config of configs) {
@@ -211,17 +246,28 @@ export function registerIpcHandlers(configs: IpcHandlerConfig[]): void {
 }
 
 /**
- * 创建标准成功响应
+ * 创建成功响应（带数据）
+ * @param data 响应数据
+ * @returns IpcResponse<T> 成功响应对象
  */
-export function success<T>(data?: T): IpcResponse<T> {
+export function success<T>(data: T): IpcResponse<T>
+/**
+ * 创建成功响应（无数据）
+ * @returns IpcResponse<undefined> 成功响应对象
+ */
+export function success(): IpcResponse<undefined>
+export function success<T>(data?: T): IpcResponse<T | undefined> {
   return {
     success: true,
     data,
-  }
+  } as IpcResponse<T | undefined>
 }
 
 /**
- * 创建标准失败响应
+ * 创建失败响应
+ * @param error 错误信息
+ * @param code 错误代码（可选）
+ * @returns IpcResponse 失败响应对象
  */
 export function failure(error: string, code?: string): IpcResponse {
   return {

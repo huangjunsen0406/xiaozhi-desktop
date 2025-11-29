@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer'
 import OpusScript from 'opusscript'
 
 /**
- * Opus 编解码器 (使用 opusscript - 纯 JS 实现)
+ * Opus 编解码器
  * 负责音频的编码和解码
  */
 export class OpusCodec {

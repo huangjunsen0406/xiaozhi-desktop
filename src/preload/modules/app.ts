@@ -1,37 +1,12 @@
+import type { AppStateSnapshotRaw, IpcResult, ServerMessage } from '@shared/types'
 /**
  * Application 控制 API 模块
  */
 import { ipcRenderer } from 'electron'
 
-/**
- * IPC 结果类型
- */
-interface IpcResult<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
-/**
- * 服务器消息类型
- */
-export interface ServerMessage {
-  type: string
-  emotion?: string
-  text?: string
-  state?: string
-  [key: string]: unknown
-}
-
-/**
- * 应用状态快照类型
- */
-export interface AppStateSnapshot {
-  device_state: string
-  listening_mode: string
-  keep_listening: boolean
-  audio_opened: boolean
-}
+// 导出类型以便其他模块使用
+export type { ServerMessage }
+export type AppStateSnapshot = AppStateSnapshotRaw
 
 export const appApi = {
   // 开始手动监听

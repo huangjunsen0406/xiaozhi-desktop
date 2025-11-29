@@ -1,3 +1,4 @@
+import type { ShortcutConfig } from '@shared/types'
 import type { Application } from './Application'
 import Database from 'better-sqlite3'
 import { globalShortcut } from 'electron'
@@ -8,16 +9,6 @@ import {
   toggleToMain,
   toggleToMini,
 } from '../windows/windowManager'
-
-interface ShortcutConfig {
-  id: number
-  action: string
-  name: string
-  category: string
-  accelerator: string | null
-  enabled: number
-  is_global: number
-}
 
 export class ShortcutManager {
   private db: Database.Database
@@ -45,7 +36,6 @@ export class ShortcutManager {
       )
     `)
 
-    // 检查是否需要插入默认数据
     const count = this.db.prepare('SELECT COUNT(*) as count FROM shortcuts').get() as { count: number }
     if (count.count === 0) {
       this.insertDefaultShortcuts()
@@ -77,9 +67,6 @@ export class ShortcutManager {
     console.log('[ShortcutManager] 已插入默认快捷键')
   }
 
-  /**
-   * 加载所有快捷键
-   */
   async loadShortcuts(): Promise<ShortcutConfig[]> {
     const shortcuts = this.db.prepare('SELECT * FROM shortcuts').all() as ShortcutConfig[]
     this.shortcuts.clear()
@@ -87,9 +74,6 @@ export class ShortcutManager {
     return shortcuts
   }
 
-  /**
-   * 注册所有启用的快捷键
-   */
   async registerAll(): Promise<void> {
     await this.loadShortcuts()
 
@@ -102,9 +86,6 @@ export class ShortcutManager {
     console.log('[ShortcutManager] 已注册快捷键数量:', this.shortcuts.size)
   }
 
-  /**
-   * 注册单个快捷键
-   */
   registerShortcut(action: string, accelerator: string): void {
     try {
       const success = globalShortcut.register(accelerator, () => {
@@ -123,42 +104,29 @@ export class ShortcutManager {
     }
   }
 
-  /**
-   * 注销单个快捷键
-   */
   unregisterShortcut(accelerator: string): void {
     globalShortcut.unregister(accelerator)
     console.log(`[ShortcutManager] 注销快捷键: ${accelerator}`)
   }
 
-  /**
-   * 更新快捷键
-   */
   async updateShortcut(action: string, newAccelerator: string | null): Promise<void> {
     const oldConfig = this.shortcuts.get(action)
 
-    // 注销旧的
     if (oldConfig?.accelerator) {
       this.unregisterShortcut(oldConfig.accelerator)
     }
 
-    // 更新数据库
     const now = Math.floor(Date.now() / 1000)
     this.db.prepare('UPDATE shortcuts SET accelerator = ?, updated_at = ? WHERE action = ?')
       .run(newAccelerator, now, action)
 
-    // 注册新的
     if (newAccelerator) {
       this.registerShortcut(action, newAccelerator)
     }
 
-    // 更新缓存
     await this.loadShortcuts()
   }
 
-  /**
-   * 检测快捷键冲突
-   */
   checkConflict(accelerator: string, excludeAction?: string): string | null {
     for (const [action, config] of this.shortcuts) {
       if (action !== excludeAction && config.accelerator === accelerator && config.enabled) {
@@ -168,29 +136,17 @@ export class ShortcutManager {
     return null
   }
 
-  /**
-   * 重置为默认值
-   */
   async resetToDefaults(): Promise<void> {
-    // 注销所有
     globalShortcut.unregisterAll()
-
-    // 删除并重建
     this.db.prepare('DELETE FROM shortcuts').run()
     this.insertDefaultShortcuts()
-
-    // 重新注册
     await this.registerAll()
   }
 
-  /**
-   * 执行快捷键对应的操作
-   */
   private executeAction(action: string): void {
     console.log(`[ShortcutManager] 执行操作: ${action}`)
 
     switch (action) {
-      // 窗口控制
       case 'settings.toggle':
         toggleSettings()
         break
@@ -207,7 +163,6 @@ export class ShortcutManager {
         toggleToChat()
         break
 
-      // 对话控制
       case 'conversation.manual': {
         const state = this.application.getState()
         if (state.deviceState === 'idle') {
@@ -234,7 +189,6 @@ export class ShortcutManager {
         this.application.interruptSpeaking()
         break
 
-      // 快速操作
       case 'app.activate': {
         const mainWin = ensureMainWindow()
         mainWin.show()
@@ -247,9 +201,6 @@ export class ShortcutManager {
     }
   }
 
-  /**
-   * 销毁（应用退出时调用）
-   */
   destroy(): void {
     globalShortcut.unregisterAll()
     this.db.close()

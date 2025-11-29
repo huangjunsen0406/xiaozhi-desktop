@@ -59,47 +59,6 @@ export function uint8ArrayToBase64(buffer: Uint8Array): string {
 }
 
 /**
- * 将 base64 字符串转换为 Uint8Array
- * @param base64 - base64 字符串
- * @returns Uint8Array
- */
-export function base64ToUint8Array(base64: string): Uint8Array {
-  const binaryString = atob(base64)
-  const bytes = new Uint8Array(binaryString.length)
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i)
-  }
-  return bytes
-}
-
-/**
- * 将图片数据转换为 data URL
- * @param imageData - 图片二进制数据（支持多种格式）
- * @returns data URL 或空字符串（如果转换失败）
- */
-export function imageDataToDataURL(imageData: ImageDataInput): string {
-  try {
-    // 转换为 Uint8Array
-    const buffer = convertToUint8Array(imageData)
-    if (!buffer || buffer.length === 0) {
-      console.error('[imageUtils] 图片数据为空或无效')
-      return ''
-    }
-
-    // 检测 MIME 类型
-    const mimeType = detectImageMimeType(buffer)
-
-    // 转换为 base64 并返回 data URL
-    const base64 = uint8ArrayToBase64(buffer)
-    return `data:${mimeType};base64,${base64}`
-  }
-  catch (error) {
-    console.error('[imageUtils] 转换图片失败:', error)
-    return ''
-  }
-}
-
-/**
  * 将图片数据转换为 Blob
  * @param imageData - 图片二进制数据
  * @returns Blob 或 null

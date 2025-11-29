@@ -1,8 +1,4 @@
-import type { AnalyzeResult, CameraConfig, CaptureResult } from './types'
-/**
- * VL 摄像头实现
- * 使用智普 AI (Zhipu AI) 进行图像分析
- */
+import type { AnalyzeResult, CameraToolConfig, CaptureResult } from './types'
 import { Buffer } from 'node:buffer'
 import { BrowserWindow, ipcMain } from 'electron'
 import OpenAI from 'openai'
@@ -18,7 +14,7 @@ export class VLCamera extends BaseCamera {
     apiKey: string,
     baseUrl: string,
     model: string,
-    config?: Partial<CameraConfig>,
+    config?: Partial<CameraToolConfig>,
   ) {
     super(config)
     this.client = new OpenAI({
@@ -33,7 +29,7 @@ export class VLCamera extends BaseCamera {
     apiKey: string,
     baseUrl: string,
     model: string,
-    config?: Partial<CameraConfig>,
+    config?: Partial<CameraToolConfig>,
   ): VLCamera {
     if (!VLCamera.instance) {
       VLCamera.instance = new VLCamera(apiKey, baseUrl, model, config)
@@ -41,24 +37,18 @@ export class VLCamera extends BaseCamera {
     return VLCamera.instance
   }
 
-  /**
-   * 捕获图像（通过 IPC 调用渲染进程）
-   */
   async capture(): Promise<CaptureResult> {
     try {
       console.log('[VLCamera] 开始捕获图像...')
 
-      // 获取当前焦点窗口
       const win = BrowserWindow.getFocusedWindow()
       if (!win) {
         console.error('[VLCamera] 未找到焦点窗口')
         return { success: false, message: '未找到焦点窗口' }
       }
 
-      // 通知渲染进程捕获图像
       win.webContents.send('camera:request-capture')
 
-      // 等待渲染进程返回图像数据（设置超时 10 秒）
       const imageData = await new Promise<Buffer>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('捕获图像超时'))
@@ -67,7 +57,6 @@ export class VLCamera extends BaseCamera {
         ipcMain.once('camera:capture-result', (_event, data: { success: boolean, data?: Uint8Array, message?: string }) => {
           clearTimeout(timeout)
           if (data.success && data.data) {
-            // 将 Uint8Array 转换为 Buffer
             resolve(Buffer.from(data.data))
           }
           else {
@@ -76,7 +65,6 @@ export class VLCamera extends BaseCamera {
         })
       })
 
-      // 使用 sharp 压缩和调整大小
       const resizedBuffer = await sharp(imageData)
         .resize(this.config.maxDimension, this.config.maxDimension, {
           fit: 'inside',
@@ -99,9 +87,6 @@ export class VLCamera extends BaseCamera {
     }
   }
 
-  /**
-   * 分析图像（使用智普 AI）
-   */
   async analyze(question: string): Promise<AnalyzeResult> {
     try {
       if (!this.jpegBuffer) {
@@ -113,10 +98,8 @@ export class VLCamera extends BaseCamera {
 
       console.log(`[VLCamera] 开始分析图像, 问题: ${question}`)
 
-      // 将图像转为 Base64
       const imageBase64 = this.jpegBuffer.toString('base64')
 
-      // 准备消息
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         {
@@ -136,14 +119,12 @@ export class VLCamera extends BaseCamera {
         },
       ]
 
-      // 发送请求
       const completion = await this.client.chat.completions.create({
         model: this.model,
         messages,
         stream: true,
       })
 
-      // 收集响应
       let result = ''
       for await (const chunk of completion) {
         if (chunk.choices && chunk.choices[0]?.delta?.content) {

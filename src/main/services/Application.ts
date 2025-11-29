@@ -18,14 +18,10 @@ import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 import { isAlertMessage, isTtsMessage } from '../types/protocol'
 import { ShortcutManager } from './ShortcutManager'
-/**
- * 应用核心类 (单例模式)
- * 负责协调协议通信、插件管理和设备状态
- */
+
 export class Application {
   private static instance: Application | null = null
 
-  // 状态
   private running: boolean = false
   private protocol: Protocol | null = null
   private deviceState: DeviceState = DeviceState.IDLE
@@ -33,20 +29,16 @@ export class Application {
   private keepListening: boolean = false
   private aborted: boolean = false
 
-  // 插件系统
   private plugins = new PluginManager()
   private audioPlugin: AudioPlugin | null = null
   private wakeWordPlugin: WakeWordPlugin | null = null
 
-  // 快捷键管理器
   private shortcutManager: ShortcutManager | null = null
 
-  // 锁（用于并发控制）
   private connectLock: Promise<boolean> | null = null
   private stateChangeLock: Promise<void> | null = null
   private isShuttingDown: boolean = false
 
-  // 任务管理（用于追踪和优雅关闭）
   private activeTasks: Map<string, Promise<unknown>> = new Map()
   private taskIdCounter: number = 0
 
@@ -54,9 +46,6 @@ export class Application {
     console.log('[Application] 初始化应用实例')
   }
 
-  /**
-   * 获取单例实例
-   */
   static getInstance(): Application {
     if (!Application.instance) {
       Application.instance = new Application()
@@ -64,20 +53,6 @@ export class Application {
     return Application.instance
   }
 
-  // ========== 任务管理 ==========
-
-  /**
-   * 派发异步任务并追踪
-   *
-   * 功能：
-   * 1. 防止 shutdown 后创建新任务
-   * 2. 追踪活跃任务（调试用）
-   * 3. shutdown 时等待重要任务完成
-   *
-   * @param promise - 要执行的 Promise
-   * @param name - 任务名称（用于日志和调试）
-   * @returns 原始 Promise（如果 shutdown 中则返回 resolved Promise）
-   */
   spawn<T>(promise: Promise<T>, name: string): Promise<T> {
     if (this.isShuttingDown || !this.running) {
       return Promise.resolve(undefined as T)
@@ -97,10 +72,6 @@ export class Application {
     return trackedPromise as Promise<T>
   }
 
-  /**
-   * 等待所有活跃任务完成（用于优雅关闭）
-   * @param timeout - 超时时间（毫秒），默认 5000ms
-   */
   private async waitForTasks(timeout: number = 5000): Promise<void> {
     if (this.activeTasks.size === 0) {
       return
@@ -111,7 +82,6 @@ export class Application {
     const taskNames = Array.from(this.activeTasks.keys())
     console.log(`[Application] 活跃任务: ${taskNames.join(', ')}`)
 
-    // 创建超时 Promise
     const timeoutPromise = new Promise<void>((resolve) => {
       setTimeout(() => {
         if (this.activeTasks.size > 0) {
@@ -121,32 +91,21 @@ export class Application {
       }, timeout)
     })
 
-    // 等待所有任务完成或超时
     await Promise.race([
       Promise.allSettled(this.activeTasks.values()),
       timeoutPromise,
     ])
 
-    // 清理剩余任务引用
     this.activeTasks.clear()
   }
 
-  // ========== 生命周期 ==========
-
-  /**
-   * 初始化应用
-   * @param protocolType - 协议类型 (websocket | mqtt)
-   */
   async initialize(protocolType: 'websocket' | 'mqtt' = 'mqtt'): Promise<void> {
     console.log(`[Application] 初始化，协议类型: ${protocolType}`)
 
-    // 设置协议
     this.setProtocol(protocolType)
 
-    // 设置协议回调
     this.setupProtocolCallbacks()
 
-    // 注册插件（按优先级顺序）
     this.audioPlugin = new AudioPlugin()
     this.wakeWordPlugin = new WakeWordPlugin()
 
@@ -160,10 +119,8 @@ export class Application {
       new UIPlugin(),
     )
 
-    // 初始化插件
     await this.plugins.setupAll(this)
 
-    // 初始化快捷键管理器
     const dbPath = path.join(app.getPath('userData'), 'xiaozhi.db')
     this.shortcutManager = new ShortcutManager(dbPath, this)
     await this.shortcutManager.registerAll()
@@ -171,25 +128,17 @@ export class Application {
     console.log('[Application] 初始化完成')
   }
 
-  /**
-   * 启动应用
-   */
   async start(): Promise<void> {
     console.log('[Application] 启动应用')
     this.running = true
 
-    // 启动所有插件
     await this.plugins.startAll()
 
-    // 广播初始设备状态
     await this.plugins.notifyDeviceStateChanged(this.deviceState)
 
     console.log('[Application] 应用启动完成')
   }
 
-  /**
-   * 设置协议类型
-   */
   private setProtocol(protocolType: 'websocket' | 'mqtt'): void {
     console.log(`[Application] 设置协议: ${protocolType}`)
     if (protocolType === 'mqtt') {
@@ -200,9 +149,6 @@ export class Application {
     }
   }
 
-  /**
-   * 设置协议回调
-   */
   private setupProtocolCallbacks(): void {
     if (!this.protocol) {
       return
@@ -213,13 +159,10 @@ export class Application {
     })
 
     this.protocol.onIncomingJson((data) => {
-      // 使用 spawn 追踪任务，不阻塞协议层
       this.spawn(
         this.handleIncomingJson(data),
         'handle:json',
-      ).catch(() => {
-        // spawn 内部已记录错误，这里静默处理
-      })
+      ).catch(() => {})
     })
 
     this.protocol.onIncomingAudio((data) => {
