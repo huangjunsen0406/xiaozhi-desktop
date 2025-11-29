@@ -34,6 +34,10 @@ const routes: RouteRecordRaw[] = [
     path: '/chat',
     component: () => import('../pages/ChatView.vue'),
   },
+  {
+    path: '/live2d',
+    component: () => import('../pages/Live2dView.vue'),
+  },
 ]
 
 export const router = createRouter({

@@ -9,7 +9,6 @@ import { McpServer } from '../McpServer'
 import { AppLauncher } from './app/AppLauncher'
 import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
-import { IoTToolsManager } from './iot'
 import { MusicToolsManager } from './music'
 import { ScreenshotTool } from './screenshot'
 import { TimerService } from './timer'
@@ -85,9 +84,6 @@ export class SystemToolsManager {
 
       // 注册音乐播放工具
       this.registerMusicTools(addTool, PropertyListClass, PropertyTypeEnum)
-
-      // 注册 IoT 工具
-      await this.registerIoTTools(addTool, PropertyListClass, PropertyTypeEnum)
 
       this.initialized = true
       console.log('[SystemToolsManager] 系统工具注册完成')
@@ -1511,9 +1507,6 @@ Examples:
       'self.music.set_playback_rate',
       'self.music.get_status',
       'self.music.get_lyrics',
-      'self.iot.get_devices',
-      'self.iot.get_device_state',
-      'self.iot.invoke_method',
     ]
 
     return {
@@ -1523,26 +1516,4 @@ Examples:
     }
   }
 
-  /**
-   * 注册 IoT 工具
-   */
-  private async registerIoTTools(
-    addTool: (
-      name: string,
-      description: string,
-      properties: PropertyList,
-      callback: (args: Record<string, unknown>) => Promise<string>,
-    ) => void,
-    PropertyListClass: typeof PropertyList,
-    PropertyTypeEnum: typeof PropertyType,
-  ): Promise<void> {
-    try {
-      const iotManager = IoTToolsManager.getInstance()
-      await iotManager.init(addTool, PropertyListClass, PropertyTypeEnum)
-    }
-    catch (error) {
-      console.error('[SystemToolsManager] 注册 IoT 工具失败:', error)
-      // 不抛出错误，允许其他工具继续注册
-    }
-  }
 }

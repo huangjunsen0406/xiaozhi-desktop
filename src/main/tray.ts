@@ -5,7 +5,7 @@ import linux24 from '../../resources/tray/icon-24.png?asset'
 import linux32 from '../../resources/tray/icon-32.png?asset'
 import winIco from '../../resources/tray/icon.ico?asset'
 import macTpl2x from '../../resources/tray/iconTemplate@2x.png?asset'
-import { getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToMain, toggleToMini } from './windows/windowManager'
+import { getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from './windows/windowManager'
 
 let tray: Tray | null = null
 let lastLinuxBucket: 24 | 32 | null = null
@@ -92,6 +92,14 @@ function buildTrayMenu(): Menu {
           checked: currentMode === 'chat',
           click: () => {
             toggleToChat()
+          },
+        },
+        {
+          label: 'Live2D 桌面宠物',
+          type: 'radio',
+          checked: currentMode === 'live2d',
+          click: () => {
+            toggleToLive2d()
           },
         },
       ],

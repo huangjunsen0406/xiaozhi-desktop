@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
+import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
 let mainWindow: BrowserWindow | null = null
 let miniWindow: BrowserWindow | null = null
@@ -8,9 +8,10 @@ let activationWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let backgroundAudioWindow: BrowserWindow | null = null
 let chatWindow: BrowserWindow | null = null
+let live2dWindow: BrowserWindow | null = null
 
 // 显示模式状态管理
-type DisplayMode = 'main' | 'mini' | 'chat'
+type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d'
 let currentDisplayMode: DisplayMode = 'main'
 let onDisplayModeChanged: ((mode: DisplayMode) => void) | null = null
 
@@ -103,6 +104,10 @@ export function toggleToMini(): void {
   const main = ensureMainWindow()
   mini.show()
   main.hide()
+  if (chatWindow)
+    chatWindow.hide()
+  if (live2dWindow)
+    live2dWindow.hide()
   setDisplayMode('mini')
 }
 
@@ -113,6 +118,8 @@ export function toggleToMain(): void {
     miniWindow.hide()
   if (chatWindow)
     chatWindow.hide()
+  if (live2dWindow)
+    live2dWindow.hide()
   setDisplayMode('main')
 }
 
@@ -176,9 +183,39 @@ export function toggleToChat(): void {
     mainWindow.hide()
   if (miniWindow)
     miniWindow.hide()
+  if (live2dWindow)
+    live2dWindow.hide()
   setDisplayMode('chat')
 }
 
 export function getChatWindow(): BrowserWindow | null {
   return chatWindow
+}
+
+export function ensureLive2dWindow(): BrowserWindow {
+  if (live2dWindow == null) {
+    const win = buildLive2dWindow()
+    live2dWindow = win
+    win.on('closed', () => {
+      live2dWindow = null
+    })
+  }
+  return live2dWindow as BrowserWindow
+}
+
+export function toggleToLive2d(): void {
+  const win = ensureLive2dWindow()
+  win.show()
+  win.moveTop()
+  if (mainWindow)
+    mainWindow.hide()
+  if (miniWindow)
+    miniWindow.hide()
+  if (chatWindow)
+    chatWindow.hide()
+  setDisplayMode('live2d')
+}
+
+export function getLive2dWindow(): BrowserWindow | null {
+  return live2dWindow
 }

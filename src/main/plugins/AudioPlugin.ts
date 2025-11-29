@@ -358,16 +358,27 @@ export class AudioPlugin extends Plugin {
         return
       }
 
-      // 解码 Opus → PCM
+      // 解码 Opus → PCM (只解码一次!)
       const pcmBuffer = opusCodec.decode(opusFrame)
 
-      // 发送到后台音频窗口播放
+      // 1. 发送到后台音频窗口播放
       if (this.backgroundAudioWindow) {
         this.backgroundAudioWindow.webContents.send('audio:opus-decoded', pcmBuffer)
       }
       else {
         console.warn('[AudioPlugin] 后台音频窗口不存在，无法播放音频')
       }
+
+      // 2. 通知 Live2DPlugin (通过 PluginManager 广播)
+      // 使用 setImmediate 异步执行,避免阻塞音频播放
+      setImmediate(() => {
+        if (this.app) {
+          const live2dPlugin = this.app.getPluginManager().getPlugin('Live2DPlugin')
+          if (live2dPlugin && 'onDecodedAudio' in live2dPlugin) {
+            ;(live2dPlugin as any).onDecodedAudio(pcmBuffer)
+          }
+        }
+      })
     }
     catch (error) {
       console.error('[AudioPlugin] 处理 Opus 数据失败:', error)

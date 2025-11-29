@@ -8,7 +8,7 @@ import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
-import { ensureBackgroundAudioWindow, ensureMainWindow, getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToMain, toggleToMini } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from './windows/windowManager'
 
 // 启用系统级回声消除特性
 app.commandLine.appendSwitch(
@@ -100,6 +100,14 @@ function buildDockMenu(): Menu {
           checked: currentMode === 'chat',
           click: () => {
             toggleToChat()
+          },
+        },
+        {
+          label: 'Live2D 桌面宠物',
+          type: 'radio',
+          checked: currentMode === 'live2d',
+          click: () => {
+            toggleToLive2d()
           },
         },
       ],

@@ -7,6 +7,8 @@ import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { ChatPlugin } from '../plugins/ChatPlugin'
+import { IoTPlugin } from '../plugins/IoTPlugin'
+import { Live2DPlugin } from '../plugins/Live2DPlugin'
 import { McpPlugin } from '../plugins/McpPlugin'
 import { PluginManager } from '../plugins/PluginManager'
 import { UIPlugin } from '../plugins/UIPlugin'
@@ -149,8 +151,10 @@ export class Application {
 
     this.plugins.register(
       this.audioPlugin,
+      new Live2DPlugin(),
       new McpPlugin(),
       new ChatPlugin(),
+      new IoTPlugin(),
       this.wakeWordPlugin,
       new UIPlugin(),
     )

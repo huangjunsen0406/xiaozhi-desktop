@@ -14,13 +14,14 @@ const mode = useColorMode({
   },
 })
 
-const displayMode = ref<'main' | 'mini' | 'chat'>('main')
+const displayMode = ref<'main' | 'mini' | 'chat' | 'live2d'>('main')
 
 // 选项定义
 const displayModeOptions = [
   { label: '标准窗口', value: 'main' },
   { label: '迷你悬浮球', value: 'mini' },
   { label: '聊天视图', value: 'chat' },
+  { label: 'Live2D 桌面宠物', value: 'live2d' },
 ]
 
 const themeOptions = [
@@ -29,9 +30,8 @@ const themeOptions = [
   { label: '跟随系统', value: 'auto' },
 ]
 
-async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat') {
+async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat' | 'live2d') {
   try {
-    // 立即切换显示模式
     await window.api.switchDisplayMode(value)
     console.log(`已切换到 ${value} 模式`)
   }

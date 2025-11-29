@@ -2,7 +2,7 @@ import type { IpcContext } from '../types/ipc'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
-import { showActivation, togglePanel, toggleSettings, toggleToChat, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { getLive2dWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
@@ -11,7 +11,6 @@ import { registerCameraConfigIpc } from './cameraConfigIpc'
 import { registerChatIpc } from './chatIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
-import { IoTIpc } from './iotIpc'
 import { registerMusicIpc } from './musicIpc'
 import { registerThemeIpc } from './themeIpc'
 
@@ -32,9 +31,6 @@ export function registerBasicIpcChannels(): void {
   registerThemeIpc()
   registerChatIpc()
   registerMusicIpc()
-
-  // 注册 IoT IPC
-  new IoTIpc()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()
@@ -96,13 +92,28 @@ export function registerBasicIpcChannels(): void {
     toggleSettings()
   })
 
+  // Live2D 窗口
+  ipcMain.on('window:toggle-live2d', () => {
+    toggleToLive2d()
+  })
+
+  ipcMain.on('live2d:set-ignore-mouse', (_, ignore: boolean) => {
+    const win = getLive2dWindow()
+    if (win) {
+      win.setIgnoreMouseEvents(ignore, { forward: ignore })
+    }
+  })
+
   // 显示模式切换
-  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini' | 'chat') => {
+  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini' | 'chat' | 'live2d') => {
     if (mode === 'mini') {
       toggleToMini()
     }
     else if (mode === 'chat') {
       toggleToChat()
+    }
+    else if (mode === 'live2d') {
+      toggleToLive2d()
     }
     else {
       toggleToMain()

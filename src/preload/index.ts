@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, iotApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, live2dApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -17,6 +17,7 @@ const api = {
   switchDisplayMode: windowApi.switchDisplayMode,
   showActivation: windowApi.showActivation,
   toggleSettings: windowApi.toggleSettings,
+  setIgnoreMouseEvents: windowApi.setIgnoreMouseEvents,
   dragStart: windowApi.dragStart,
   dragMove: windowApi.dragMove,
   dragEnd: windowApi.dragEnd,
@@ -132,11 +133,9 @@ const api = {
   musicOnCommand: musicApi.onCommand,
   musicStatusUpdate: musicApi.statusUpdate,
 
-  // IoT API
-  iotGetDevices: iotApi.getDevices,
-  iotGetStates: iotApi.getStates,
-  iotGetDeviceState: iotApi.getDeviceState,
-  iotInvokeMethod: iotApi.invokeMethod,
+  // Live2D API
+  live2dOnAudioVolume: live2dApi.onAudioVolume,
+  live2dRemoveAudioVolumeListener: live2dApi.removeAudioVolumeListener,
 }
 
 // 使用 contextBridge 暴露 API

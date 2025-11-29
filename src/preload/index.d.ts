@@ -153,9 +153,10 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
-  switchDisplayMode: (mode: 'main' | 'mini' | 'chat') => Promise<void>
+  switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d') => Promise<void>
   showActivation: () => void
   toggleSettings: () => void
+  setIgnoreMouseEvents: (ignore: boolean) => void
   dragStart: () => void
   dragMove: () => void
   dragEnd: () => void
@@ -289,38 +290,10 @@ export interface RendererApi {
   // Music APIs
   musicOnCommand: (callback: (message: { command: string, args?: Record<string, unknown> }) => void) => void
   musicStatusUpdate: (status: Record<string, unknown>) => void
-  // IoT APIs
-  iotGetDevices: () => Promise<IoTResponse<IoTDeviceDescriptor[]>>
-  iotGetStates: () => Promise<IoTResponse<IoTDeviceState[]>>
-  iotGetDeviceState: (deviceName: string) => Promise<IoTResponse<IoTDeviceState>>
-  iotInvokeMethod: (deviceName: string, method: string, parameters?: Record<string, unknown>) => Promise<IoTResponse<unknown>>
-}
 
-/**
- * IoT 设备描述符
- */
-export interface IoTDeviceDescriptor {
-  name: string
-  description: string
-  properties: Record<string, { description: string, type: string }>
-  methods: Record<string, { description: string, parameters: Record<string, { description: string, type: string }> }>
-}
-
-/**
- * IoT 设备状态
- */
-export interface IoTDeviceState {
-  name: string
-  state: Record<string, unknown>
-}
-
-/**
- * IoT API 响应
- */
-export interface IoTResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
+  // Live2D APIs
+  live2dOnAudioVolume: (callback: (volume: number) => void) => void
+  live2dRemoveAudioVolumeListener: () => void
 }
 
 export interface ShortcutConfig {

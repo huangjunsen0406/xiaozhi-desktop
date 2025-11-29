@@ -1,4 +1,3 @@
-export type { IoTDeviceDescriptor, IoTDeviceState, IoTResponse } from '../index.d'
 /**
  * Preload API 模块索引
  */
@@ -14,7 +13,7 @@ export type { CameraConfig } from './cameraConfigApi'
 export { chatApi } from './chat'
 export { emotionApi } from './emotion'
 export { hoverApi } from './hover'
-export { iotApi } from './iot'
+export { live2dApi } from './live2d'
 export { musicApi } from './music'
 export { shortcutApi } from './shortcut'
 export { systemApi } from './system'

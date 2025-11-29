@@ -23,6 +23,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@pixi/unsafe-eval": "6.5.10",
     "@types/uuid": "^11.0.0",
     "@vueuse/core": "^13.9.0",
     "axios": "^1.13.2",
@@ -39,8 +40,11 @@
     "opusscript": "^0.1.1",
     "pinia": "^3.0.4",
     "pinyin": "^4.0.0",
+    "pixi-live2d-display": "0.4.0",
+    "pixi.js": "6.5.10",
     "sharp": "^0.34.5",
     "sherpa-onnx-node": "^1.12.17",
+    "uiohook-napi": "1.5.4",
     "uuid": "^13.0.0",
     "vue-router": "^4.5.1",
     "ws": "^8.18.3"
