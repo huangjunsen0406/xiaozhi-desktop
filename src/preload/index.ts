@@ -118,10 +118,8 @@ const api = {
   chatRemoveMessageAddedListener: chatApi.removeMessageAddedListener,
   chatOnMessagesBatchAdded: chatApi.onMessagesBatchAdded,
   chatRemoveMessagesBatchAddedListener: chatApi.removeMessagesBatchAddedListener,
-  chatGetStreamingState: chatApi.getStreamingState,
-  chatOnStreamingUpdate: chatApi.onStreamingUpdate,
-  chatOnStreamingFinalize: chatApi.onStreamingFinalize,
-  chatRemoveStreamingListeners: chatApi.removeStreamingListeners,
+  chatOnSessionCreated: chatApi.onSessionCreated,
+  chatRemoveSessionCreatedListener: chatApi.removeSessionCreatedListener,
 
   // 快捷键 API
   shortcutGetAll: shortcutApi.getAll,
@@ -150,6 +148,7 @@ if (process.contextIsolated) {
   }
 }
 else {
+  // @ts-expect-error (type mismatch in activation/app modules)
   window.electron = electronAPI
   // @ts-expect-error (type mismatch in activation/app modules)
   window.api = api

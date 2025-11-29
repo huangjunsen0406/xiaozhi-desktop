@@ -13,6 +13,7 @@ import { McpPlugin } from '../plugins/McpPlugin'
 import { PluginManager } from '../plugins/PluginManager'
 import { UIPlugin } from '../plugins/UIPlugin'
 import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
+import { MqttProtocol } from '../protocols/MqttProtocol'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 import { isAlertMessage, isTtsMessage } from '../types/protocol'
@@ -136,7 +137,7 @@ export class Application {
    * 初始化应用
    * @param protocolType - 协议类型 (websocket | mqtt)
    */
-  async initialize(protocolType: 'websocket' | 'mqtt' = 'websocket'): Promise<void> {
+  async initialize(protocolType: 'websocket' | 'mqtt' = 'mqtt'): Promise<void> {
     console.log(`[Application] 初始化，协议类型: ${protocolType}`)
 
     // 设置协议
@@ -192,8 +193,7 @@ export class Application {
   private setProtocol(protocolType: 'websocket' | 'mqtt'): void {
     console.log(`[Application] 设置协议: ${protocolType}`)
     if (protocolType === 'mqtt') {
-      // TODO: 实现 MQTT 协议
-      throw new Error('MQTT 协议尚未实现')
+      this.protocol = new MqttProtocol()
     }
     else {
       this.protocol = new WebSocketProtocol()

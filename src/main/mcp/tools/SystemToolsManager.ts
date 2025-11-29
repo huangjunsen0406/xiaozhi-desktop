@@ -681,13 +681,8 @@ Examples:
       const captureResult = await camera.capture()
 
       if (captureResult.success && captureResult.data) {
-        // 广播图片到渲染进程（用于 ChatView 显示）
-        const imageBase64 = captureResult.data.toString('base64')
-        const mcpServer = McpServer.getInstance()
-        mcpServer.broadcastImage(imageBase64, 'camera')
-        console.log('[SystemToolsManager] 已广播摄像头图片')
-
         // 保存图片到数据库
+        const imageBase64 = captureResult.data.toString('base64')
         const app = getApplication()
         const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
         await chatPlugin?.saveImage(imageBase64, 'camera')
@@ -733,17 +728,13 @@ Examples:
 
       console.log('[SystemToolsManager] 截图成功，开始分析...')
 
-      // 从 MCP Server 获取 vision 配置
-      const mcpServer = McpServer.getInstance()
-
-      // 通过 McpServer 回调广播截图到渲染进程（用于 ChatView 显示）
-      mcpServer.broadcastImage(result.base64, 'screenshot')
-
       // 保存图片到数据库
       const app = getApplication()
       const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(result.base64, 'screenshot')
 
+      // 从 MCP Server 获取 vision 配置
+      const mcpServer = McpServer.getInstance()
       const visionConfig = mcpServer.getVisionConfig()
 
       // 从数据库获取摄像头配置（复用 VL 配置）

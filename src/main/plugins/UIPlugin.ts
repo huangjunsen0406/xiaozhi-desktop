@@ -128,29 +128,16 @@ export class UIPlugin extends Plugin {
   }
 
   /**
-   * 广播流式消息增量更新
+   * 广播会话创建事件（用于跨天自动创建新会话）
+   * @param sessionId - 会话 ID
    */
-  broadcastStreamingUpdate(data: {
-    sessionId: string
-    role: 'assistant'
-    content: string
-    emotion?: string
-    updatedAt: number
-  }): void {
-    this.broadcastToRenderer('chat:streaming-update', data)
-  }
-
-  /**
-   * 广播流式消息完成（用于原子切换到持久化消息）
-   */
-  broadcastStreamingFinalize(data: {
-    sessionId: string
-    role: 'assistant'
-    content: string
-    emotion?: string
-    updatedAt: number
-  }): void {
-    this.broadcastToRenderer('chat:streaming-finalize', data)
+  broadcastSessionCreated(sessionId: string): void {
+    const payload = {
+      sessionId,
+      timestamp: Date.now(),
+    }
+    this.broadcastToRenderer('chat:session-created', payload)
+    console.log(`[UIPlugin] 已广播会话创建: ${sessionId}`)
   }
 
   /**

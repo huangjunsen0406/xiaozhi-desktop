@@ -38,17 +38,6 @@ interface ChatSession {
   last_message_at?: number
 }
 
-/**
- * 流式消息状态
- */
-interface StreamingState {
-  sessionId: string
-  role: 'assistant'
-  content: string
-  emotion?: string
-  updatedAt: number
-}
-
 export const chatApi = {
   /**
    * 获取会话列表
@@ -206,35 +195,16 @@ export const chatApi = {
   },
 
   /**
-   * 获取当前流式消息状态快照（用于新窗口补偿）
+   * 监听会话创建事件（跨天自动创建新会话）
    */
-  getStreamingState: async (): Promise<StreamingState | null> => {
-    const result = await ipcRenderer.invoke('chat:get-streaming-state') as IpcResult<StreamingState | null>
-    if (!result.success) {
-      throw new Error(result.error || '获取流式状态失败')
-    }
-    return result.data ?? null
+  onSessionCreated: (callback: (data: { sessionId: string, timestamp: number }) => void) => {
+    ipcRenderer.on('chat:session-created', (_, data) => callback(data))
   },
 
   /**
-   * 监听流式消息增量更新
+   * 移除会话创建监听器
    */
-  onStreamingUpdate: (callback: (data: StreamingState) => void) => {
-    ipcRenderer.on('chat:streaming-update', (_, data) => callback(data))
-  },
-
-  /**
-   * 监听流式消息完成事件
-   */
-  onStreamingFinalize: (callback: (data: StreamingState) => void) => {
-    ipcRenderer.on('chat:streaming-finalize', (_, data) => callback(data))
-  },
-
-  /**
-   * 移除流式相关监听器
-   */
-  removeStreamingListeners: () => {
-    ipcRenderer.removeAllListeners('chat:streaming-update')
-    ipcRenderer.removeAllListeners('chat:streaming-finalize')
+  removeSessionCreatedListener: () => {
+    ipcRenderer.removeAllListeners('chat:session-created')
   },
 }

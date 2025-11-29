@@ -1,7 +1,6 @@
 import type { Buffer } from 'node:buffer'
 import type { Application } from '../services/Application'
 import { BrowserWindow } from 'electron'
-import { getOpusCodec } from '../ipc/audioIpc'
 import { Plugin } from './Plugin'
 
 /**
@@ -41,14 +40,6 @@ export class Live2DPlugin extends Plugin {
   async start(): Promise<void> {
     await super.start()
     console.log('[Live2DPlugin] 启动完成')
-  }
-
-  /**
-   * 接收到音频数据回调 - 不再使用
-   * 改用 onDecodedAudio 接收已解码的 PCM 数据,避免重复解码
-   */
-  async onIncomingAudio(_data: Buffer): Promise<void> {
-    // 不再在这里处理,避免重复解码
   }
 
   /**

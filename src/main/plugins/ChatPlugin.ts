@@ -7,11 +7,11 @@ import { Plugin } from './Plugin'
 
 /**
  * 聊天插件
- * 负责消息累积、数据库存储和会话管理
+ * 负责消息数据库存储和会话管理
  *
  * 职责：
  * - 处理 STT 消息（用户语音识别）保存
- * - 处理 TTS 消息流式累积和保存
+ * - 处理 TTS 消息逐句保存
  * - 会话管理（按天创建会话）
  * - 通知 UIPlugin 广播消息更新事件
  */
@@ -29,21 +29,11 @@ export class ChatPlugin extends Plugin {
   // 会话管理（按天）
   private currentSessionId: string = ''
 
-  // 消息累积器（用于 TTS 流式内容）
+  // 消息累积器（用于情绪和图片）
   private messageAccumulator = {
-    ttsContent: '',
     currentEmotion: '',
     pendingImageData: null as { type: string, data: string } | null,
   }
-
-  // 当前流式消息状态（主进程作为唯一来源）
-  private streamingState: {
-    sessionId: string
-    role: 'assistant'
-    content: string
-    emotion?: string
-    updatedAt: number
-  } | null = null
 
   /**
    * 插件初始化
@@ -125,8 +115,19 @@ export class ChatPlugin extends Plugin {
 
     if (todaySessionId !== this.currentSessionId) {
       console.log(`[ChatPlugin] 检测到日期变化，切换会话: ${this.currentSessionId} → ${todaySessionId}`)
+
+      // 检查会话是否已存在
+      const db = DatabaseManager.getInstance()
+      const existingSession = db.getChatSession(todaySessionId)
+      const isNewSession = !existingSession
+
       this.currentSessionId = todaySessionId
       await this.ensureSessionExists(todaySessionId)
+
+      // 如果是新创建的会话，通知前端
+      if (isNewSession) {
+        this.getUIPlugin()?.broadcastSessionCreated(todaySessionId)
+      }
     }
   }
 
@@ -137,21 +138,6 @@ export class ChatPlugin extends Plugin {
     return this.currentSessionId
   }
 
-  /**
-   * 获取当前流式消息状态快照
-   */
-  getStreamingState(): {
-    sessionId: string
-    role: 'assistant'
-    content: string
-    emotion?: string
-    updatedAt: number
-  } | null {
-    if (!this.streamingState)
-      return null
-
-    return { ...this.streamingState }
-  }
 
   /**
    * 获取 UIPlugin 实例
@@ -226,129 +212,72 @@ export class ChatPlugin extends Plugin {
   }
 
   /**
-   * 处理 TTS 消息（流式累积）
+   * 处理 TTS 消息（逐句保存）
    */
   private async handleTtsMessage(message: JsonMessage): Promise<void> {
     const state = (message as { state?: string }).state
     const text = (message as { text?: string }).text
 
     if (state === 'start') {
-      // TTS 开始，重置累积器
+      // TTS 开始，确保使用今天的会话
       await this.checkAndSwitchSession()
-
-      // 如果已经有未完成的流式内容，不要清空，继续在同一条里追加
-      const hasOngoingContent = !!this.streamingState?.content || !!this.messageAccumulator.ttsContent
-      if (!hasOngoingContent) {
-        this.messageAccumulator.ttsContent = ''
-        console.log('[ChatPlugin] TTS 开始，重置累积器')
-
-        this.streamingState = {
-          sessionId: this.currentSessionId,
-          role: 'assistant',
-          content: '',
-          emotion: this.messageAccumulator.currentEmotion || undefined,
-          updatedAt: Date.now(),
-        }
-
-        this.getUIPlugin()?.broadcastStreamingUpdate({ ...this.streamingState })
-      }
-      else {
-        console.log('[ChatPlugin] 检测到未完成的流式内容，继续追加，不重置')
-        // 确保会话 ID 对齐
-        if (this.streamingState) {
-          this.streamingState.sessionId = this.currentSessionId
-        }
-      }
+      console.log('[ChatPlugin] TTS 开始')
     }
-    else if ((state === 'sentence_start' || state === 'sentence_end') && text) {
+    else if (state === 'sentence_start' && text) {
+      // 每个句子开始时直接保存到数据库
+
       // 过滤工具提示行（以 % 开头）
       if (text.startsWith('% ')) {
         console.log('[ChatPlugin] 过滤工具提示句子:', text)
         return
       }
 
-      // 以 sentence_start 为准累积内容，sentence_end 仅用作刷新
-      if (state === 'sentence_start') {
-        if (this.messageAccumulator.ttsContent) {
-          this.messageAccumulator.ttsContent += `\n${text}`
-        }
-        else {
-          this.messageAccumulator.ttsContent = text
-        }
-      }
-
-      if (this.streamingState) {
-        this.streamingState.content = this.messageAccumulator.ttsContent
-        this.streamingState.emotion = this.messageAccumulator.currentEmotion || undefined
-        this.streamingState.updatedAt = Date.now()
-        this.getUIPlugin()?.broadcastStreamingUpdate({ ...this.streamingState })
-      }
-    }
-    else if (state === 'stop') {
-      // TTS 结束，保存完整回复
-      console.log('[ChatPlugin] TTS 结束，准备保存')
-
-      if (this.streamingState) {
-        this.streamingState.content = this.messageAccumulator.ttsContent
-        this.streamingState.emotion = this.messageAccumulator.currentEmotion || undefined
-        this.streamingState.updatedAt = Date.now()
-        this.getUIPlugin()?.broadcastStreamingFinalize({ ...this.streamingState })
-      }
-      await this.saveTtsReply()
-    }
-  }
-
-  /**
-   * 保存 TTS 完整回复
-   */
-  private async saveTtsReply(): Promise<void> {
-    try {
       // 确保使用今天的会话
       await this.checkAndSwitchSession()
 
+      // 直接插入数据库
       const db = DatabaseManager.getInstance()
-      const savedMessageIds: number[] = []
+      const result = db.addChatMessage({
+        session_id: this.currentSessionId,
+        role: 'assistant',
+        content: text,
+        emotion: this.messageAccumulator.currentEmotion || undefined,
+        source_type: 'tts',
+        timestamp: Math.floor(Date.now() / 1000),
+      })
 
-      // 1. 保存图片（如果有）
+      console.log(`[ChatPlugin] 已保存 TTS 句子 [${result.id}]: ${text.substring(0, 30)}...`)
+
+      // 广播消息添加事件
+      this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'assistant')
+    }
+    else if (state === 'sentence_end' && text) {
+      // sentence_end 只是标记，不需要处理（内容已在 sentence_start 保存）
+      console.log('[ChatPlugin] 忽略 sentence_end')
+    }
+    else if (state === 'stop') {
+      // TTS 结束，只保存图片（如果有）
+      console.log('[ChatPlugin] TTS 结束')
+
       if (this.messageAccumulator.pendingImageData) {
+        await this.checkAndSwitchSession()
+
+        const db = DatabaseManager.getInstance()
         const imageResult = db.addChatMessage({
           session_id: this.currentSessionId,
           role: 'assistant',
           content: '[图片]',
           source_type: 'image',
           image_data: Buffer.from(this.messageAccumulator.pendingImageData.data, 'base64'),
-          timestamp: Math.floor(Date.now() / 1000) - 1, // 图片时间稍早
-        })
-        savedMessageIds.push(imageResult.id)
-        console.log(`[ChatPlugin] 已保存图片消息 [${imageResult.id}]`)
-      }
-
-      // 2. 保存文本内容
-      if (this.messageAccumulator.ttsContent.trim()) {
-        const textResult = db.addChatMessage({
-          session_id: this.currentSessionId,
-          role: 'assistant',
-          content: this.messageAccumulator.ttsContent.trim(),
-          emotion: this.messageAccumulator.currentEmotion || undefined,
-          source_type: 'tts',
           timestamp: Math.floor(Date.now() / 1000),
         })
-        savedMessageIds.push(textResult.id)
-        console.log(`[ChatPlugin] 已保存 TTS 消息 [${textResult.id}]: ${
-          this.messageAccumulator.ttsContent.substring(0, 30)
-        }...`)
+
+        console.log(`[ChatPlugin] 已保存图片消息 [${imageResult.id}]`)
+        this.getUIPlugin()?.broadcastMessageAdded(imageResult.id, this.currentSessionId, 'assistant')
       }
 
-      // 3. 广播消息保存事件
-      if (savedMessageIds.length > 0) {
-        this.getUIPlugin()?.broadcastMessagesBatchAdded(savedMessageIds, this.currentSessionId)
-      }
-
-      // 4. 重置累积器
+      // 重置累积器
       this.resetMessageAccumulator()
-    }
-    catch (error) {
-      console.error('[ChatPlugin] 保存 TTS 回复失败:', error)
     }
   }
 
@@ -356,10 +285,8 @@ export class ChatPlugin extends Plugin {
    * 重置消息累积器
    */
   private resetMessageAccumulator(): void {
-    this.messageAccumulator.ttsContent = ''
     this.messageAccumulator.currentEmotion = ''
     this.messageAccumulator.pendingImageData = null
-    this.streamingState = null
   }
 
   /**
@@ -384,7 +311,7 @@ export class ChatPlugin extends Plugin {
         timestamp: Math.floor(Date.now() / 1000),
       })
 
-      console.log(`[ChatPlugin] 已保存图片消息 [${result.id}]`)
+      console.log(`[ChatPlugin] 已保存图片消息 [${result.id}] 到会话 ${this.currentSessionId}`)
 
       // 广播消息保存事件
       this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'assistant')

@@ -89,18 +89,6 @@ onMounted(async () => {
       appStore.handleServerMessage(message)
     })
 
-    // 补偿当前的流式状态（避免新窗口错过已播出的内容）
-    const streamingSnapshot = await window.api.chatGetStreamingState()
-    appStore.hydrateStreamingState(streamingSnapshot)
-
-    // 监听流式增量和完成事件
-    window.api.chatOnStreamingUpdate((data) => {
-      void appStore.handleStreamingUpdate(data)
-    })
-    window.api.chatOnStreamingFinalize((data) => {
-      void appStore.handleStreamingFinalize(data)
-    })
-
     // 监听图片捕获事件
     window.api.chatOnImageCaptured((data: { imageBase64: string }) => {
       appStore.handleImageCaptured(data.imageBase64)
@@ -109,14 +97,6 @@ onMounted(async () => {
     // 监听单条消息添加事件
     window.api.chatOnMessageAdded((data) => {
       console.log('[App] 收到消息添加事件:', data)
-
-      // 仅在 AI 流式过程中跳过 AI 消息，用户消息仍需刷新
-      if (appStore.isStreaming && data.role === 'assistant') {
-        console.log('[App] AI 正在流式，跳过覆盖消息列表')
-        // 只刷新会话列表（更新消息计数）
-        appStore.loadSessions()
-        return
-      }
 
       // 对齐当前会话到事件会话，避免忽略新会话
       if (appStore.currentSessionId !== data.sessionId) {
@@ -135,14 +115,6 @@ onMounted(async () => {
     window.api.chatOnMessagesBatchAdded((data) => {
       console.log('[App] 收到批量消息添加事件:', data)
 
-      // 如果 AI 正在流式，等待 finalize 后的刷新
-      if (appStore.isStreaming) {
-        console.log('[App] AI 正在流式，跳过覆盖消息列表')
-        // 只刷新会话列表（更新消息计数）
-        appStore.loadSessions()
-        return
-      }
-
       if (appStore.currentSessionId !== data.sessionId) {
         appStore.currentSessionId = data.sessionId
         appStore.sessions.forEach((s) => {
@@ -155,6 +127,17 @@ onMounted(async () => {
       appStore.loadSessions()
     })
 
+    // 监听会话创建事件（跨天自动创建新会话）
+    window.api.chatOnSessionCreated((data) => {
+      console.log('[App] 收到会话创建事件:', data)
+      // 刷新会话列表以显示新会话
+      appStore.loadSessions()
+      // 如果当前没有会话，自动切换到新会话
+      if (!appStore.currentSessionId) {
+        appStore.switchSession(data.sessionId)
+      }
+    })
+
     // 保存清理函数
     onUnmounted(() => {
       removeCameraListener()
@@ -163,7 +146,7 @@ onMounted(async () => {
       window.api.chatRemoveImageCapturedListener()
       window.api.chatRemoveMessageAddedListener()
       window.api.chatRemoveMessagesBatchAddedListener()
-      window.api.chatRemoveStreamingListeners()
+      window.api.chatRemoveSessionCreatedListener()
     })
   }
   catch (error) {
