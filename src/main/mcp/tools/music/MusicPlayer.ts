@@ -110,11 +110,12 @@ export class MusicPlayer {
       })
 
       if (success) {
-        this.currentState = 'playing'
-        logger.info(`音乐播放成功`)
+        // 不在这里设置状态,等待渲染进程的状态更新
+        // this.currentState = 'playing' // <- 移除:状态由渲染进程更新
+        logger.info(`播放指令已发送`)
         return {
           success: true,
-          message: '音乐播放成功',
+          message: '播放指令已发送',
           file: filePath,
           startPosition,
           songInfo: Object.keys(songInfo).some(k => songInfo[k as keyof typeof songInfo]) ? songInfo : undefined,
@@ -157,10 +158,11 @@ export class MusicPlayer {
       const success = await this.sendCommand('pause')
 
       if (success) {
-        this.currentState = 'paused'
+        // 不在这里设置状态,等待渲染进程的状态更新
+        // this.currentState = 'paused' // <- 移除:状态由渲染进程更新
         return {
           success: true,
-          message: '已暂停播放',
+          message: '暂停指令已发送',
           currentTime: this.currentTime,
         }
       }
@@ -197,10 +199,11 @@ export class MusicPlayer {
       const success = await this.sendCommand('resume')
 
       if (success) {
-        this.currentState = 'playing'
+        // 不在这里设置状态,等待渲染进程的状态更新
+        // this.currentState = 'playing' // <- 移除:状态由渲染进程更新
         return {
           success: true,
-          message: '已恢复播放',
+          message: '恢复播放指令已发送',
         }
       }
       else {
@@ -236,11 +239,12 @@ export class MusicPlayer {
       const success = await this.sendCommand('stop')
 
       if (success) {
-        this.currentState = 'stopped'
-        this.currentTime = 0
+        // 不在这里设置状态,等待渲染进程的状态更新
+        // this.currentState = 'stopped' // <- 移除:状态由渲染进程更新
+        // this.currentTime = 0 // <- 由渲染进程更新
         return {
           success: true,
-          message: '已停止播放',
+          message: '停止播放指令已发送',
         }
       }
       else {
@@ -324,10 +328,11 @@ export class MusicPlayer {
       const success = await this.sendCommand('seek', { position })
 
       if (success) {
-        this.currentTime = position
+        // 不在这里设置位置,等待渲染进程的状态更新
+        // this.currentTime = position // <- 移除:由渲染进程更新
         return {
           success: true,
-          message: `已跳转到 ${position.toFixed(1)} 秒`,
+          message: `跳转指令已发送到 ${position.toFixed(1)} 秒`,
           position,
         }
       }

@@ -2,12 +2,12 @@
  * 日志传输层实现
  */
 import type { LogRecord, LogTransport } from './types'
+import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { ConsoleFormatter, TextFormatter } from './formatters'
 import { LogLevel } from './types'
-
 /**
  * 控制台传输
  */
@@ -238,7 +238,7 @@ export class IPCTransport implements LogTransport {
 
   log(record: LogRecord): void {
     try {
-      const { BrowserWindow } = require('electron')
+      // const { BrowserWindow } = require('electron')
       const windows = BrowserWindow.getAllWindows()
 
       // 发送到所有窗口
@@ -256,6 +256,7 @@ export class IPCTransport implements LogTransport {
     catch (error) {
       // IPC 传输失败不应影响日志系统
       // 静默失败
+      console.error('Failed to send log via IPC', error)
     }
   }
 }

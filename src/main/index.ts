@@ -101,7 +101,7 @@ app.whenReady().then(() => {
       const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
       const application = getApplication()
-      await application.initialize('mqtt')
+      await application.initialize('websocket')
 
       const audioPlugin = application.getAudioPlugin()
       if (audioPlugin && backgroundAudioWindow) {
