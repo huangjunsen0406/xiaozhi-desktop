@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import Database from 'better-sqlite3'
 import { app } from 'electron'
+
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null
   private db: Database.Database
@@ -92,6 +93,12 @@ export class DatabaseManager {
         enable_noise_reduction INTEGER DEFAULT 1,
         enable_echo_cancellation INTEGER DEFAULT 1,
         conversation_mode TEXT DEFAULT 'auto',
+        input_sample_rate INTEGER DEFAULT 16000,
+        output_sample_rate INTEGER DEFAULT 24000,
+        channels INTEGER DEFAULT 1,
+        max_input_channels INTEGER DEFAULT 2,
+        max_output_channels INTEGER DEFAULT 2,
+        frame_duration INTEGER DEFAULT 20,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
         updated_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
@@ -321,9 +328,13 @@ export class DatabaseManager {
     }
 
     const result = this.db.prepare(`
-      INSERT INTO audio_config (enable_noise_reduction, enable_echo_cancellation, conversation_mode)
-      VALUES (?, ?, ?)
-    `).run(1, 1, 'auto')
+      INSERT INTO audio_config (
+        enable_noise_reduction, enable_echo_cancellation, conversation_mode,
+        input_sample_rate, output_sample_rate, channels,
+        max_input_channels, max_output_channels, frame_duration
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(1, 1, 'auto', 16000, 24000, 1, 2, 2, 20)
 
     return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioConfig
   }
@@ -369,6 +380,12 @@ export class DatabaseManager {
     enableNoiseReduction: boolean
     enableEchoCancellation: boolean
     conversationMode: 'realtime' | 'auto'
+    inputSampleRate: number
+    outputSampleRate: number
+    channels: number
+    maxInputChannels: number
+    maxOutputChannels: number
+    frameDuration: number
   } {
     const config = this.getOrCreateAudioConfig()
 
@@ -378,6 +395,12 @@ export class DatabaseManager {
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
       enableEchoCancellation: Boolean(config.enable_echo_cancellation),
       conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',
+      inputSampleRate: config.input_sample_rate || 16000,
+      outputSampleRate: config.output_sample_rate || 24000,
+      channels: config.channels || 1,
+      maxInputChannels: config.max_input_channels || 2,
+      maxOutputChannels: config.max_output_channels || 2,
+      frameDuration: config.frame_duration || 20,
     }
   }
 
@@ -662,7 +685,17 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(result.lastInsertRowid) as DbChatMessage
   }
 
-  getChatMessages(sessionId: string, limit = 100, offset = 0): DbChatMessage[] {
+  getChatMessages(sessionId: string, limit?: number, offset = 0): DbChatMessage[] {
+    // 如果不指定 limit，则加载所有消息
+    if (limit === undefined || limit === null || limit <= 0) {
+      return this.db.prepare(`
+        SELECT * FROM chat_messages
+        WHERE session_id = ?
+        ORDER BY timestamp ASC
+      `).all(sessionId) as DbChatMessage[]
+    }
+
+    // 如果指定了 limit，则使用分页查询
     return this.db.prepare(`
       SELECT * FROM chat_messages
       WHERE session_id = ?

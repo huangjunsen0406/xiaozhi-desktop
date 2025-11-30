@@ -26,6 +26,35 @@ const enableNoiseReduction = ref(true)
 const enableEchoCancellation = ref(true)
 const enableRealtimeConversation = ref(false) // 实时对话模式开关
 
+// 高级音频参数
+const inputSampleRate = ref(16000)
+const outputSampleRate = ref(24000)
+const channels = ref(1)
+const maxInputChannels = ref(2)
+const maxOutputChannels = ref(2)
+const frameDuration = ref(20)
+
+// 选项配置
+const sampleRateOptions = [
+  { label: '8000 Hz', value: 8000 },
+  { label: '16000 Hz', value: 16000 },
+  { label: '24000 Hz', value: 24000 },
+  { label: '44100 Hz', value: 44100 },
+  { label: '48000 Hz', value: 48000 },
+]
+
+const channelOptions = [
+  { label: '单声道', value: 1 },
+  { label: '立体声', value: 2 },
+]
+
+const frameDurationOptions = [
+  { label: '10ms', value: 10 },
+  { label: '20ms (推荐)', value: 20 },
+  { label: '40ms', value: 40 },
+  { label: '60ms', value: 60 },
+]
+
 // 系统音量控制支持标志
 const systemVolumeSupported = ref(false)
 
@@ -68,6 +97,14 @@ async function loadConfig(): Promise<void> {
     enableEchoCancellation.value = config.enableEchoCancellation !== false
     enableRealtimeConversation.value = config.conversationMode === 'realtime'
 
+    // 加载高级音频参数
+    inputSampleRate.value = config.inputSampleRate || 16000
+    outputSampleRate.value = config.outputSampleRate || 24000
+    channels.value = config.channels || 1
+    maxInputChannels.value = config.maxInputChannels || 2
+    maxOutputChannels.value = config.maxOutputChannels || 2
+    frameDuration.value = config.frameDuration || 20
+
     // 从配置加载并匹配设备（使用当前组件的 composable 实例）
     const { inputDeviceId, outputDeviceId } = await loadDevicesFromConfig()
 
@@ -107,10 +144,22 @@ async function handleSave(): Promise<void> {
       conversationMode: 'auto' | 'realtime'
       inputDeviceName?: string
       outputDeviceName?: string
+      inputSampleRate: number
+      outputSampleRate: number
+      channels: number
+      maxInputChannels: number
+      maxOutputChannels: number
+      frameDuration: number
     } = {
       enableNoiseReduction: enableNoiseReduction.value,
       enableEchoCancellation: enableEchoCancellation.value,
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',
+      inputSampleRate: inputSampleRate.value,
+      outputSampleRate: outputSampleRate.value,
+      channels: channels.value,
+      maxInputChannels: maxInputChannels.value,
+      maxOutputChannels: maxOutputChannels.value,
+      frameDuration: frameDuration.value,
     }
 
     // 使用 composable 提供的方法获取设备名称
@@ -235,6 +284,67 @@ defineExpose({ handleSave, handleCustomButton })
         <span style="color: #999; font-size: 12px">
           {{ enableRealtimeConversation ? '实时对话模式（全双工）' : '自动对话模式（回合制）' }}
         </span>
+      </div>
+    </NFormItem>
+
+    <!-- 高级音频参数 -->
+    <NFormItem label=" " :show-label="false">
+      <div style="color: #666; font-size: 14px; font-weight: 500; margin-top: 16px">
+        高级音频参数
+      </div>
+    </NFormItem>
+
+    <NFormItem label="输入采样率">
+      <NSelect
+        v-model:value="inputSampleRate"
+        :options="sampleRateOptions"
+        style="width: 300px"
+      />
+    </NFormItem>
+
+    <NFormItem label="输出采样率">
+      <NSelect
+        v-model:value="outputSampleRate"
+        :options="sampleRateOptions"
+        style="width: 300px"
+      />
+    </NFormItem>
+
+    <NFormItem label="声道数">
+      <NSelect
+        v-model:value="channels"
+        :options="channelOptions"
+        style="width: 300px"
+      />
+    </NFormItem>
+
+    <NFormItem label="最大输入声道">
+      <NSelect
+        v-model:value="maxInputChannels"
+        :options="channelOptions"
+        style="width: 300px"
+      />
+    </NFormItem>
+
+    <NFormItem label="最大输出声道">
+      <NSelect
+        v-model:value="maxOutputChannels"
+        :options="channelOptions"
+        style="width: 300px"
+      />
+    </NFormItem>
+
+    <NFormItem label="帧长度">
+      <NSelect
+        v-model:value="frameDuration"
+        :options="frameDurationOptions"
+        style="width: 300px"
+      />
+    </NFormItem>
+
+    <NFormItem label=" " :show-label="false">
+      <div style="color: #f90; font-size: 12px">
+        ⚠️ 注意：修改这些高级参数可能影响音频质量和性能，建议使用默认值
       </div>
     </NFormItem>
 

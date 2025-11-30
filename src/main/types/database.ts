@@ -58,6 +58,13 @@ export interface DbAudioConfig {
   enable_noise_reduction: number
   enable_echo_cancellation: number
   conversation_mode: string
+  // 音频参数配置
+  input_sample_rate: number
+  output_sample_rate: number
+  channels: number
+  max_input_channels: number
+  max_output_channels: number
+  frame_duration: number
   created_at: number
   updated_at: number
 }

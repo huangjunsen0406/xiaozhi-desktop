@@ -2,13 +2,14 @@ import type { IpcContext } from './types/ipc'
 import { join } from 'node:path'
 import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
-import { ensureBackgroundAudioWindow, ensureMainWindow, getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from './windows/windowManager'
+import { buildDisplayModeMenu } from './utils/menuBuilder'
+import { ensureBackgroundAudioWindow, ensureMainWindow, onDisplayModeChange } from './windows/windowManager'
 
 app.commandLine.appendSwitch(
   'enable-features',
@@ -62,74 +63,14 @@ app.on('ready', () => {
   setDevDockIconOnce()
 })
 
-function buildDockMenu(): Menu {
-  const currentMode = getCurrentDisplayMode()
-
-  return Menu.buildFromTemplate([
-    {
-      label: '显示模式',
-      submenu: [
-        {
-          label: '标准窗口',
-          type: 'radio',
-          checked: currentMode === 'main',
-          click: () => {
-            toggleToMain()
-          },
-        },
-        {
-          label: '迷你悬浮球',
-          type: 'radio',
-          checked: currentMode === 'mini',
-          click: () => {
-            toggleToMini()
-          },
-        },
-        {
-          label: '聊天视图',
-          type: 'radio',
-          checked: currentMode === 'chat',
-          click: () => {
-            toggleToChat()
-          },
-        },
-        {
-          label: 'Live2D 桌面宠物',
-          type: 'radio',
-          checked: currentMode === 'live2d',
-          click: () => {
-            toggleToLive2d()
-          },
-        },
-      ],
-    },
-    { type: 'separator' },
-    {
-      label: '设置',
-      click: () => {
-        toggleSettings()
-      },
-    },
-  ])
-}
-
-function updateDockMenu(): void {
-  if (isMacOS && hasDock()) {
-    app.dock!.setMenu(buildDockMenu())
-  }
-}
-
 app.whenReady().then(() => {
-  ensureDockVisible()
   electronApp.setAppUserModelId('com.electron')
 
   app.on('browser-window-created', (_, window) => {
     setDevDockIconOnce()
     optimizer.watchWindowShortcuts(window)
-    window.on('ready-to-show', ensureDockVisible)
+    // Only bind essential events to reduce overhead
     window.on('show', ensureDockVisible)
-    window.on('minimize', ensureDockVisible)
-    window.on('hide', ensureDockVisible)
     window.on('closed', ensureDockVisible)
   })
 
@@ -137,10 +78,10 @@ app.whenReady().then(() => {
   registerTray()
 
   if (isMacOS && hasDock()) {
-    app.dock!.setMenu(buildDockMenu())
+    app.dock!.setMenu(buildDisplayModeMenu(false))
 
     onDisplayModeChange(() => {
-      updateDockMenu()
+      app.dock!.setMenu(buildDisplayModeMenu(false))
     })
   }
 
@@ -153,7 +94,7 @@ app.whenReady().then(() => {
       const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
       const application = getApplication()
-      await application.initialize('websocket')
+      await application.initialize('mqtt')
 
       const audioPlugin = application.getAudioPlugin()
       if (audioPlugin && backgroundAudioWindow) {

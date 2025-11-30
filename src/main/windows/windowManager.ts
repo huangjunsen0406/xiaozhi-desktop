@@ -1,14 +1,17 @@
 import type { BrowserWindow } from 'electron'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
-let mainWindow: BrowserWindow | null = null
-let miniWindow: BrowserWindow | null = null
-let panelWindow: BrowserWindow | null = null
-let activationWindow: BrowserWindow | null = null
-let settingsWindow: BrowserWindow | null = null
-let backgroundAudioWindow: BrowserWindow | null = null
-let chatWindow: BrowserWindow | null = null
-let live2dWindow: BrowserWindow | null = null
+// 窗口引用统一管理
+const windowRefs = {
+  main: { current: null as BrowserWindow | null },
+  mini: { current: null as BrowserWindow | null },
+  panel: { current: null as BrowserWindow | null },
+  activation: { current: null as BrowserWindow | null },
+  settings: { current: null as BrowserWindow | null },
+  backgroundAudio: { current: null as BrowserWindow | null },
+  chat: { current: null as BrowserWindow | null },
+  live2d: { current: null as BrowserWindow | null },
+}
 
 // 显示模式状态管理
 type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d'
@@ -44,82 +47,89 @@ export function onDisplayModeChange(callback: (mode: DisplayMode) => void): void
   onDisplayModeChanged = callback
 }
 
-export function ensureMainWindow(): BrowserWindow {
-  if (mainWindow == null) {
-    const win = buildMainWindow()
-    mainWindow = win
-    win.on('closed', () => {
-      mainWindow = null
-    })
+/**
+ * 创建窗口确保函数的工厂
+ * 统一处理窗口创建、引用管理和关闭事件
+ */
+function createWindowEnsurer(
+  windowRef: { current: BrowserWindow | null },
+  builder: () => BrowserWindow,
+): () => BrowserWindow {
+  return () => {
+    if (windowRef.current == null) {
+      const win = builder()
+      windowRef.current = win
+      win.on('closed', () => {
+        windowRef.current = null
+      })
+    }
+    return windowRef.current as BrowserWindow
   }
-  return mainWindow as BrowserWindow
 }
 
-export function ensureMiniWindow(): BrowserWindow {
-  if (miniWindow == null) {
-    const win = buildMiniWindow()
-    miniWindow = win
-    win.on('closed', () => {
-      miniWindow = null
-    })
-  }
-  return miniWindow as BrowserWindow
-}
+// 使用工厂函数创建所有窗口确保函数
+export const ensureMainWindow = createWindowEnsurer(
+  windowRefs.main,
+  buildMainWindow,
+)
 
-export function ensurePanelWindow(): BrowserWindow {
-  if (panelWindow == null) {
-    const win = buildPanelWindow()
-    panelWindow = win
-    win.on('closed', () => {
-      panelWindow = null
-    })
-  }
-  return panelWindow as BrowserWindow
-}
+export const ensureMiniWindow = createWindowEnsurer(
+  windowRefs.mini,
+  buildMiniWindow,
+)
 
-export function ensureActivationWindow(): BrowserWindow {
-  if (activationWindow == null) {
-    const win = buildActivationWindow()
-    activationWindow = win
-    win.on('closed', () => {
-      activationWindow = null
-    })
-  }
-  return activationWindow as BrowserWindow
-}
+export const ensurePanelWindow = createWindowEnsurer(
+  windowRefs.panel,
+  buildPanelWindow,
+)
 
-export function ensureSettingsWindow(): BrowserWindow {
-  if (settingsWindow == null) {
-    const win = buildSettingsWindow()
-    settingsWindow = win
-    win.on('closed', () => {
-      settingsWindow = null
-    })
-  }
-  return settingsWindow as BrowserWindow
-}
+export const ensureActivationWindow = createWindowEnsurer(
+  windowRefs.activation,
+  buildActivationWindow,
+)
 
+export const ensureSettingsWindow = createWindowEnsurer(
+  windowRefs.settings,
+  buildSettingsWindow,
+)
+
+export const ensureBackgroundAudioWindow = createWindowEnsurer(
+  windowRefs.backgroundAudio,
+  buildBackgroundAudioWindow,
+)
+
+export const ensureChatWindow = createWindowEnsurer(
+  windowRefs.chat,
+  buildChatWindow,
+)
+
+export const ensureLive2dWindow = createWindowEnsurer(
+  windowRefs.live2d,
+  buildLive2dWindow,
+)
+
+// 窗口切换和控制函数
 export function toggleToMini(): void {
   const mini = ensureMiniWindow()
   const main = ensureMainWindow()
   mini.show()
   main.hide()
-  if (chatWindow)
-    chatWindow.hide()
-  if (live2dWindow)
-    live2dWindow.hide()
+  if (windowRefs.chat.current)
+    windowRefs.chat.current.hide()
+  if (windowRefs.live2d.current)
+    windowRefs.live2d.current.hide()
   setDisplayMode('mini')
 }
 
 export function toggleToMain(): void {
-  if (mainWindow)
-    mainWindow.show()
-  if (miniWindow)
-    miniWindow.hide()
-  if (chatWindow)
-    chatWindow.hide()
-  if (live2dWindow)
-    live2dWindow.hide()
+  if (windowRefs.main.current)
+    windowRefs.main.current.show()
+  if (windowRefs.mini.current)
+    windowRefs.mini.current.hide()
+  if (windowRefs.chat.current)
+    windowRefs.chat.current.hide()
+  if (windowRefs.live2d.current)
+    windowRefs.live2d.current.hide()
   setDisplayMode('main')
 }
 
@@ -139,7 +149,7 @@ export function showActivation(): void {
 }
 
 export function getMainWindow(): BrowserWindow | null {
-  return mainWindow
+  return windowRefs.main.current
 }
 
 export function toggleSettings(): void {
@@ -150,72 +160,40 @@ export function toggleSettings(): void {
     win.show()
 }
 
-export function ensureBackgroundAudioWindow(): BrowserWindow {
-  if (backgroundAudioWindow == null) {
-    const win = buildBackgroundAudioWindow()
-    backgroundAudioWindow = win
-    win.on('closed', () => {
-      backgroundAudioWindow = null
-    })
-  }
-  return backgroundAudioWindow as BrowserWindow
-}
-
 export function getBackgroundAudioWindow(): BrowserWindow | null {
-  return backgroundAudioWindow
-}
-
-export function ensureChatWindow(): BrowserWindow {
-  if (chatWindow == null) {
-    const win = buildChatWindow()
-    chatWindow = win
-    win.on('closed', () => {
-      chatWindow = null
-    })
-  }
-  return chatWindow as BrowserWindow
+  return windowRefs.backgroundAudio.current
 }
 
 export function toggleToChat(): void {
   const chat = ensureChatWindow()
   chat.show()
-  if (mainWindow)
-    mainWindow.hide()
-  if (miniWindow)
-    miniWindow.hide()
-  if (live2dWindow)
-    live2dWindow.hide()
+  if (windowRefs.main.current)
+    windowRefs.main.current.hide()
+  if (windowRefs.mini.current)
+    windowRefs.mini.current.hide()
+  if (windowRefs.live2d.current)
+    windowRefs.live2d.current.hide()
   setDisplayMode('chat')
 }
 
 export function getChatWindow(): BrowserWindow | null {
-  return chatWindow
-}
-
-export function ensureLive2dWindow(): BrowserWindow {
-  if (live2dWindow == null) {
-    const win = buildLive2dWindow()
-    live2dWindow = win
-    win.on('closed', () => {
-      live2dWindow = null
-    })
-  }
-  return live2dWindow as BrowserWindow
+  return windowRefs.chat.current
 }
 
 export function toggleToLive2d(): void {
   const win = ensureLive2dWindow()
   win.show()
   win.moveTop()
-  if (mainWindow)
-    mainWindow.hide()
-  if (miniWindow)
-    miniWindow.hide()
-  if (chatWindow)
-    chatWindow.hide()
+  if (windowRefs.main.current)
+    windowRefs.main.current.hide()
+  if (windowRefs.mini.current)
+    windowRefs.mini.current.hide()
+  if (windowRefs.chat.current)
+    windowRefs.chat.current.hide()
   setDisplayMode('live2d')
 }
 
 export function getLive2dWindow(): BrowserWindow | null {
-  return live2dWindow
+  return windowRefs.live2d.current
 }
+

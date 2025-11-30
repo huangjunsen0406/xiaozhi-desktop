@@ -1,6 +1,7 @@
 import type { AudioListener } from '../types/audio'
 import type { KeywordSpotter, KeywordSpotterStream } from '../types/database'
 import path from 'node:path'
+import sherpa_onnx from 'sherpa-onnx-node'
 
 export interface WakeWordDetectorConfig {
   language: string
@@ -38,9 +39,6 @@ export class WakeWordDetector implements AudioListener {
 
   private initKeywordSpotter(config: WakeWordDetectorConfig): void {
     try {
-      // eslint-disable-next-line ts/no-require-imports
-      const sherpa_onnx = require('sherpa-onnx-node')
-
       const modelPath = path.join(config.modelsBasePath, config.language)
       const tokensPath = path.join(modelPath, 'tokens.txt')
       const encoderPath = path.join(modelPath, 'encoder.onnx')

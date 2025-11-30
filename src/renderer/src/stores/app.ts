@@ -216,6 +216,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       console.log('[AppStore] 加载会话消息:', sessionId)
 
+      // 不传递 limit 参数，加载所有消息
       const msgs = await window.api.chatGetMessages(sessionId)
       messages.value = msgs.map(mapIpcMessageToChatMessage)
 
@@ -264,7 +265,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       console.log('[AppStore] 切换会话:', sessionId)
 
-      // 加载消息
+      // 不传递 limit 参数，加载所有消息
       const msgs = await window.api.chatGetMessages(sessionId)
       messages.value = msgs.map(mapIpcMessageToChatMessage)
 

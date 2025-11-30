@@ -8,10 +8,12 @@ export class AudioPlayback {
   private audioContext: AudioContext | null = null
   private nextStartTime = 0 // 下一帧开始时间(用于无缝播放)
   private deviceId: string | undefined = undefined
-  // 配置常量
-  private readonly SAMPLE_RATE = 24000 // 24kHz
-  private readonly CHANNELS = 1 // 单声道
-  private readonly FRAME_SIZE = 480 // 24kHz * 0.02s = 480 samples
+
+  // 配置（从数据库动态加载）
+  private sampleRate = 24000
+  private channels = 1
+  private frameDuration = 20
+  private frameSize = 480
 
   /**
    * 初始化音频播放
@@ -23,9 +25,25 @@ export class AudioPlayback {
 
       this.deviceId = deviceId
 
-      // 创建 24kHz 音频上下文
+      // 加载音频配置
+      const audioConfig = await window.api.audioGetConfig()
+      this.sampleRate = audioConfig.outputSampleRate || 24000
+      this.channels = audioConfig.channels || 1
+      this.frameDuration = audioConfig.frameDuration || 20
+
+      // 计算帧大小 (samples)
+      this.frameSize = Math.floor(this.sampleRate * (this.frameDuration / 1000))
+
+      console.log('音频播放配置:', {
+        sampleRate: this.sampleRate,
+        channels: this.channels,
+        frameDuration: this.frameDuration,
+        frameSize: this.frameSize,
+      })
+
+      // 创建音频上下文
       this.audioContext = new AudioContext({
-        sampleRate: this.SAMPLE_RATE,
+        sampleRate: this.sampleRate,
       })
 
       console.log(`AudioContext 创建成功: ${this.audioContext.sampleRate}Hz`)
@@ -104,9 +122,9 @@ export class AudioPlayback {
       )
 
       // 验证数据长度
-      if (int16Array.length !== this.FRAME_SIZE) {
+      if (int16Array.length !== this.frameSize) {
         console.warn(
-          `PCM 数据长度不正确: ${int16Array.length}, 期望: ${this.FRAME_SIZE}`,
+          `PCM 数据长度不正确: ${int16Array.length}, 期望: ${this.frameSize}`,
         )
       }
 
@@ -115,9 +133,9 @@ export class AudioPlayback {
 
       // 创建 AudioBuffer
       const audioBuffer = this.audioContext.createBuffer(
-        this.CHANNELS,
+        this.channels,
         float32Array.length,
-        this.SAMPLE_RATE,
+        this.sampleRate,
       )
 
       // 填充数据到第一个声道

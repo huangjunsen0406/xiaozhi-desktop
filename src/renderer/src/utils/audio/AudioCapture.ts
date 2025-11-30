@@ -10,9 +10,10 @@ export class AudioCapture {
   private source: MediaStreamAudioSourceNode | null = null
   private deviceId: string | undefined = undefined
 
-  // 配置常量
-  private readonly SAMPLE_RATE = 16000 // 16kHz
-  private readonly CHANNELS = 1 // 单声道
+  // 配置（从数据库动态加载）
+  private sampleRate = 16000
+  private channels = 1
+  private frameDuration = 20
 
   /**
    * 初始化音频采集
@@ -24,9 +25,25 @@ export class AudioCapture {
 
       this.deviceId = deviceId
 
-      // 创建 16kHz 音频上下文
+      // 加载音频配置
+      const audioConfig = await window.api.audioGetConfig()
+      this.sampleRate = audioConfig.inputSampleRate || 16000
+      this.channels = audioConfig.channels || 1
+      this.frameDuration = audioConfig.frameDuration || 20
+
+      // 计算帧大小 (samples)
+      const bufferSize = Math.floor(this.sampleRate * (this.frameDuration / 1000))
+
+      console.log('音频配置:', {
+        sampleRate: this.sampleRate,
+        channels: this.channels,
+        frameDuration: this.frameDuration,
+        bufferSize,
+      })
+
+      // 创建音频上下文
       this.audioContext = new AudioContext({
-        sampleRate: this.SAMPLE_RATE,
+        sampleRate: this.sampleRate,
       })
 
       console.log(`AudioContext 创建成功: ${this.audioContext.sampleRate}Hz`)
@@ -36,8 +53,12 @@ export class AudioCapture {
 
       console.log('AudioWorklet 模块加载成功')
 
-      // 创建 Worklet 节点
-      this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-capture-processor')
+      // 创建 Worklet 节点，传递配置参数
+      this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-capture-processor', {
+        processorOptions: {
+          bufferSize,
+        },
+      })
 
       // 监听 Worklet 发送的 PCM 数据
       this.workletNode.port.onmessage = (event) => {
@@ -78,8 +99,8 @@ export class AudioCapture {
         echoCancellation: audioConfig.enableEchoCancellation,
         noiseSuppression: audioConfig.enableNoiseReduction,
         autoGainControl: true,
-        sampleRate: this.SAMPLE_RATE,
-        channelCount: this.CHANNELS,
+        sampleRate: this.sampleRate,
+        channelCount: this.channels,
       }
 
       // 如果指定了设备ID且不是 'default'，添加设备约束

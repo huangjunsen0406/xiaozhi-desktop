@@ -67,8 +67,9 @@ export function registerChatIpc(): void {
 
   /**
    * 获取消息列表
+   * @param limit 不传或传undefined则加载所有消息
    */
-  ipcMain.handle('chat:get-messages', async (_event, sessionId: string, limit = 100, offset = 0) => {
+  ipcMain.handle('chat:get-messages', async (_event, sessionId: string, limit?: number, offset = 0) => {
     try {
       const messages = db.getChatMessages(sessionId, limit, offset)
 

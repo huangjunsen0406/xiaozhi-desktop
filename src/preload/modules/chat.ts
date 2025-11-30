@@ -40,8 +40,11 @@ export const chatApi = {
 
   /**
    * 获取消息列表
+   * @param sessionId 会话ID
+   * @param limit 限制数量，不传或传0则加载所有消息
+   * @param offset 偏移量
    */
-  getMessages: async (sessionId: string, limit = 100, offset = 0): Promise<ChatMessage[]> => {
+  getMessages: async (sessionId: string, limit?: number, offset = 0): Promise<ChatMessage[]> => {
     const result = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset) as IpcResult<ChatMessage[]>
     if (!result.success) {
       throw new Error(result.error || '获取消息失败')

@@ -131,13 +131,14 @@ async function sendMessage() {
  * 切换会话
  */
 async function switchSession(sessionId: string) {
+  console.log('[ChatView] 请求切换会话:', sessionId)
   await appStore.switchSession(sessionId)
 
   // 滚动到底部
   await nextTick()
   scrollToBottom()
 
-  console.log('[ChatView] 会话已切换，消息数:', appStore.messages.length)
+  console.log('[ChatView] 会话已切换，当前会话ID:', appStore.currentSessionId, '消息数:', appStore.messages.length)
 }
 
 /**

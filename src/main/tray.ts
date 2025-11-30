@@ -1,11 +1,12 @@
 import { join } from 'node:path'
 import process from 'node:process'
-import { app, Menu, nativeImage, nativeTheme, screen, Tray } from 'electron'
+import { app, nativeImage, nativeTheme, screen, Tray } from 'electron'
 import linux24 from '../../resources/tray/icon-24.png?asset'
 import linux32 from '../../resources/tray/icon-32.png?asset'
 import winIco from '../../resources/tray/icon.ico?asset'
 import macTpl2x from '../../resources/tray/iconTemplate@2x.png?asset'
-import { getCurrentDisplayMode, onDisplayModeChange, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from './windows/windowManager'
+import { buildDisplayModeMenu } from './utils/menuBuilder'
+import { onDisplayModeChange } from './windows/windowManager'
 
 let tray: Tray | null = null
 let lastLinuxBucket: 24 | 32 | null = null
@@ -54,71 +55,6 @@ function buildTrayImage(): Electron.NativeImage {
   return img
 }
 
-/**
- * 构建托盘菜单
- */
-function buildTrayMenu(): Menu {
-  const currentMode = getCurrentDisplayMode()
-
-  return Menu.buildFromTemplate([
-    {
-      label: '显示模式',
-      submenu: [
-        {
-          label: '标准窗口',
-          type: 'radio',
-          checked: currentMode === 'main',
-          click: () => {
-            toggleToMain()
-          },
-        },
-        {
-          label: '迷你悬浮球',
-          type: 'radio',
-          checked: currentMode === 'mini',
-          click: () => {
-            toggleToMini()
-          },
-        },
-        {
-          label: '聊天视图',
-          type: 'radio',
-          checked: currentMode === 'chat',
-          click: () => {
-            toggleToChat()
-          },
-        },
-        {
-          label: 'Live2D 桌面宠物',
-          type: 'radio',
-          checked: currentMode === 'live2d',
-          click: () => {
-            toggleToLive2d()
-          },
-        },
-      ],
-    },
-    { type: 'separator' },
-    {
-      label: '设置',
-      click: () => {
-        toggleSettings()
-      },
-    },
-    { type: 'separator' },
-    { label: '退出', click: () => app.quit() },
-  ])
-}
-
-/**
- * 更新托盘菜单（当显示模式变化时调用）
- */
-function updateTrayMenu(): void {
-  if (!tray)
-    return
-  tray.setContextMenu(buildTrayMenu())
-}
-
 export function registerTray(): void {
   if (tray)
     return
@@ -127,10 +63,12 @@ export function registerTray(): void {
   tray = new Tray(image)
   tray.setToolTip('小智')
 
-  tray.setContextMenu(buildTrayMenu())
+  tray.setContextMenu(buildDisplayModeMenu(true))
 
   onDisplayModeChange(() => {
-    updateTrayMenu()
+    if (tray) {
+      tray.setContextMenu(buildDisplayModeMenu(true))
+    }
   })
 
   if (process.platform === 'darwin') {

@@ -65,9 +65,16 @@ export interface AudioConfig {
   outputDeviceName?: string
   microphoneVolume?: number
   speakerVolume?: number
-  enableNoiseReduction: boolean
-  enableEchoCancellation: boolean
-  conversationMode: 'auto' | 'realtime'
+  enableNoiseReduction?: boolean
+  enableEchoCancellation?: boolean
+  conversationMode?: 'realtime' | 'auto'
+  // 高级音频参数
+  inputSampleRate?: number
+  outputSampleRate?: number
+  channels?: number
+  maxInputChannels?: number
+  maxOutputChannels?: number
+  frameDuration?: number
 }
 
 export interface AudioDeviceList {

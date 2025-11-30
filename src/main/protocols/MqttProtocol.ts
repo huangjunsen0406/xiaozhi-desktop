@@ -1,18 +1,18 @@
+import type { JsonMessage } from '../types/protocol'
 /**
- * MQTT 协议实现
- * 支持 MQTT over TLS 和 UDP 音频传输
+ * MQTT Protocol Implementation
+ * 基于 Python 和 C++ 版本实现
+ * 使用 MQTT + UDP 双通道架构，音频通过 UDP 加密传输
  */
-import type { ConnectionInfo, HelloMessage } from './Protocol'
+import type { ConnectionInfo } from './Protocol'
 import { Buffer } from 'node:buffer'
-import * as crypto from 'node:crypto'
-import * as dgram from 'node:dgram'
+import crypto from 'node:crypto'
+import dgram from 'node:dgram'
 import * as mqtt from 'mqtt'
+import { getAudioConfig } from '../ipc/audioIpc'
 import { getConfigManager } from '../services/configManagerDB'
 import { Protocol } from './Protocol'
 
-/**
- * UDP 配置
- */
 interface UdpConfig {
   server: string
   port: number
@@ -20,28 +20,9 @@ interface UdpConfig {
   nonce: string
 }
 
-/**
- * MQTT 配置
- */
-interface MqttConfig {
-  endpoint: string
-  client_id: string
-  username: string
-  password: string
-  publish_topic: string
-  subscribe_topic: string | null
-}
-
-/**
- * MQTT 协议实现
- */
 export class MqttProtocol extends Protocol {
-  // MQTT 客户端
+  // MQTT 相关
   private mqttClient: mqtt.MqttClient | null = null
-  private connected: boolean = false
-  private isClosing: boolean = false
-
-  // MQTT 配置
   private endpoint: string = ''
   private clientId: string = ''
   private username: string = ''
@@ -49,34 +30,91 @@ export class MqttProtocol extends Protocol {
   private publishTopic: string = ''
   private subscribeTopic: string | null = null
 
-  // UDP 配置和实例
+  // UDP 相关
   private udpSocket: dgram.Socket | null = null
   private udpServer: string = ''
   private udpPort: number = 0
   private aesKey: Buffer | null = null
-  private aesNonce: Buffer | null = null
+  private aesNonce: string = ''
   private localSequence: number = 0
-  private udpRunning: boolean = false
 
-  // Hello 握手
-  private helloPromise: Promise<void> | null = null
-  private helloResolve: (() => void) | null = null
-  private helloReject: ((error: Error) => void) | null = null
+  // 状态管理
+  private connected: boolean = false
+  private isClosing: boolean = false
+  private serverHelloReceived: boolean = false
+  private serverHelloResolve: (() => void) | null = null
 
-  // 自动重连
+  // 连接监控
   private reconnectAttempts: number = 0
   private maxReconnectAttempts: number = 0
   private autoReconnectEnabled: boolean = false
-
-  // 连接监控
-  private lastActivityTime: number = 0
-  private keepAliveInterval: number = 60 * 1000 // 60 秒
-  private connectionTimeout: number = 120 * 1000 // 120 秒
+  private lastActivityTime: number | null = null
   private connectionMonitorTimer: NodeJS.Timeout | null = null
-  private isHandlingConnectionLoss: boolean = false
+  private readonly keepAliveInterval: number = 60
+  private readonly connectionTimeout: number = 120
 
   constructor() {
     super()
+    console.log('[MqttProtocol] 初始化')
+  }
+
+  /**
+   * 解析 endpoint，提取主机和端口
+   */
+  private parseEndpoint(endpoint: string): { host: string, port: number, useTls: boolean } {
+    if (!endpoint) {
+      throw new Error('endpoint 不能为空')
+    }
+
+    let host: string
+    let port: number
+
+    if (endpoint.includes(':')) {
+      const parts = endpoint.split(':')
+      host = parts[0]
+      port = Number.parseInt(parts[1], 10)
+
+      if (Number.isNaN(port) || port < 1 || port > 65535) {
+        throw new Error(`无效的端口号: ${parts[1]}`)
+      }
+    }
+    else {
+      host = endpoint
+      port = 8883 // 默认使用 TLS 端口
+    }
+
+    const useTls = port === 8883
+
+    return { host, port, useTls }
+  }
+
+  /**
+   * 从配置管理器获取 MQTT 信息
+   */
+  private loadMqttConfig(): boolean {
+    const configManager = getConfigManager()
+    const mqttInfo = configManager.getMqttInfo()
+
+    if (!mqttInfo) {
+      console.error('[MqttProtocol] MQTT 配置未设置')
+      return false
+    }
+
+    this.endpoint = mqttInfo.endpoint || ''
+    this.clientId = mqttInfo.client_id || ''
+    this.username = mqttInfo.username || ''
+    this.password = mqttInfo.password || ''
+    this.publishTopic = mqttInfo.publish_topic || ''
+    this.subscribeTopic = mqttInfo.subscribe_topic === 'null' ? null : mqttInfo.subscribe_topic
+
+    console.log('[MqttProtocol] MQTT 配置:', {
+      endpoint: this.endpoint,
+      client_id: this.clientId,
+      publish_topic: this.publishTopic,
+      subscribe_topic: this.subscribeTopic,
+    })
+
+    return true
   }
 
   /**
@@ -89,187 +127,102 @@ export class MqttProtocol extends Protocol {
     }
 
     try {
-      // 加载 MQTT 配置
-      const mqttConfig = await this.loadMqttConfig()
-      if (!mqttConfig) {
+      // 加载配置
+      if (!this.loadMqttConfig()) {
+        this.onNetworkErrorCallback?.('MQTT 配置未设置')
         return false
+      }
+
+      // 验证配置
+      if (!this.endpoint || !this.username || !this.password || !this.publishTopic) {
+        const error = 'MQTT 配置不完整'
+        console.error(`[MqttProtocol] ${error}`)
+        this.onNetworkErrorCallback?.(error)
+        return false
+      }
+
+      // 如果已有客户端，先断开
+      if (this.mqttClient) {
+        await this.mqttClient.endAsync(true)
+        this.mqttClient = null
       }
 
       // 解析 endpoint
       const { host, port, useTls } = this.parseEndpoint(this.endpoint)
-
-      console.log(`[MqttProtocol] 正在连接 MQTT 服务器: ${host}:${port} (TLS: ${useTls})`)
-
-      // 清理旧连接
-      if (this.mqttClient) {
-        await this.cleanup()
-      }
-
-      // 重置 hello 状态
-      this.helloPromise = new Promise((resolve, reject) => {
-        this.helloResolve = resolve
-        this.helloReject = reject
-      })
+      console.log(`[MqttProtocol] 解析 endpoint: ${this.endpoint} -> 主机: ${host}, 端口: ${port}, TLS: ${useTls}`)
 
       // 创建 MQTT 客户端
-      const protocol = useTls ? 'mqtts' : 'mqtt'
-      const brokerUrl = `${protocol}://${host}:${port}`
+      const connectUrl = useTls ? `mqtts://${host}:${port}` : `mqtt://${host}:${port}`
 
-      this.mqttClient = mqtt.connect(brokerUrl, {
+      this.mqttClient = mqtt.connect(connectUrl, {
         clientId: this.clientId,
         username: this.username,
         password: this.password,
-        keepalive: this.keepAliveInterval / 1000,
+        keepalive: this.keepAliveInterval,
         clean: true,
-        reconnectPeriod: 0, // 禁用自动重连，我们自己管理
-        connectTimeout: 10 * 1000,
-        rejectUnauthorized: useTls, // TLS 时验证证书
+        reconnectPeriod: 0,
+        connectTimeout: 10000,
+        rejectUnauthorized: useTls,
       })
 
-      // 设置事件监听器
-      this.setupMqttListeners()
+      // 设置事件处理器
+      this.setupMqttHandlers()
 
-      // 等待连接成功
+      // 等待连接建立
       await this.waitForConnection()
 
       // 订阅主题
-      if (this.subscribeTopic && this.subscribeTopic !== 'null') {
-        await this.subscribeMqtt(this.subscribeTopic)
+      if (this.subscribeTopic) {
+        await this.mqttClient.subscribeAsync(this.subscribeTopic, { qos: 1 })
+        console.log(`[MqttProtocol] 已订阅主题: ${this.subscribeTopic}`)
       }
 
       // 启动连接监控
       this.startConnectionMonitor()
 
       // 发送 hello 消息
-      const helloMessage = await this.sendHelloMessage()
-      if (!helloMessage) {
-        throw new Error('发送 hello 消息失败')
+      const helloMessage = this.createHelloMessage()
+      const sent = await this.sendText(JSON.stringify(helloMessage))
+      if (!sent) {
+        console.error('[MqttProtocol] 发送 hello 消息失败')
+        return false
       }
 
       // 等待服务器 hello 响应
-      await Promise.race([
-        this.helloPromise,
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('等待服务器 hello 响应超时')), 10000),
-        ),
-      ])
-
-      // 创建 UDP 套接字
-      await this.setupUdpSocket()
-
-      this.connected = true
-      this.reconnectAttempts = 0
-
-      console.log('[MqttProtocol] 已成功连接到 MQTT 服务器')
-
-      // 通知连接状态变化
-      if (this.onConnectionStateChangedCallback) {
-        this.onConnectionStateChangedCallback(true, '连接成功')
+      try {
+        await this.waitForServerHello()
+      }
+      catch (error) {
+        console.error('[MqttProtocol] 等待服务器 hello 超时:', error)
+        this.onNetworkErrorCallback?.('等待服务器响应超时')
+        return false
       }
 
-      return true
+      // 创建 UDP socket
+      try {
+        await this.createUdpSocket()
+        this.connected = true
+        this.reconnectAttempts = 0
+
+        this.onConnectionStateChangedCallback?.(true, '连接成功')
+        return true
+      }
+      catch (error) {
+        console.error('[MqttProtocol] 创建 UDP socket 失败:', error)
+        this.onNetworkErrorCallback?.(`创建 UDP 连接失败: ${error}`)
+        return false
+      }
     }
     catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('[MqttProtocol] 连接失败:', error)
-      await this.cleanup()
-      if (this.onNetworkErrorCallback) {
-        this.onNetworkErrorCallback(`连接 MQTT 服务器失败: ${errorMessage}`)
-      }
+      this.onNetworkErrorCallback?.(`连接 MQTT 服务器失败: ${error}`)
       return false
     }
   }
 
-  /**
-   * 加载 MQTT 配置
-   */
-  private async loadMqttConfig(): Promise<MqttConfig | null> {
-    try {
-      const config = getConfigManager()
-      const mqttInfo = config.getMqttInfo()
-
-      if (!mqttInfo) {
-        console.error('[MqttProtocol] MQTT 配置未找到')
-        if (this.onNetworkErrorCallback) {
-          this.onNetworkErrorCallback('MQTT 配置未找到')
-        }
-        return null
-      }
-
-      const mqttConfig: MqttConfig = {
-        endpoint: mqttInfo.endpoint || '',
-        client_id: mqttInfo.client_id || '',
-        username: mqttInfo.username || '',
-        password: mqttInfo.password || '',
-        publish_topic: mqttInfo.publish_topic || '',
-        subscribe_topic: mqttInfo.subscribe_topic,
-      }
-
-      // 验证配置
-      if (!mqttConfig.endpoint || !mqttConfig.username || !mqttConfig.password || !mqttConfig.publish_topic) {
-        console.error('[MqttProtocol] MQTT 配置不完整')
-        if (this.onNetworkErrorCallback) {
-          this.onNetworkErrorCallback('MQTT 配置不完整')
-        }
-        return null
-      }
-
-      this.endpoint = mqttConfig.endpoint
-      this.clientId = mqttConfig.client_id || `xiaozhi_${Date.now()}`
-      this.username = mqttConfig.username
-      this.password = mqttConfig.password
-      this.publishTopic = mqttConfig.publish_topic
-      this.subscribeTopic = mqttConfig.subscribe_topic === 'null' ? null : mqttConfig.subscribe_topic
-
-      console.log(`[MqttProtocol] MQTT 配置已加载: ${this.endpoint}`)
-      return mqttConfig
-    }
-    catch (error) {
-      console.error('[MqttProtocol] 加载 MQTT 配置失败:', error)
-      if (this.onNetworkErrorCallback) {
-        this.onNetworkErrorCallback(`加载 MQTT 配置失败: ${error}`)
-      }
-      return null
-    }
-  }
-
-  /**
-   * 解析 endpoint
-   */
-  private parseEndpoint(endpoint: string): { host: string, port: number, useTls: boolean } {
-    if (!endpoint) {
-      throw new Error('endpoint 不能为空')
-    }
-
-    let host: string
-    let port: number
-    let useTls: boolean
-
-    if (endpoint.includes(':')) {
-      const parts = endpoint.split(':')
-      host = parts[0]
-      port = Number.parseInt(parts[1], 10)
-
-      if (Number.isNaN(port) || port < 1 || port > 65535) {
-        throw new Error(`无效的端口号: ${parts[1]}`)
-      }
-
-      useTls = port === 8883
-    }
-    else {
-      host = endpoint
-      port = 8883 // 默认端口
-      useTls = true
-    }
-
-    return { host, port, useTls }
-  }
-
-  /**
-   * 设置 MQTT 事件监听器
-   */
-  private setupMqttListeners(): void {
-    if (!this.mqttClient) return
+  private setupMqttHandlers(): void {
+    if (!this.mqttClient)
+      return
 
     this.mqttClient.on('connect', () => {
       console.log('[MqttProtocol] MQTT 已连接')
@@ -277,395 +230,469 @@ export class MqttProtocol extends Protocol {
     })
 
     this.mqttClient.on('message', (_topic: string, payload: Buffer) => {
-      this.handleMqttMessage(payload.toString())
+      this.lastActivityTime = Date.now()
+      this.handleMqttMessage(payload.toString('utf-8'))
     })
 
-    this.mqttClient.on('error', (error: Error) => {
-      console.error('[MqttProtocol] MQTT 错误:', error)
-      if (!this.isClosing) {
-        this.handleConnectionLoss(`MQTT 错误: ${error.message}`)
-      }
-    })
-
-    this.mqttClient.on('close', () => {
-      console.log('[MqttProtocol] MQTT 连接已关闭')
-      if (!this.isClosing) {
-        this.handleConnectionLoss('MQTT 连接关闭')
-      }
+    this.mqttClient.on('disconnect', () => {
+      console.log('[MqttProtocol] MQTT 连接断开')
+      this.handleDisconnect()
     })
 
     this.mqttClient.on('offline', () => {
       console.warn('[MqttProtocol] MQTT 离线')
-      if (!this.isClosing) {
-        this.handleConnectionLoss('MQTT 离线')
-      }
+      this.handleDisconnect()
+    })
+
+    this.mqttClient.on('error', (error) => {
+      console.error('[MqttProtocol] MQTT 错误:', error)
     })
   }
 
-  /**
-   * 等待连接成功
-   */
-  private async waitForConnection(): Promise<void> {
+  private waitForConnection(): Promise<void> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('MQTT 连接超时'))
+        reject(new Error('连接超时'))
       }, 10000)
 
-      this.mqttClient!.once('connect', () => {
+      if (!this.mqttClient) {
+        clearTimeout(timeout)
+        reject(new Error('MQTT 客户端未初始化'))
+        return
+      }
+
+      this.mqttClient.once('connect', () => {
         clearTimeout(timeout)
         resolve()
       })
 
-      this.mqttClient!.once('error', (error) => {
+      this.mqttClient.once('error', (error) => {
         clearTimeout(timeout)
         reject(error)
       })
     })
   }
 
-  /**
-   * 订阅 MQTT 主题
-   */
-  private async subscribeMqtt(topic: string): Promise<void> {
+  private waitForServerHello(): Promise<void> {
+    this.serverHelloReceived = false
     return new Promise((resolve, reject) => {
-      this.mqttClient!.subscribe(topic, { qos: 1 }, (error) => {
-        if (error) {
-          console.error(`[MqttProtocol] 订阅主题 ${topic} 失败:`, error)
+      this.serverHelloResolve = resolve
+
+      setTimeout(() => {
+        if (!this.serverHelloReceived) {
+          reject(new Error('等待服务器 hello 超时'))
+        }
+      }, 10000)
+    })
+  }
+
+  private createHelloMessage() {
+    const audioConfig = getAudioConfig()
+
+    return {
+      type: 'hello',
+      version: 3,
+      features: {
+        mcp: true,
+        aec: true,
+      },
+      transport: 'udp',
+      audio_params: {
+        format: 'opus',
+        sample_rate: audioConfig.outputSampleRate,
+        channels: audioConfig.channels,
+        frame_duration: audioConfig.frameDuration,
+      },
+    }
+  }
+
+  private handleMqttMessage(payload: string): void {
+    try {
+      const data = JSON.parse(payload) as JsonMessage
+      const msgType = data.type
+
+      if (msgType === 'goodbye') {
+        const sessionId = (data as any).session_id
+        if (!sessionId || sessionId === this.sessionId) {
+          this.handleGoodbye().catch((error) => {
+            console.error('[MqttProtocol] 处理 goodbye 失败:', error)
+          })
+        }
+        return
+      }
+
+      if (msgType === 'hello') {
+        this.parseServerHello(data)
+        return
+      }
+
+      this.onIncomingJsonCallback?.(data)
+    }
+    catch (error) {
+      console.error('[MqttProtocol] 解析 MQTT 消息失败:', error, payload)
+    }
+  }
+
+  private parseServerHello(data: any): void {
+    console.log('[MqttProtocol] 收到服务器 hello 响应', data)
+
+    const transport = data.transport
+    if (transport !== 'udp') {
+      console.error(`[MqttProtocol] 不支持的传输方式: ${transport}`)
+      return
+    }
+
+    this.sessionId = data.session_id || ''
+
+    const udp: UdpConfig = data.udp
+    if (!udp) {
+      console.error('[MqttProtocol] UDP 配置缺失')
+      return
+    }
+
+    this.udpServer = udp.server
+    this.udpPort = udp.port
+    this.aesNonce = udp.nonce
+    this.aesKey = Buffer.from(udp.key, 'hex')
+    this.localSequence = 0
+
+    console.log(`[MqttProtocol] UDP 服务器: ${this.udpServer}:${this.udpPort}`)
+
+    this.serverHelloReceived = true
+    this.serverHelloResolve?.()
+
+    if (this.onAudioChannelOpenedCallback) {
+      Promise.resolve(this.onAudioChannelOpenedCallback()).catch((error) => {
+        console.error('[MqttProtocol] 音频通道打开回调出错:', error)
+      })
+    }
+  }
+
+  private async createUdpSocket(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.udpSocket) {
+        try {
+          this.udpSocket.close()
+        }
+        catch (e) {
+          console.error('[MqttProtocol] 关闭旧 socket 失败:', e)
+        }
+      }
+
+      this.udpSocket = dgram.createSocket('udp4')
+
+      this.udpSocket.on('message', (data: Buffer) => {
+        this.handleUdpMessage(data).catch((error) => {
+          console.error('[MqttProtocol] 处理 UDP 消息失败:', error)
+        })
+      })
+
+      this.udpSocket.on('error', (error) => {
+        console.error('[MqttProtocol] UDP socket 错误:', error)
+        // 不要在 error 时 reject，因为可能是在运行中发生的
+        if (!this.connected) {
           reject(error)
         }
+      })
+
+      this.udpSocket.on('listening', () => {
+        try {
+          const address = this.udpSocket!.address()
+          console.log(`[MqttProtocol] 🎧 UDP socket 已启动 (隐式绑定)`)
+          console.log(`[MqttProtocol] 📍 本地地址: ${address.address}:${address.port}`)
+        }
+        catch {
+          // 忽略错误
+        }
+      })
+
+      // 关键修改：不显式 bind，而是发送一个空包来触发隐式绑定和 NAT 打洞
+      // 这完全模拟了 Python 的行为（Python 是直接 sendto）
+      const dummyPacket = Buffer.from([0])
+      this.udpSocket.send(dummyPacket, this.udpPort, this.udpServer, (err) => {
+        if (err) {
+          console.error('[MqttProtocol] 发送打洞包失败:', err)
+          reject(err)
+        }
         else {
-          console.log(`[MqttProtocol] 成功订阅主题: ${topic}`)
-          this.lastActivityTime = Date.now()
+          console.log(`[MqttProtocol] 🚀 已发送打洞包到 ${this.udpServer}:${this.udpPort}`)
           resolve()
         }
       })
     })
   }
 
-  /**
-   * 发送 hello 消息
-   */
-  private async sendHelloMessage(): Promise<boolean> {
-    const helloMessage: HelloMessage = {
-      type: 'hello',
-      version: 3,
-      features: {
-        mcp: true,
-      },
-      transport: 'udp',
-      audio_params: {
-        format: 'opus',
-        sample_rate: 16000,
-        channels: 1,
-        frame_duration: 20,
-      },
-    }
-
-    return await this.sendText(JSON.stringify(helloMessage))
-  }
-
-  /**
-   * 处理 MQTT 消息
-   */
-  private handleMqttMessage(payload: string): void {
+  private async handleUdpMessage(data: Buffer): Promise<void> {
     try {
-      this.lastActivityTime = Date.now()
-
-      const data = JSON.parse(payload)
-      const msgType = data.type
-
-      if (msgType === 'hello') {
-        this.handleServerHello(data)
-      }
-      else if (msgType === 'goodbye') {
-        this.handleGoodbye(data)
-      }
-      else {
-        // 其他 JSON 消息
-        if (this.onIncomingJsonCallback) {
-          this.onIncomingJsonCallback(data)
-        }
-      }
-    }
-    catch (error) {
-      console.error('[MqttProtocol] 处理 MQTT 消息失败:', error)
-    }
-  }
-
-  /**
-   * 处理服务器 hello 消息
-   */
-  private handleServerHello(data: {
-    transport?: string
-    session_id?: string
-    udp?: UdpConfig
-  }): void {
-    try {
-      const transport = data.transport
-      if (transport !== 'udp') {
-        const error = new Error(`不支持的传输方式: ${transport}`)
-        if (this.helloReject) {
-          this.helloReject(error)
-        }
+      if (data.length < 16) {
         return
       }
 
-      // 保存会话 ID
-      if (data.session_id) {
-        this.setSessionId(data.session_id)
-      }
+      const receivedNonce = data.subarray(0, 16)
+      const encryptedAudio = data.subarray(16)
 
-      // 保存 UDP 配置
-      const udp = data.udp
-      if (!udp) {
-        const error = new Error('UDP 配置缺失')
-        if (this.helloReject) {
-          this.helloReject(error)
-        }
-        return
-      }
+      const decrypted = this.aesCtrDecrypt(this.aesKey!, receivedNonce, encryptedAudio)
 
-      this.udpServer = udp.server
-      this.udpPort = udp.port
-      this.aesKey = Buffer.from(udp.key, 'hex')
-      this.aesNonce = Buffer.from(udp.nonce, 'hex')
-      this.localSequence = 0
-      console.log(`[MqttProtocol] 收到服务器 hello，UDP: ${this.udpServer}:${this.udpPort}`)
-
-      // 完成 hello promise
-      if (this.helloResolve) {
-        this.helloResolve()
-      }
-
-      // 通知音频通道已打开
-      if (this.onAudioChannelOpenedCallback) {
-        Promise.resolve(this.onAudioChannelOpenedCallback()).catch((error) => {
-          console.error('[MqttProtocol] 音频通道打开回调出错:', error)
-        })
-      }
-    }
-    catch (error) {
-      console.error('[MqttProtocol] 处理服务器 hello 失败:', error)
-      if (this.helloReject) {
-        this.helloReject(error instanceof Error ? error : new Error(String(error)))
-      }
-    }
-  }
-
-  /**
-   * 处理 goodbye 消息
-   */
-  private async handleGoodbye(data: { session_id?: string }): Promise<void> {
-    try {
-      const sessionId = data.session_id
-      if (!sessionId || sessionId === this.sessionId) {
-        console.log('[MqttProtocol] 收到 goodbye 消息，关闭连接')
-        await this.closeAudioChannel()
-      }
-    }
-    catch (error) {
-      console.error('[MqttProtocol] 处理 goodbye 消息失败:', error)
-    }
-  }
-
-  /**
-   * 设置 UDP 套接字
-   */
-  private async setupUdpSocket(): Promise<void> {
-    try {
-      // 关闭旧的 UDP 套接字
-      if (this.udpSocket) {
-        this.stopUdpReceiver()
-      }
-
-      // 创建新的 UDP 套接字
-      this.udpSocket = dgram.createSocket('udp4')
-
-      // 设置 UDP 事件监听
-      this.udpSocket.on('message', (msg: Buffer, rinfo: dgram.RemoteInfo) => {
-        this.handleUdpMessage(msg, rinfo)
-      })
-
-      this.udpSocket.on('error', (error: Error) => {
-        console.error('[MqttProtocol] UDP 错误:', error)
-      })
-
-      this.udpRunning = true
-      console.log('[MqttProtocol] UDP 套接字已创建')
-    }
-    catch (error) {
-      console.error('[MqttProtocol] 创建 UDP 套接字失败:', error)
-      throw error
-    }
-  }
-
-  /**
-   * 处理 UDP 消息
-   */
-  private handleUdpMessage(msg: Buffer, _rinfo: dgram.RemoteInfo): void {
-    try {
-      // 验证数据包大小
-      if (msg.length < 16) {
-        console.error(`[MqttProtocol] 无效的音频数据包大小: ${msg.length}`)
-        return
-      }
-
-      // 分离 nonce 和加密数据
-      const receivedNonce = msg.subarray(0, 16)
-      const encryptedAudio = msg.subarray(16)
-
-      // 解密
-      if (!this.aesKey) {
-        console.error('[MqttProtocol] AES 密钥未设置')
-        return
-      }
-
-      const decrypted = this.aesCtrDecrypt(this.aesKey, receivedNonce, encryptedAudio)
-
-      // 传递给音频回调
       if (this.onIncomingAudioCallback) {
         this.onIncomingAudioCallback(decrypted)
       }
     }
     catch (error) {
-      console.error('[MqttProtocol] 处理 UDP 消息失败:', error)
+      console.error('[MqttProtocol] 处理音频数据包错误:', error)
     }
   }
 
-  /**
-   * AES-CTR 加密
-   */
   private aesCtrEncrypt(key: Buffer, nonce: Buffer, plaintext: Buffer): Buffer {
-    const cipher = crypto.createCipheriv('aes-256-ctr', key, nonce)
+    const cipher = crypto.createCipheriv('aes-128-ctr', key, nonce)
     return Buffer.concat([cipher.update(plaintext), cipher.final()])
   }
 
-  /**
-   * AES-CTR 解密
-   */
   private aesCtrDecrypt(key: Buffer, nonce: Buffer, ciphertext: Buffer): Buffer {
-    const decipher = crypto.createDecipheriv('aes-256-ctr', key, nonce)
+    const decipher = crypto.createDecipheriv('aes-128-ctr', key, nonce)
     return Buffer.concat([decipher.update(ciphertext), decipher.final()])
   }
 
-  /**
-   * 启动连接监控
-   */
-  private startConnectionMonitor(): void {
-    this.stopConnectionMonitor()
+  private generateNonce(dataLength: number): Buffer {
+    const baseNonce = Buffer.from(this.aesNonce, 'hex')
+    const nonce = Buffer.alloc(16)
 
-    this.connectionMonitorTimer = setInterval(() => {
-      if (!this.connected || this.isClosing) {
-        return
+    // Python: self.aes_nonce[:4] -> 前4个字符 -> 前2个字节
+    baseNonce.copy(nonce, 0, 0, 2)
+
+    // Python: format(len(audio_data), "04x") -> 2个字节
+    nonce.writeUInt16BE(dataLength, 2)
+
+    // Python: self.aes_nonce[8:24] -> 第8-24个字符 -> 第4-12个字节 (8个字节)
+    baseNonce.copy(nonce, 4, 4, 12)
+
+    // Python: format(self.local_sequence, "08x") -> 4个字节
+    nonce.writeUInt32BE(this.localSequence, 12)
+
+    return nonce
+  }
+
+  async sendText(message: string): Promise<boolean> {
+    if (!this.mqttClient || !this.mqttClient.connected) {
+      console.error('[MqttProtocol] MQTT 客户端未连接')
+      return false
+    }
+
+    try {
+      await this.mqttClient.publishAsync(this.publishTopic, message, { qos: 0 })
+      return true
+    }
+    catch (error) {
+      console.error('[MqttProtocol] 发送 MQTT 消息失败:', error)
+      this.onNetworkErrorCallback?.(`发送消息失败: ${error}`)
+      return false
+    }
+  }
+
+  async sendAudio(audioData: Buffer): Promise<boolean> {
+    if (!this.udpSocket || !this.udpServer || !this.udpPort || !this.aesKey) {
+      console.error('[MqttProtocol] UDP 通道未初始化')
+      return false
+    }
+
+    try {
+      this.localSequence = (this.localSequence + 1) & 0xFFFFFFFF
+      const nonce = this.generateNonce(audioData.length)
+      const encrypted = this.aesCtrEncrypt(this.aesKey, nonce, audioData)
+      const packet = Buffer.concat([nonce, encrypted])
+
+      await new Promise<void>((resolve, reject) => {
+        this.udpSocket!.send(packet, this.udpPort, this.udpServer, (error) => {
+          if (error)
+            reject(error)
+          else
+            resolve()
+        })
+      })
+
+      return true
+    }
+    catch (error) {
+      this.onNetworkErrorCallback?.(`发送音频失败: ${error}`)
+      return false
+    }
+  }
+
+  isAudioChannelOpened(): boolean {
+    return this.connected
+      && !this.isClosing
+      && this.mqttClient?.connected === true
+      && this.udpSocket !== null
+  }
+
+  async openAudioChannel(): Promise<boolean> {
+    if (this.isAudioChannelOpened()) {
+      return true
+    }
+
+    const success = await this.connect()
+    if (success && this.onAudioChannelOpenedCallback) {
+      await this.onAudioChannelOpenedCallback()
+    }
+
+    return success
+  }
+
+  async closeAudioChannel(): Promise<void> {
+    this.isClosing = true
+
+    try {
+      if (this.sessionId) {
+        const goodbyeMsg = {
+          type: 'goodbye',
+          session_id: this.sessionId,
+        }
+        await this.sendText(JSON.stringify(goodbyeMsg))
       }
 
-      // 检查 MQTT 连接状态
-      if (!this.mqttClient || !this.mqttClient.connected) {
-        console.warn('[MqttProtocol] 检测到 MQTT 连接断开')
+      await this.handleGoodbye()
+    }
+    catch (error) {
+      console.error('[MqttProtocol] 关闭音频通道时出错:', error)
+      if (this.onAudioChannelClosedCallback) {
+        await this.onAudioChannelClosedCallback()
+      }
+    }
+    finally {
+      this.isClosing = false
+    }
+  }
+
+  private async handleGoodbye(): Promise<void> {
+    try {
+      if (this.udpSocket) {
+        this.udpSocket.close()
+        this.udpSocket = null
+      }
+
+      if (this.connectionMonitorTimer) {
+        clearInterval(this.connectionMonitorTimer)
+        this.connectionMonitorTimer = null
+      }
+
+      if (this.mqttClient) {
+        await this.mqttClient.endAsync(true)
+        this.mqttClient = null
+      }
+
+      this.connected = false
+      this.sessionId = ''
+      this.localSequence = 0
+      this.udpServer = ''
+      this.udpPort = 0
+      this.aesKey = null
+      this.aesNonce = ''
+
+      if (this.onAudioChannelClosedCallback) {
+        await this.onAudioChannelClosedCallback()
+      }
+    }
+    catch (error) {
+      console.error('[MqttProtocol] 处理 goodbye 失败:', error)
+    }
+  }
+
+  private handleDisconnect(): void {
+    const wasConnected = this.connected
+    this.connected = false
+
+    if (wasConnected && this.onConnectionStateChangedCallback) {
+      this.onConnectionStateChangedCallback(false, 'MQTT 断开')
+    }
+
+    if (this.udpSocket) {
+      this.udpSocket.close()
+      this.udpSocket = null
+    }
+
+    if (!this.isClosing && this.autoReconnectEnabled && this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.attemptReconnect('MQTT 断开').catch((error) => {
+        console.error('[MqttProtocol] 重连失败:', error)
+      })
+    }
+    else {
+      if (this.onAudioChannelClosedCallback) {
+        this.onAudioChannelClosedCallback()
+      }
+
+      if (this.onNetworkErrorCallback) {
+        let errorMsg = 'MQTT 连接断开'
+        if (this.autoReconnectEnabled && this.reconnectAttempts >= this.maxReconnectAttempts) {
+          errorMsg += ' (重连失败)'
+        }
+        this.onNetworkErrorCallback(errorMsg)
+      }
+    }
+  }
+
+  private startConnectionMonitor(): void {
+    if (this.connectionMonitorTimer) {
+      clearInterval(this.connectionMonitorTimer)
+    }
+
+    this.connectionMonitorTimer = setInterval(() => {
+      if (!this.mqttClient?.connected) {
+        console.warn('[MqttProtocol] 检测到 MQTT 连接已断开')
         this.handleConnectionLoss('MQTT 连接检测失败')
         return
       }
 
-      // 检查最后活动时间
-      const timeSinceActivity = Date.now() - this.lastActivityTime
-      if (timeSinceActivity > this.connectionTimeout) {
-        console.warn(`[MqttProtocol] 连接超时，最后活动: ${timeSinceActivity}ms 前`)
-        this.handleConnectionLoss('连接超时')
+      if (this.lastActivityTime) {
+        const elapsed = Date.now() - this.lastActivityTime
+        if (elapsed > this.connectionTimeout * 1000) {
+          console.warn(`[MqttProtocol] 连接超时，最后活动: ${elapsed / 1000}秒前`)
+          this.handleConnectionLoss('连接超时')
+        }
       }
-    }, 30000) // 每 30 秒检查一次
+    }, 30000)
   }
 
-  /**
-   * 停止连接监控
-   */
-  private stopConnectionMonitor(): void {
-    if (this.connectionMonitorTimer) {
-      clearInterval(this.connectionMonitorTimer)
-      this.connectionMonitorTimer = null
-    }
-  }
-
-  /**
-   * 处理连接丢失
-   */
   private async handleConnectionLoss(reason: string): Promise<void> {
-    // 防止重复调用
-    if (this.isHandlingConnectionLoss) {
-      console.log(`[MqttProtocol] 已在处理连接丢失，忽略: ${reason}`)
-      return
-    }
-    this.isHandlingConnectionLoss = true
-
     console.warn(`[MqttProtocol] 连接丢失: ${reason}`)
 
     const wasConnected = this.connected
     this.connected = false
 
-    // 通知连接状态变化
-    if (this.onConnectionStateChangedCallback && wasConnected) {
-      try {
-        this.onConnectionStateChangedCallback(false, reason)
-      }
-      catch (error) {
-        console.error('[MqttProtocol] 调用连接状态变化回调失败:', error)
-      }
+    if (wasConnected && this.onConnectionStateChangedCallback) {
+      this.onConnectionStateChangedCallback(false, reason)
     }
 
-    // 清理连接
-    await this.cleanup()
+    await this.cleanupConnection()
 
-    // 通知音频通道关闭
     if (this.onAudioChannelClosedCallback) {
-      try {
-        await Promise.resolve(this.onAudioChannelClosedCallback())
-      }
-      catch (error) {
-        console.error('[MqttProtocol] 调用音频通道关闭回调失败:', error)
-      }
+      await this.onAudioChannelClosedCallback()
     }
 
-    // 尝试自动重连
     if (!this.isClosing && this.autoReconnectEnabled && this.reconnectAttempts < this.maxReconnectAttempts) {
       await this.attemptReconnect(reason)
     }
     else {
-      // 通知网络错误
       if (this.onNetworkErrorCallback) {
+        let errorMsg = `连接丢失: ${reason}`
         if (this.autoReconnectEnabled && this.reconnectAttempts >= this.maxReconnectAttempts) {
-          this.onNetworkErrorCallback(`连接丢失且重连失败: ${reason}`)
+          errorMsg += ' (重连失败)'
         }
-        else {
-          this.onNetworkErrorCallback(`连接丢失: ${reason}`)
-        }
+        this.onNetworkErrorCallback(errorMsg)
       }
     }
-
-    this.isHandlingConnectionLoss = false
   }
 
-  /**
-   * 尝试自动重连
-   */
   private async attemptReconnect(originalReason: string): Promise<void> {
     this.reconnectAttempts++
 
-    // 通知开始重连
     if (this.onReconnectingCallback) {
-      try {
-        this.onReconnectingCallback(this.reconnectAttempts, this.maxReconnectAttempts)
-      }
-      catch (error) {
-        console.error('[MqttProtocol] 调用重连回调失败:', error)
-      }
+      this.onReconnectingCallback(this.reconnectAttempts, this.maxReconnectAttempts)
     }
 
     console.log(`[MqttProtocol] 尝试自动重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
 
-    // 指数退避，最大 30 秒
     const delay = Math.min(this.reconnectAttempts * 2000, 30000)
     await new Promise(resolve => setTimeout(resolve, delay))
 
-    // 如果在等待期间被取消，直接返回
     if (this.isClosing) {
       console.log('[MqttProtocol] 重连被取消')
       return
@@ -689,206 +716,40 @@ export class MqttProtocol extends Protocol {
       }
     }
     catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('[MqttProtocol] 重连过程中出错:', error)
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         if (this.onNetworkErrorCallback) {
-          this.onNetworkErrorCallback(`重连异常: ${errorMessage}`)
+          this.onNetworkErrorCallback(`重连异常: ${error}`)
         }
       }
     }
   }
 
-  /**
-   * 停止 UDP 接收器
-   */
-  private stopUdpReceiver(): void {
-    this.udpRunning = false
+  private async cleanupConnection(): Promise<void> {
+    this.connected = false
+
+    if (this.connectionMonitorTimer) {
+      clearInterval(this.connectionMonitorTimer)
+      this.connectionMonitorTimer = null
+    }
 
     if (this.udpSocket) {
-      try {
-        this.udpSocket.close()
-      }
-      catch (error) {
-        console.error('[MqttProtocol] 关闭 UDP 套接字失败:', error)
-      }
+      this.udpSocket.close()
       this.udpSocket = null
     }
-  }
 
-  /**
-   * 清理资源
-   */
-  private async cleanup(): Promise<void> {
-    this.connected = false
-    this.isHandlingConnectionLoss = false
-
-    // 停止连接监控
-    this.stopConnectionMonitor()
-
-    // 停止 UDP
-    this.stopUdpReceiver()
-
-    // 关闭 MQTT 客户端
     if (this.mqttClient) {
       try {
-        this.mqttClient.removeAllListeners()
-        await new Promise<void>((resolve) => {
-          this.mqttClient!.end(false, {}, () => {
-            resolve()
-          })
-        })
+        await this.mqttClient.endAsync(true)
       }
       catch (error) {
-        console.error('[MqttProtocol] 关闭 MQTT 客户端失败:', error)
-      }
-      this.mqttClient = null
-    }
-
-    // 重置序列号和 hello 状态
-    this.localSequence = 0
-    this.helloResolve = null
-    this.helloReject = null
-    this.helloPromise = null
-  }
-
-  /**
-   * 发送文本消息
-   */
-  async sendText(message: string): Promise<boolean> {
-    if (!this.mqttClient || this.isClosing) {
-      console.warn('[MqttProtocol] MQTT 客户端未连接或正在关闭')
-      return false
-    }
-
-    if (!this.mqttClient.connected) {
-      console.warn('[MqttProtocol] MQTT 客户端未连接')
-      return false
-    }
-
-    return new Promise((resolve) => {
-      this.mqttClient!.publish(this.publishTopic, message, { qos: 1 }, (error) => {
-        if (error) {
-          console.error('[MqttProtocol] 发送 MQTT 消息失败:', error)
-          this.handleConnectionLoss(`发送消息失败: ${error.message}`)
-          resolve(false)
-        }
-        else {
-          this.lastActivityTime = Date.now()
-          resolve(true)
-        }
-      })
-    })
-  }
-
-  /**
-   * 发送音频数据
-   */
-  async sendAudio(data: Buffer): Promise<boolean> {
-    if (!this.udpSocket || !this.udpServer || !this.udpPort || !this.aesKey || !this.aesNonce) {
-      console.error('[MqttProtocol] UDP 通道未初始化')
-      return false
-    }
-
-    try {
-      // 生成新的 nonce
-      this.localSequence = (this.localSequence + 1) & 0xFFFFFFFF
-
-      const dataLength = Buffer.allocUnsafe(2)
-      dataLength.writeUInt16BE(data.length, 0)
-
-      const sequenceBuffer = Buffer.allocUnsafe(8)
-      sequenceBuffer.writeBigUInt64BE(BigInt(this.localSequence), 0)
-
-      const newNonce = Buffer.concat([
-        this.aesNonce.subarray(0, 4), // 固定前缀
-        dataLength, // 数据长度
-        this.aesNonce.subarray(8, 24), // 原始 nonce
-        sequenceBuffer, // 序列号
-      ])
-
-      // 加密
-      const encrypted = this.aesCtrEncrypt(this.aesKey, newNonce, data)
-
-      // 拼接 nonce 和密文
-      const packet = Buffer.concat([newNonce, encrypted])
-
-      // 发送
-      return new Promise((resolve, reject) => {
-        this.udpSocket!.send(packet, this.udpPort, this.udpServer, (error) => {
-          if (error) {
-            console.error('[MqttProtocol] 发送 UDP 数据失败:', error)
-            reject(error)
-          }
-          else {
-            resolve(true)
-          }
-        })
-      })
-    }
-    catch (error) {
-      console.error('[MqttProtocol] 发送音频数据失败:', error)
-      if (this.onNetworkErrorCallback) {
-        this.onNetworkErrorCallback(`发送音频数据失败: ${error}`)
-      }
-      return false
-    }
-  }
-
-  /**
-   * 检查音频通道是否打开
-   */
-  isAudioChannelOpened(): boolean {
-    if (!this.mqttClient || !this.connected || this.isClosing) {
-      return false
-    }
-
-    return this.mqttClient.connected && this.udpRunning
-  }
-
-  /**
-   * 打开音频通道
-   */
-  async openAudioChannel(): Promise<boolean> {
-    if (!this.isAudioChannelOpened()) {
-      return await this.connect()
-    }
-    return true
-  }
-
-  /**
-   * 关闭音频通道
-   */
-  async closeAudioChannel(): Promise<void> {
-    this.isClosing = true
-
-    try {
-      // 发送 goodbye 消息
-      if (this.sessionId) {
-        const goodbye = {
-          type: 'goodbye',
-          session_id: this.sessionId,
-        }
-        await this.sendText(JSON.stringify(goodbye))
-      }
-
-      await this.cleanup()
-
-      if (this.onAudioChannelClosedCallback) {
-        await Promise.resolve(this.onAudioChannelClosedCallback())
+        console.error('[MqttProtocol] 断开 MQTT 连接失败:', error)
       }
     }
-    catch (error) {
-      console.error('[MqttProtocol] 关闭音频通道失败:', error)
-    }
-    finally {
-      this.isClosing = false
-    }
+
+    this.lastActivityTime = null
   }
 
-  /**
-   * 启用/禁用自动重连
-   */
   enableAutoReconnect(enabled: boolean, maxAttempts: number = 5): void {
     this.autoReconnectEnabled = enabled
     if (enabled) {
@@ -901,9 +762,6 @@ export class MqttProtocol extends Protocol {
     }
   }
 
-  /**
-   * 获取连接信息
-   */
   getConnectionInfo(): ConnectionInfo {
     return {
       connected: this.connected,

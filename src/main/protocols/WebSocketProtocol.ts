@@ -1,6 +1,7 @@
 import type { ConnectionInfo, HelloMessage } from './Protocol'
 import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
+import { AudioConfig } from '../constants/DeviceState'
 import { getConfigManager } from '../services/configManagerDB'
 import { Protocol } from './Protocol'
 
@@ -344,11 +345,13 @@ export class WebSocketProtocol extends Protocol {
       transport: 'websocket',
       audio_params: {
         format: 'opus',
-        sample_rate: 16000,
-        channels: 1,
-        frame_duration: 20,
+        sample_rate: AudioConfig.INPUT_SAMPLE_RATE,
+        channels: AudioConfig.CHANNELS,
+        frame_duration: AudioConfig.FRAME_DURATION,
       },
     }
+
+    console.log('[WebSocketProtocol] 发送 hello 消息:', helloMessage)
 
     await this.sendText(JSON.stringify(helloMessage))
   }

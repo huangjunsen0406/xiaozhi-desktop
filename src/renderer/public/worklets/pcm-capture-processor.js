@@ -1,17 +1,28 @@
 /**
  * PCM 音频采集处理器
  * 运行在 AudioWorklet 独立线程中
- * 负责累积音频样本到 20ms 帧并发送到主线程
+ * 负责累积音频样本到指定帧大小并发送到主线程
  */
 class PCMCaptureProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super()
 
-    // 配置参数 (20ms @ 16kHz = 320 samples)
-    this.BUFFER_SIZE = 320
+    // 从options获取配置参数，默认 20ms @ 16kHz = 320 samples
+    const processorOptions = options.processorOptions || {}
+    this.BUFFER_SIZE = processorOptions.bufferSize || 320
     this.buffer = []
 
-    console.log('PCMCaptureProcessor 已创建')
+    console.log('PCMCaptureProcessor 已创建, 帧大小:', this.BUFFER_SIZE)
+
+    // 监听来自主线程的配置更新消息
+    this.port.onmessage = (event) => {
+      if (event.data.type === 'updateConfig') {
+        this.BUFFER_SIZE = event.data.bufferSize
+        console.log('PCMCaptureProcessor 配置已更新, 新帧大小:', this.BUFFER_SIZE)
+        // 清空缓冲区以避免混合不同帧大小的数据
+        this.buffer = []
+      }
+    }
   }
 
   /**

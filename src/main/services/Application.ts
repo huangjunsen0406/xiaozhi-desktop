@@ -14,6 +14,7 @@ import { PluginManager } from '../plugins/PluginManager'
 import { UIPlugin } from '../plugins/UIPlugin'
 import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import { MqttProtocol } from '../protocols/MqttProtocol'
+
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 import { isAlertMessage, isTtsMessage } from '../types/protocol'

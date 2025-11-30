@@ -64,9 +64,33 @@ export function registerAudioIpc(): void {
       if ('conversationMode' in config) {
         dbUpdates.conversation_mode = config.conversationMode
       }
+      // 新增音频参数
+      if ('inputSampleRate' in config) {
+        dbUpdates.input_sample_rate = config.inputSampleRate
+      }
+      if ('outputSampleRate' in config) {
+        dbUpdates.output_sample_rate = config.outputSampleRate
+      }
+      if ('channels' in config) {
+        dbUpdates.channels = config.channels
+      }
+      if ('maxInputChannels' in config) {
+        dbUpdates.max_input_channels = config.maxInputChannels
+      }
+      if ('maxOutputChannels' in config) {
+        dbUpdates.max_output_channels = config.maxOutputChannels
+      }
+      if ('frameDuration' in config) {
+        dbUpdates.frame_duration = config.frameDuration
+      }
 
       db.updateAudioConfig(dbUpdates)
       console.log('[Audio IPC] 音频配置已保存到数据库:', dbUpdates)
+      
+      // 重新加载 AudioConfig
+      const { AudioConfig: AudioConfigInstance } = await import('../constants/DeviceState')
+      AudioConfigInstance.reload()
+      
       return success()
     },
   })
