@@ -3,9 +3,9 @@ import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 
-import { createLogger } from '../../utils/logger'
+import { getLogger } from '../../utils/logger'
 
-const logger = createLogger('Live2dWindow')
+const logger = getLogger('Live2dWindow')
 // import { initLive2dDragBehavior } from '../behaviors/Live2dDragBehavior'
 
 /**

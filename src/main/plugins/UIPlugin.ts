@@ -1,10 +1,10 @@
 import type { DeviceState } from '../constants/DeviceState'
 import type { JsonMessage } from '../types/protocol'
 import { webContents } from 'electron'
+import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
-import { createLogger } from '../utils/logger'
 
-const logger = createLogger('UIPlugin')
+const logger = getLogger('UIPlugin')
 
 /**
  * UI 插件

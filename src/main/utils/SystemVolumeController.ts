@@ -4,9 +4,9 @@
  * 使用 easy-volume 库实现
  */
 import { getMute, getVolume, setMute, setVolume } from 'easy-volume'
-import { createLogger } from './logger'
+import { getLogger } from './logger'
 
-const logger = createLogger('SystemVolumeController')
+const logger = getLogger('SystemVolumeController')
 
 export class SystemVolumeController {
   /**

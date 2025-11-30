@@ -6,11 +6,11 @@ import type { Application } from '../services/Application'
 import type { AudioListener } from '../types/audio'
 import { ipcMain } from 'electron'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
 
-const logger = createLogger('AudioPlugin')
+const logger = getLogger('AudioPlugin')
 
 /**
  * 音频性能指标

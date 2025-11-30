@@ -6,9 +6,9 @@
 import type { PropertyList, PropertyType } from '../../types'
 import { MusicPlayer } from './MusicPlayer'
 
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
-const logger = createLogger('MusicToolsManager')
+const logger = getLogger('MusicToolsManager')
 
 /**
  * 音乐工具管理器

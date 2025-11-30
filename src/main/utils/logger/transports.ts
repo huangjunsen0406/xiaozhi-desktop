@@ -1,11 +1,11 @@
 /**
- * 日志传输层实现
+ * 日志传输层实现（依赖注入模式，不直接依赖 electron）
  */
 import type { LogRecord, LogTransport } from './types'
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { ConsoleFormatter, TextFormatter } from './formatters'
 import { LogLevel } from './types'
 /**
@@ -41,7 +41,7 @@ export class ConsoleTransport implements LogTransport {
 }
 
 /**
- * 文件传输（支持日志轮转）
+ * 文件传输（支持日志轮转）- 依赖注入模式
  */
 export class FileTransport implements LogTransport {
   name = 'file'
@@ -59,17 +59,17 @@ export class FileTransport implements LogTransport {
   constructor(
     minLevel: LogLevel = LogLevel.INFO,
     options: {
-      logDir?: string
+      logDir: string  // 必须从外部注入，不再可选
       maxFileSize?: number
       maxFiles?: number
-    } = {},
+    },
   ) {
     this.minLevel = minLevel
     this.maxFileSize = options.maxFileSize || 10 * 1024 * 1024 // 10MB
     this.maxFiles = options.maxFiles || 7
 
-    // 确定日志目录
-    this.logDir = options.logDir || path.join(app.getPath('userData'), 'logs')
+    // 使用注入的日志目录，不再访问 electron app
+    this.logDir = options.logDir
 
     // 确保目录存在
     if (!fs.existsSync(this.logDir)) {

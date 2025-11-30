@@ -1,9 +1,9 @@
 import { Buffer } from 'node:buffer'
 import OpusScript from 'opusscript'
 import { AudioConfig } from '../constants/DeviceState'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('OpusCodec')
+const logger = getLogger('OpusCodec')
 
 /**
  * Opus 编解码器

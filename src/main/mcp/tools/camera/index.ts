@@ -3,12 +3,12 @@
  * 根据配置返回对应的摄像头实现
  */
 import type { BaseCamera } from './BaseCamera'
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 import { VLCamera } from './VLCamera'
 
 import { WebCamera } from './WebCamera'
 
-const logger = createLogger('Index')
+const logger = getLogger('Index')
 
 /** 摄像头配置 */
 interface CameraOptions {

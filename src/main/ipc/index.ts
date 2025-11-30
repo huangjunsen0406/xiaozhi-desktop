@@ -1,7 +1,7 @@
 import type { IpcContext } from '../types/ipc'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
 import { getLive2dWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
@@ -16,7 +16,7 @@ import { registerMusicIpc } from './musicIpc'
 
 import { registerThemeIpc } from './themeIpc'
 
-const logger = createLogger('Index')
+const logger = getLogger('Index')
 
 /**
  * 注册基础 IPC 通道（不依赖 Application）

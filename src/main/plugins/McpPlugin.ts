@@ -4,9 +4,9 @@ import type { UIPlugin } from './UIPlugin'
 import { McpServer } from '../mcp/McpServer'
 import { Plugin } from './Plugin'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('McpPlugin')
+const logger = getLogger('McpPlugin')
 
 /**
  * MCP 插件

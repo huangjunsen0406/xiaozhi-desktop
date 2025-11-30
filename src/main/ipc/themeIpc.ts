@@ -3,9 +3,9 @@
  */
 import { BrowserWindow, ipcMain } from 'electron'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('ThemeIpc')
+const logger = getLogger('ThemeIpc')
 
 /**
  * 当前主题存储

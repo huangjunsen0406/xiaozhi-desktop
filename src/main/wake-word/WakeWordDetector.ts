@@ -2,9 +2,9 @@ import type { AudioListener } from '../types/audio'
 import type { KeywordSpotter, KeywordSpotterStream } from '../types/database'
 import path from 'node:path'
 import sherpa_onnx from 'sherpa-onnx-node'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('WakeWord')
+const logger = getLogger('WakeWord')
 
 export interface WakeWordDetectorConfig {
   language: string

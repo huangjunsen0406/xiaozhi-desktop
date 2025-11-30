@@ -1,10 +1,10 @@
 import type { IpcContext } from '../types/ipc'
 import { ipcMain } from 'electron'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { registerShortcutIpcChannels } from './shortcutIpc'
 import { registerWakeWordIpc } from './wakeWordIpc'
 
-const logger = createLogger('AppIpc')
+const logger = getLogger('AppIpc')
 
 /**
  * 注册 Application 控制相关的 IPC 通道

@@ -1,9 +1,9 @@
 import type { IpcResult } from '@shared/types'
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
-import { createLogger } from '../../utils/logger'
+import { getLogger } from '../../utils/logger'
 
-const logger = createLogger('IpcMiddleware')
+const logger = getLogger('IpcMiddleware')
 
 /**
  * IPC 参数验证规则

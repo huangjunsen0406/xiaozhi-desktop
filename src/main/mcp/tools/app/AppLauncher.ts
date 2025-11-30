@@ -6,10 +6,10 @@ import type { LaunchResult, Platform } from './types'
 import { exec, spawn } from 'node:child_process'
 import * as os from 'node:os'
 import { promisify } from 'node:util'
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
 const execAsync = promisify(exec)
-const logger = createLogger('AppLauncher')
+const logger = getLogger('AppLauncher')
 
 export class AppLauncher {
   /**

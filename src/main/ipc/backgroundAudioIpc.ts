@@ -1,10 +1,10 @@
 import type { BackgroundAudioStatus } from '@shared/types'
 import { ipcMain } from 'electron'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
 import { getBackgroundAudioWindow } from '../windows/windowManager'
 
-const logger = createLogger('BackgroundAudioIpc')
+const logger = getLogger('BackgroundAudioIpc')
 
 let audioStatus: BackgroundAudioStatus = {
   initialized: false,

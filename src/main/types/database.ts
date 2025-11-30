@@ -76,10 +76,8 @@ export interface DbWakeWordConfig {
   id: number
   enabled: number
   language: string
-  keywords_list: string
-  keyword_zh?: string
-  keyword_en?: string
-  keyword?: string
+  keyword_zh: string
+  keyword_en: string
   threshold: number
   score: number
   cooldown_ms: number
@@ -141,6 +139,21 @@ export interface DbChatMessage {
 export interface DbSessionStats {
   count: number
   last_ts: number | null
+}
+
+/**
+ * 快捷键配置表类型
+ */
+export interface DbShortcutConfig {
+  id: number
+  action: string
+  name: string
+  category: string
+  accelerator: string | null
+  enabled: number
+  is_global: number
+  created_at: number
+  updated_at: number
 }
 
 // 导出共享类型

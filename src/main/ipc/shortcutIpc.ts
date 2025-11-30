@@ -2,9 +2,9 @@ import type { IpcMainInvokeEvent } from 'electron'
 import type { Application } from '../services/Application'
 import { ipcMain } from 'electron'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('ShortcutIpc')
+const logger = getLogger('ShortcutIpc')
 
 export function registerShortcutIpcChannels(application: Application) {
   const shortcutManager = application.getShortcutManager()

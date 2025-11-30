@@ -1,11 +1,11 @@
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
 import { ThingManager } from '../iot'
+import { getLogger } from '../utils/logger'
+
 import { Plugin } from './Plugin'
 
-import { createLogger } from '../utils/logger'
-
-const logger = createLogger('IoTPlugin')
+const logger = getLogger('IoTPlugin')
 
 /**
  * IoT 插件

@@ -3,7 +3,8 @@ import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
-import { createLogger } from '../utils/logger'
+import type { Logger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
 /**
  * 插件状态
@@ -78,14 +79,14 @@ export abstract class Plugin {
   /**
    * Logger 实例（懒加载）
    */
-  private _logger?: ReturnType<typeof createLogger>
+  private _logger?: Logger
 
   /**
    * 获取 logger 实例
    */
-  protected get logger(): ReturnType<typeof createLogger> {
+  protected get logger(): Logger {
     if (!this._logger) {
-      this._logger = createLogger(this.name)
+      this._logger = getLogger(this.name)
     }
     return this._logger
   }

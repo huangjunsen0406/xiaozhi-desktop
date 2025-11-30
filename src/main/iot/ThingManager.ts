@@ -1,9 +1,9 @@
 import type { Thing } from './Thing'
 import type { IoTCommand, ThingDescriptor, ThingState } from './types'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('ThingManager')
+const logger = getLogger('ThingManager')
 
 /**
  * IoT 设备管理器

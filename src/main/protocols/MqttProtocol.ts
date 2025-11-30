@@ -11,10 +11,10 @@ import dgram from 'node:dgram'
 import * as mqtt from 'mqtt'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { getConfigManager } from '../services/configManagerDB'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
 
-const logger = createLogger('MQTT')
+const logger = getLogger('MQTT')
 
 interface UdpConfig {
   server: string

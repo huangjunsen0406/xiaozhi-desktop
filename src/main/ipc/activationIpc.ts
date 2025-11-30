@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron'
 import { getActivationService } from '../services/ActivationService'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('ActivationIpc')
+const logger = getLogger('ActivationIpc')
 
 /**
  * 注册激活相关的 IPC 通道

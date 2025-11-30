@@ -1,16 +1,14 @@
 import type { MqttInfo } from '@shared/types'
 import { v4 as uuidv4 } from 'uuid'
-import { createLogger } from '../utils/logger'
-
+import { getLogger } from '../utils/logger'
 import { DatabaseManager } from './database'
-
-const logger = createLogger('ConfigManagerDB')
 
 export type { MqttInfo }
 
 export class ConfigManager {
   private static instance: ConfigManager | null = null
   private db: DatabaseManager
+  private logger = getLogger('ConfigManagerDB') // 移到类内部
 
   private static DEFAULT_CONFIG = {
     OTA_VERSION_URL: 'https://api.tenclass.net/xiaozhi/ota/',
@@ -35,13 +33,13 @@ export class ConfigManager {
     if (!clientId) {
       clientId = uuidv4()
       this.setClientId(clientId)
-      logger.info(`已生成 CLIENT_ID: ${clientId}`)
+      this.logger.info(`已生成 CLIENT_ID: ${clientId}`)
     }
 
     const config = this.db.getNetworkConfig()
     if (!config) {
       this.db.getOrCreateNetworkConfig({ client_id: clientId })
-      logger.info('已创建网络配置记录')
+      this.logger.info('已创建网络配置记录')
     }
   }
 
@@ -52,7 +50,7 @@ export class ConfigManager {
 
     if (macAddress && macAddress !== this.getDeviceId()) {
       this.setDeviceId(macAddress)
-      logger.info(`已设置 DEVICE_ID: ${macAddress}`)
+      this.logger.info(`已设置 DEVICE_ID: ${macAddress}`)
     }
   }
 
@@ -71,7 +69,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 CLIENT_ID 失败', error)
+      this.logger.error('设置 CLIENT_ID 失败', error)
       return false
     }
   }
@@ -87,7 +85,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 DEVICE_ID 失败', error)
+      this.logger.error('设置 DEVICE_ID 失败', error)
       return false
     }
   }
@@ -103,7 +101,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 OTA_VERSION_URL 失败', error)
+      this.logger.error('设置 OTA_VERSION_URL 失败', error)
       return false
     }
   }
@@ -119,7 +117,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 WEBSOCKET_URL 失败', error)
+      this.logger.error('设置 WEBSOCKET_URL 失败', error)
       return false
     }
   }
@@ -135,7 +133,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 WEBSOCKET_ACCESS_TOKEN 失败', error)
+      this.logger.error('设置 WEBSOCKET_ACCESS_TOKEN 失败', error)
       return false
     }
   }
@@ -170,7 +168,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 MQTT_INFO 失败', error)
+      this.logger.error('设置 MQTT_INFO 失败', error)
       return false
     }
   }
@@ -186,7 +184,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 ACTIVATION_VERSION 失败', error)
+      this.logger.error('设置 ACTIVATION_VERSION 失败', error)
       return false
     }
   }
@@ -202,7 +200,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('设置 AUTHORIZATION_URL 失败', error)
+      this.logger.error('设置 AUTHORIZATION_URL 失败', error)
       return false
     }
   }
@@ -213,7 +211,7 @@ export class ConfigManager {
       return true
     }
     catch (error) {
-      logger.error('批量更新配置失败', error)
+      this.logger.error('批量更新配置失败', error)
       return false
     }
   }

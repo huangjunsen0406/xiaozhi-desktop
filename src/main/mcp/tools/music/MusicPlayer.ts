@@ -20,11 +20,11 @@ import type {
   SetVolumeResult,
   StopMusicResult,
 } from './types'
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
 import { ensureBackgroundAudioWindow } from '../../../windows/windowManager'
 
-const logger = createLogger('MusicPlayer')
+const logger = getLogger('MusicPlayer')
 
 /**
  * 音乐播放器服务（单例）

@@ -1,8 +1,6 @@
 import type { Buffer } from 'node:buffer'
 import type { Protocol } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
-import path from 'node:path'
-import { app } from 'electron'
 import { DeviceState } from '../constants/DeviceState'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
@@ -18,13 +16,13 @@ import { MqttProtocol } from '../protocols/MqttProtocol'
 import { AbortReason, ListeningMode } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
 import { isAlertMessage, isTtsMessage } from '../types/protocol'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
+import { DatabaseManager } from './database'
 import { ShortcutManager } from './ShortcutManager'
-
-const logger = createLogger('Application')
 
 export class Application {
   private static instance: Application | null = null
+  private logger = getLogger('Application') // 移到类内部
 
   private running: boolean = false
   private protocol: Protocol | null = null
@@ -47,7 +45,7 @@ export class Application {
   private taskIdCounter: number = 0
 
   private constructor() {
-    logger.info('初始化应用实例')
+    this.logger.info('初始化应用实例')
   }
 
   static getInstance(): Application {
@@ -65,7 +63,7 @@ export class Application {
     const taskId = `${name}:${++this.taskIdCounter}`
     const trackedPromise = promise
       .catch((error) => {
-        logger.error(`任务 ${taskId} 异常:`, error)
+        this.logger.error(`任务 ${taskId} 异常:`, error)
         throw error
       })
       .finally(() => {
@@ -81,15 +79,15 @@ export class Application {
       return
     }
 
-    logger.info(`等待 ${this.activeTasks.size} 个任务完成...`)
+    this.logger.info(`等待 ${this.activeTasks.size} 个任务完成...`)
 
     const taskNames = Array.from(this.activeTasks.keys())
-    logger.info(`活跃任务: ${taskNames.join(', ')}`)
+    this.logger.info(`活跃任务: ${taskNames.join(', ')}`)
 
     const timeoutPromise = new Promise<void>((resolve) => {
       setTimeout(() => {
         if (this.activeTasks.size > 0) {
-          logger.warn(`等待任务超时，${this.activeTasks.size} 个任务未完成`)
+          this.logger.warn(`等待任务超时，${this.activeTasks.size} 个任务未完成`)
         }
         resolve()
       }, timeout)
@@ -104,7 +102,7 @@ export class Application {
   }
 
   async initialize(protocolType: 'websocket' | 'mqtt' = 'mqtt'): Promise<void> {
-    logger.info(`初始化，协议类型: ${protocolType}`)
+    this.logger.info(`初始化，协议类型: ${protocolType}`)
 
     this.setProtocol(protocolType)
 
@@ -125,26 +123,26 @@ export class Application {
 
     await this.plugins.setupAll(this)
 
-    const dbPath = path.join(app.getPath('userData'), 'xiaozhi.db')
-    this.shortcutManager = new ShortcutManager(dbPath, this)
+    const db = DatabaseManager.getInstance()
+    this.shortcutManager = new ShortcutManager(db, this)
     await this.shortcutManager.registerAll()
 
-    logger.info('初始化完成')
+    this.logger.info('初始化完成')
   }
 
   async start(): Promise<void> {
-    logger.info('启动应用')
+    this.logger.info('启动应用')
     this.running = true
 
     await this.plugins.startAll()
 
     await this.plugins.notifyDeviceStateChanged(this.deviceState)
 
-    logger.info('应用启动完成')
+    this.logger.info('应用启动完成')
   }
 
   private setProtocol(protocolType: 'websocket' | 'mqtt'): void {
-    logger.info(`设置协议: ${protocolType}`)
+    this.logger.info(`设置协议: ${protocolType}`)
     if (protocolType === 'mqtt') {
       this.protocol = new MqttProtocol()
     }
@@ -187,7 +185,7 @@ export class Application {
    */
   async connectProtocol(): Promise<boolean> {
     if (!this.protocol) {
-      logger.error('协议未初始化')
+      this.logger.error('协议未初始化')
       return false
     }
 
@@ -207,16 +205,16 @@ export class Application {
 
           const opened = await this.protocol!.openAudioChannel()
           if (!opened) {
-            logger.error('协议连接失败')
+            this.logger.error('协议连接失败')
             return false
           }
 
-          logger.info('协议连接已建立')
+          this.logger.info('协议连接已建立')
           await this.plugins.notifyProtocolConnected(this.protocol!)
           return true
         }
         catch (error) {
-          logger.error('连接协议时出错:', error)
+          this.logger.error('连接协议时出错:', error)
           return false
         }
         finally {
@@ -243,7 +241,7 @@ export class Application {
 
       // 如果正在说话，先发送打断
       if (this.deviceState === DeviceState.SPEAKING) {
-        logger.info('说话中发送打断')
+        this.logger.info('说话中发送打断')
         await this.protocol!.sendAbortSpeaking(AbortReason.USER_INTERRUPTED)
         await this.setDeviceState(DeviceState.IDLE)
       }
@@ -252,7 +250,7 @@ export class Application {
       await this.setDeviceState(DeviceState.LISTENING)
     }
     catch (error) {
-      logger.error('开始手动监听失败:', error)
+      this.logger.error('开始手动监听失败:', error)
     }
   }
 
@@ -269,7 +267,7 @@ export class Application {
       await this.setDeviceState(DeviceState.IDLE)
     }
     catch (error) {
-      logger.error('停止手动监听失败:', error)
+      this.logger.error('停止手动监听失败:', error)
     }
   }
 
@@ -290,7 +288,7 @@ export class Application {
         ? ListeningMode.REALTIME // 实时对话（全双工，可随时打断）
         : ListeningMode.AUTO_STOP // 回合制对话（半双工）
 
-      logger.info(`启动自动对话，模式: ${conversationMode} (${mode})`)
+      this.logger.info(`启动自动对话，模式: ${conversationMode} (${mode})`)
 
       // 先设置监听模式和持续监听标志，确保 isAutoMode 正确
       this.listeningMode = mode
@@ -311,7 +309,7 @@ export class Application {
       await this.setDeviceState(DeviceState.LISTENING)
     }
     catch (error) {
-      logger.error('开始自动对话失败:', error)
+      this.logger.error('开始自动对话失败:', error)
       // 出错时恢复到空闲状态
       this.keepListening = false
       await this.setDeviceState(DeviceState.IDLE)
@@ -323,7 +321,7 @@ export class Application {
    */
   async stopAutoConversation(): Promise<void> {
     try {
-      logger.info('停止自动对话')
+      this.logger.info('停止自动对话')
       this.keepListening = false
 
       // 如果正在说话，发送打断
@@ -342,7 +340,7 @@ export class Application {
       await this.setDeviceState(DeviceState.IDLE)
     }
     catch (error) {
-      logger.error('停止自动对话失败:', error)
+      this.logger.error('停止自动对话失败:', error)
     }
   }
 
@@ -362,7 +360,7 @@ export class Application {
 
     this.stateChangeLock = (async () => {
       try {
-        logger.info(`设备状态变更: ${this.deviceState} -> ${state}`)
+        this.logger.info(`设备状态变更: ${this.deviceState} -> ${state}`)
         this.deviceState = state
 
         // 如果进入监听状态，立即重置中止标志（在广播之前）
@@ -374,7 +372,7 @@ export class Application {
         await this.plugins.notifyDeviceStateChanged(state)
       }
       catch (error) {
-        logger.error('广播状态变化失败:', error)
+        this.logger.error('广播状态变化失败:', error)
       }
       finally {
         this.stateChangeLock = null
@@ -389,11 +387,11 @@ export class Application {
    */
   async abortSpeaking(reason: AbortReason): Promise<void> {
     if (this.aborted) {
-      logger.info('已经中止，忽略重复的中止请求')
+      this.logger.info('已经中止，忽略重复的中止请求')
       return
     }
 
-    logger.info(`中止语音输出，原因: ${reason}`)
+    this.logger.info(`中止语音输出，原因: ${reason}`)
     this.aborted = true
     await this.protocol?.sendAbortSpeaking(reason)
     await this.setDeviceState(DeviceState.IDLE)
@@ -407,28 +405,28 @@ export class Application {
    */
   async sendText(text: string): Promise<void> {
     try {
-      logger.info(`发送文本消息: ${text}`)
+      this.logger.info(`发送文本消息: ${text}`)
 
       // 如果正在说话，先中止
       if (this.deviceState === DeviceState.SPEAKING) {
-        logger.info('说话中，先中止语音输出')
+        this.logger.info('说话中，先中止语音输出')
         await this.abortSpeaking(AbortReason.USER_INTERRUPTED)
       }
 
       // 确保协议已连接
       const ok = await this.connectProtocol()
       if (!ok) {
-        logger.error('协议未连接，无法发送文本')
+        this.logger.error('协议未连接，无法发送文本')
         return
       }
 
       // 发送唤醒词检测消息（服务端会将文本作为用户输入处理）
       // 服务器会返回 STT 消息，由 ChatPlugin 统一保存
       await this.protocol!.sendWakeWordDetected(text)
-      logger.info('文本消息已发送，等待服务器返回 STT')
+      this.logger.info('文本消息已发送，等待服务器返回 STT')
     }
     catch (error) {
-      logger.error('发送文本消息失败:', error)
+      this.logger.error('发送文本消息失败:', error)
     }
   }
 
@@ -436,11 +434,11 @@ export class Application {
    * 处理网络错误
    */
   private handleNetworkError(error: string): void {
-    logger.error('网络错误:', error)
+    this.logger.error('网络错误:', error)
     this.keepListening = false
     // 通知插件
     this.plugins.notifyNetworkError(error).catch((err) => {
-      logger.error('通知插件网络错误失败:', err)
+      this.logger.error('通知插件网络错误失败:', err)
     })
   }
 
@@ -451,18 +449,18 @@ export class Application {
   private async handleIncomingJson(jsonData: JsonMessage): Promise<void> {
     try {
       const msgType = jsonData.type
-      logger.info(`收到 JSON 消息: type=${msgType}`, jsonData)
+      this.logger.info(`收到 JSON 消息: type=${msgType}`, jsonData)
 
       if (msgType === 'error') {
-        logger.error('收到错误消息', jsonData)
+        this.logger.error('收到错误消息', jsonData)
       }
 
       // 处理 Alert 消息（错误/警告）
       if (isAlertMessage(jsonData)) {
         const message = jsonData.message || '未知错误'
         const code = jsonData.code
-        logger.warn(`收到服务端警告: ${message}${code ? ` (code: ${code})` : ''}`)
-        logger.warn('完整 alert 消息:', JSON.stringify(jsonData, null, 2))
+        this.logger.warn(`收到服务端警告: ${message}${code ? ` (code: ${code})` : ''}`)
+        this.logger.warn('完整 alert 消息:', JSON.stringify(jsonData, null, 2))
       }
 
       // 处理 TTS 消息
@@ -501,7 +499,7 @@ export class Application {
       })
     }
     catch (error) {
-      logger.error('处理 JSON 消息失败:', error)
+      this.logger.error('处理 JSON 消息失败:', error)
     }
   }
 
@@ -512,7 +510,7 @@ export class Application {
     // 音频数据是高频事件，不追踪（避免性能开销）
     // 直接转发给插件
     this.plugins.notifyIncomingAudio(data).catch((error) => {
-      logger.error('通知插件音频数据失败:', error)
+      this.logger.error('通知插件音频数据失败:', error)
     })
   }
 
@@ -520,7 +518,7 @@ export class Application {
    * 处理音频通道打开
    */
   private async handleAudioChannelOpened(): Promise<void> {
-    logger.info('音频通道已打开')
+    this.logger.info('音频通道已打开')
     await this.plugins.notifyAudioChannelOpened()
     await this.setDeviceState(DeviceState.LISTENING)
   }
@@ -529,7 +527,7 @@ export class Application {
    * 处理音频通道关闭
    */
   private async handleAudioChannelClosed(): Promise<void> {
-    logger.info('音频通道已关闭')
+    this.logger.info('音频通道已关闭')
     await this.plugins.notifyAudioChannelClosed()
     await this.setDeviceState(DeviceState.IDLE)
   }
@@ -551,7 +549,7 @@ export class Application {
       await this.protocol?.sendStartListening(this.listeningMode)
     }
     catch (error) {
-      logger.error('重启监听失败:', error)
+      this.logger.error('重启监听失败:', error)
     }
   }
 
@@ -658,10 +656,10 @@ export class Application {
   async interruptSpeaking(): Promise<void> {
     if (this.deviceState === DeviceState.SPEAKING) {
       await this.stopAutoConversation()
-      logger.info('已打断当前对话')
+      this.logger.info('已打断当前对话')
     }
     else {
-      logger.info('当前不在说话状态，无需打断')
+      this.logger.info('当前不在说话状态，无需打断')
     }
   }
 
@@ -674,7 +672,7 @@ export class Application {
     }
 
     this.isShuttingDown = true
-    logger.info('正在关闭应用...')
+    this.logger.info('正在关闭应用...')
     this.running = false
 
     try {
@@ -697,7 +695,7 @@ export class Application {
           await this.protocol.closeAudioChannel()
         }
         catch (error) {
-          logger.error('关闭协议失败:', error)
+          this.logger.error('关闭协议失败:', error)
         }
         this.protocol = null
       }
@@ -719,10 +717,10 @@ export class Application {
       this.keepListening = false
       this.aborted = false
 
-      logger.info('应用关闭完成')
+      this.logger.info('应用关闭完成')
     }
     catch (error) {
-      logger.error('关闭应用时出错:', error)
+      this.logger.error('关闭应用时出错:', error)
     }
     finally {
       this.isShuttingDown = false

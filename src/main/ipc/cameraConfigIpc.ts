@@ -3,9 +3,9 @@
  */
 import { ipcMain } from 'electron'
 import { DatabaseManager } from '../services/database'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('CameraConfigIpc')
+const logger = getLogger('CameraConfigIpc')
 
 export function registerCameraConfigIpc(): void {
   const db = DatabaseManager.getInstance()

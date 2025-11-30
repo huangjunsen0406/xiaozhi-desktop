@@ -5,9 +5,9 @@ import OpenAI from 'openai'
 import sharp from 'sharp'
 import { BaseCamera } from './BaseCamera'
 
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
-const logger = createLogger('VLCamera')
+const logger = getLogger('VLCamera')
 
 export class VLCamera extends BaseCamera {
   private static instance: VLCamera | null = null

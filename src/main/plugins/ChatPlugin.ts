@@ -3,11 +3,11 @@ import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Buffer } from 'node:buffer'
 import { DatabaseManager } from '../services/database'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
 
-const logger = createLogger('ChatPlugin')
+const logger = getLogger('ChatPlugin')
 
 /**
  * 聊天插件

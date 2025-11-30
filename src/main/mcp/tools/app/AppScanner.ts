@@ -4,13 +4,13 @@ import type { AppInfo, Platform } from './types'
  * 统一接口，根据平台调用对应的扫描器
  */
 import * as os from 'node:os'
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 import { LinuxScanner } from './scanners/LinuxScanner'
 import { MacScanner } from './scanners/MacScanner'
 
 import { WindowsScanner } from './scanners/WindowsScanner'
 
-const logger = createLogger('AppScanner')
+const logger = getLogger('AppScanner')
 
 export class AppScanner {
   private static cachedApps: AppInfo[] | null = null

@@ -1,8 +1,8 @@
 import { DatabaseManager } from '../services/database'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('DeviceState')
+const logger = getLogger('DeviceState')
 
 /**
  * 设备状态枚举

@@ -2,10 +2,10 @@ import type { AudioConfig } from '../types/audio'
 import { OpusCodec } from '../audio/OpusCodec'
 import { DatabaseManager } from '../services/database'
 import { SystemVolumeController } from '../utils/SystemVolumeController'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
 
-const logger = createLogger('AudioIpc')
+const logger = getLogger('AudioIpc')
 
 // Opus 编解码器实例
 let opusCodec: OpusCodec | null = null

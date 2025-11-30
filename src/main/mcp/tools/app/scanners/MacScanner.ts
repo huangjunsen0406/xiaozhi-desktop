@@ -7,9 +7,9 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { createLogger } from '../../../../utils/logger'
+import { getLogger } from '../../../../utils/logger'
 
-const logger = createLogger('MacScanner')
+const logger = getLogger('MacScanner')
 
 export class MacScanner {
   /**

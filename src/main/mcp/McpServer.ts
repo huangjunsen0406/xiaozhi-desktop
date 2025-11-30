@@ -6,11 +6,11 @@ import type {
   McpToolResult,
   ToolCallback,
 } from './types'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { SystemToolsManager } from './tools/SystemToolsManager'
 import { PropertyList, PropertyType } from './types'
 
-const logger = createLogger('MCP')
+const logger = getLogger('MCP')
 
 /**
  * MCP Server 实现

@@ -3,9 +3,9 @@ import path from 'node:path'
 import { app, dialog, ipcMain, webContents } from 'electron'
 import fs from 'fs-extra'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('EmotionIpc')
+const logger = getLogger('EmotionIpc')
 
 const EMOTIONS_DIR = path.join(app.getPath('userData'), 'emotions')
 const CUSTOM_DIR = path.join(EMOTIONS_DIR, 'custom')

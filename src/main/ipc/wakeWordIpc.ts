@@ -5,10 +5,10 @@ import process from 'node:process'
 import { ipcMain } from 'electron'
 import { DatabaseManager } from '../services/database'
 import { BpeConverter } from '../utils/BpeConverter'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { PinyinConverter } from '../utils/PinyinConverter'
 
-const logger = createLogger('WakeWordIpc')
+const logger = getLogger('WakeWordIpc')
 
 /**
  * 注册唤醒词相关的 IPC 通道
@@ -73,7 +73,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
       if (updates.keyword !== undefined && updates.keyword.trim() !== '') {
         const keyword = updates.keyword.trim()
 
-        // 保存到对应语言的字段
+        // 保存到对应语言的字段（中英文分别保存，切换时不丢失）
         if (currentLanguage === 'zh') {
           dbUpdates.keyword_zh = keyword
         }

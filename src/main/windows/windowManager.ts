@@ -1,8 +1,8 @@
 import type { BrowserWindow } from 'electron'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
-const logger = createLogger('WindowManager')
+const logger = getLogger('WindowManager')
 
 // 窗口引用统一管理
 const windowRefs = {

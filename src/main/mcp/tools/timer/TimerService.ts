@@ -10,9 +10,9 @@ import type {
   StartCountdownResult,
   TimerInfo,
 } from './types'
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
-const logger = createLogger('TimerService')
+const logger = getLogger('TimerService')
 
 /**
  * 单个倒计时任务

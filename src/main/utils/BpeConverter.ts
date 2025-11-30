@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { createLogger } from './logger'
+import { getLogger } from './logger'
 
-const logger = createLogger('BpeConverter')
+const logger = getLogger('BpeConverter')
 
 /**
  * BPE 转换工具类

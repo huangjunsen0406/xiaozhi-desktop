@@ -32,8 +32,11 @@ export class Logger {
       Logger.globalTransports.push(new ConsoleTransport(config.minLevel))
     }
 
-    // 添加文件传输
+    // 添加文件传输（需要 logDir）
     if (config.enableFile) {
+      if (!config.logDir) {
+        throw new Error('logDir is required when enableFile is true')
+      }
       Logger.globalTransports.push(
         new FileTransport(config.minLevel, {
           logDir: config.logDir,

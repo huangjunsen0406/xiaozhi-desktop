@@ -2,12 +2,12 @@ import type { Application } from '../services/Application'
 import path from 'node:path'
 import process from 'node:process'
 import { AbortReason } from '../protocols/Protocol'
+import { getLogger } from '../utils/logger'
 import { WakeWordDetector } from '../wake-word/WakeWordDetector'
+
 import { Plugin } from './Plugin'
 
-import { createLogger } from '../utils/logger'
-
-const logger = createLogger('WakeWordPlugin')
+const logger = getLogger('WakeWordPlugin')
 
 /**
  * 唤醒词插件

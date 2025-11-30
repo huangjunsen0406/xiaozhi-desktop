@@ -1,8 +1,8 @@
-import { createLogger } from '../../utils/logger'
+import { getLogger } from '../../utils/logger'
 
 import { Thing } from '../Thing'
 
-const logger = createLogger('Lamp')
+const logger = getLogger('Lamp')
 
 /**
  * 灯设备

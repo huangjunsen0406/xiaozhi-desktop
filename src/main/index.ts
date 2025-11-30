@@ -8,11 +8,11 @@ import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
-import { createLogger, initLogger, shutdownLogger } from './utils/logger'
+import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildDisplayModeMenu } from './utils/menuBuilder'
 import { ensureBackgroundAudioWindow, ensureMainWindow, onDisplayModeChange } from './windows/windowManager'
 
-const logger = createLogger('Index')
+const logger = getLogger('Index')
 
 app.commandLine.appendSwitch(
   'enable-features',

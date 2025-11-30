@@ -8,6 +8,7 @@ import type {
   DbDeviceInfo,
   DbNetworkConfig,
   DbSessionStats,
+  DbShortcutConfig,
   DbWakeWordConfig,
 } from '../types/database'
 import { existsSync, mkdirSync } from 'node:fs'
@@ -15,13 +16,12 @@ import { join } from 'node:path'
 import process from 'node:process'
 import Database from 'better-sqlite3'
 import { app } from 'electron'
-import { createLogger } from '../utils/logger'
-
-const logger = createLogger('Database')
+import { getLogger } from '../utils/logger'
 
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null
   private db: Database.Database
+  private logger = getLogger('Database')  // 移到类内部
 
   private constructor() {
     let dbDir: string
@@ -37,7 +37,7 @@ export class DatabaseManager {
     }
 
     const dbPath = join(dbDir, 'xiaozhi.db')
-    logger.info(`数据库路径: ${dbPath}`)
+    this.logger.info(`数据库路径: ${dbPath}`)
 
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
@@ -112,7 +112,8 @@ export class DatabaseManager {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         enabled INTEGER DEFAULT 1,
         language TEXT DEFAULT 'zh',
-        keywords_list TEXT DEFAULT '你好小智',
+        keyword_zh TEXT DEFAULT '你好小智',
+        keyword_en TEXT DEFAULT '',
         threshold REAL DEFAULT 0.2,
         score REAL DEFAULT 1.8,
         cooldown_ms INTEGER DEFAULT 1500,
@@ -177,7 +178,125 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_message_at ON chat_sessions(last_message_at)
     `)
 
-    logger.info('数据库表初始化完成')
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS shortcuts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        accelerator TEXT,
+        enabled INTEGER DEFAULT 1,
+        is_global INTEGER DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+
+    // 数据库迁移：从 keywords_list 迁移到 keyword_zh/keyword_en
+    this.migrateWakeWordConfig()
+
+    this.logger.info('数据库表初始化完成')
+  }
+
+  /**
+   * 迁移唤醒词配置：keywords_list -> keyword_zh/keyword_en
+   */
+  private migrateWakeWordConfig(): void {
+    try {
+      // 检查是否存在旧字段 keywords_list
+      const tableInfo = this.db.prepare('PRAGMA table_info(wake_word_config)').all() as Array<{
+        cid: number
+        name: string
+        type: string
+        notnull: number
+        dflt_value: string | null
+        pk: number
+      }>
+
+      const hasKeywordsList = tableInfo.some(col => col.name === 'keywords_list')
+      const hasKeywordZh = tableInfo.some(col => col.name === 'keyword_zh')
+      const hasKeywordEn = tableInfo.some(col => col.name === 'keyword_en')
+
+      // 如果已经是新结构，不需要迁移
+      if (hasKeywordZh && hasKeywordEn && !hasKeywordsList) {
+        return
+      }
+
+      // 如果存在旧字段，执行迁移
+      if (hasKeywordsList) {
+        this.logger.info('检测到旧的 keywords_list 字段，开始迁移...')
+
+        // 读取现有配置
+        const config = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as {
+          id: number
+          enabled: number
+          language: string
+          keywords_list: string
+          threshold: number
+          score: number
+          cooldown_ms: number
+        } | undefined
+
+        // 创建新表
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS wake_word_config_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            enabled INTEGER DEFAULT 1,
+            language TEXT DEFAULT 'zh',
+            keyword_zh TEXT DEFAULT '你好小智',
+            keyword_en TEXT DEFAULT '',
+            threshold REAL DEFAULT 0.2,
+            score REAL DEFAULT 1.8,
+            cooldown_ms INTEGER DEFAULT 1500,
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+          )
+        `)
+
+        // 如果有旧数据，迁移到新表
+        if (config) {
+          const keywordZh = config.language === 'zh' ? config.keywords_list : '你好小智'
+          const keywordEn = config.language === 'en' ? config.keywords_list : ''
+
+          this.db.prepare(`
+            INSERT INTO wake_word_config_new (enabled, language, keyword_zh, keyword_en, threshold, score, cooldown_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            config.enabled,
+            config.language,
+            keywordZh,
+            keywordEn,
+            config.threshold,
+            config.score,
+            config.cooldown_ms,
+          )
+
+          this.logger.info(`已迁移唤醒词配置: language=${config.language}, keyword=${config.keywords_list}`)
+        }
+
+        // 删除旧表，重命名新表
+        this.db.exec('DROP TABLE wake_word_config')
+        this.db.exec('ALTER TABLE wake_word_config_new RENAME TO wake_word_config')
+
+        this.logger.info('唤醒词配置迁移完成')
+      }
+      // 如果缺少新字段，添加它们
+      else if (!hasKeywordZh || !hasKeywordEn) {
+        this.logger.info('添加缺失的唤醒词字段...')
+
+        if (!hasKeywordZh) {
+          this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_zh TEXT DEFAULT \'你好小智\'')
+        }
+        if (!hasKeywordEn) {
+          this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_en TEXT DEFAULT \'\'')
+        }
+
+        this.logger.info('唤醒词字段添加完成')
+      }
+    }
+    catch (error) {
+      this.logger.error('迁移唤醒词配置失败:', error)
+    }
   }
 
   getOrCreateDeviceInfo(data: {
@@ -416,12 +535,11 @@ export class DatabaseManager {
 
     const result = this.db.prepare(`
       INSERT INTO wake_word_config (
-        enabled, language, keywords_list,
-        keyword_zh, keyword_en,
+        enabled, language, keyword_zh, keyword_en,
         threshold, score, cooldown_ms
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(1, 'zh', '你好小智', '你好小智', 'MOSS', 0.2, 1.8, 1500)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(1, 'zh', '你好小智', '', 0.2, 1.8, 1500)
 
     return this.db.prepare('SELECT * FROM wake_word_config WHERE id = ?').get(result.lastInsertRowid) as DbWakeWordConfig
   }
@@ -433,7 +551,6 @@ export class DatabaseManager {
   updateWakeWordConfig(updates: {
     enabled?: boolean
     language?: string
-    keyword?: string
     keyword_zh?: string
     keyword_en?: string
     threshold?: number
@@ -481,16 +598,10 @@ export class DatabaseManager {
     const config = this.getOrCreateWakeWordConfig()
     const language = config.language || 'zh'
 
-    let keyword: string
-    if (language === 'zh') {
-      keyword = config.keyword_zh || '小智'
-    }
-    else if (language === 'en') {
-      keyword = config.keyword_en || 'HELLO'
-    }
-    else {
-      keyword = config.keyword || '小智'
-    }
+    // 根据当前语言返回对应的唤醒词
+    const keyword = language === 'zh'
+      ? (config.keyword_zh || '你好小智')
+      : (config.keyword_en || '')
 
     return {
       enabled: Boolean(config.enabled),
@@ -728,6 +839,73 @@ export class DatabaseManager {
   clearChatMessages(sessionId: string): void {
     this.db.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(sessionId)
     this.updateChatSessionStats(sessionId)
+  }
+
+  /**
+   * 插入默认快捷键
+   */
+  insertDefaultShortcuts(): void {
+    const defaults = [
+      { action: 'settings.toggle', name: '打开设置', category: 'window', accelerator: 'CommandOrControl+,' },
+      { action: 'window.main', name: '标准窗口', category: 'window', accelerator: 'CommandOrControl+1' },
+      { action: 'window.mini', name: '迷你悬浮球', category: 'window', accelerator: 'CommandOrControl+2' },
+      { action: 'window.chat', name: '聊天视图', category: 'window', accelerator: 'CommandOrControl+3' },
+      { action: 'window.live2d', name: 'Live2D 桌宠', category: 'window', accelerator: 'CommandOrControl+4' },
+      { action: 'conversation.manual', name: '手动监听', category: 'conversation', accelerator: 'CommandOrControl+M' },
+      { action: 'conversation.auto', name: '自动对话', category: 'conversation', accelerator: 'CommandOrControl+Shift+M' },
+      { action: 'conversation.interrupt', name: '打断对话', category: 'conversation', accelerator: 'CommandOrControl+.' },
+      { action: 'app.activate', name: '唤起应用', category: 'quick', accelerator: 'CommandOrControl+Shift+X' },
+    ]
+
+    const stmt = this.db.prepare(`
+      INSERT INTO shortcuts (action, name, category, accelerator, enabled, is_global, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, 1, ?, ?)
+    `)
+
+    const now = Math.floor(Date.now() / 1000)
+    for (const shortcut of defaults) {
+      stmt.run(shortcut.action, shortcut.name, shortcut.category, shortcut.accelerator, now, now)
+    }
+
+    this.logger.info('已插入默认快捷键')
+  }
+
+  /**
+   * 获取所有快捷键
+   */
+  getShortcuts(): DbShortcutConfig[] {
+    return this.db.prepare('SELECT * FROM shortcuts').all() as DbShortcutConfig[]
+  }
+
+  /**
+   * 获取单个快捷键
+   */
+  getShortcut(action: string): DbShortcutConfig | undefined {
+    return this.db.prepare('SELECT * FROM shortcuts WHERE action = ?').get(action) as DbShortcutConfig | undefined
+  }
+
+  /**
+   * 更新快捷键
+   */
+  updateShortcut(action: string, accelerator: string | null): void {
+    const now = Math.floor(Date.now() / 1000)
+    this.db.prepare('UPDATE shortcuts SET accelerator = ?, updated_at = ? WHERE action = ?')
+      .run(accelerator, now, action)
+  }
+
+  /**
+   * 删除所有快捷键
+   */
+  deleteAllShortcuts(): void {
+    this.db.prepare('DELETE FROM shortcuts').run()
+  }
+
+  /**
+   * 检查快捷键表是否为空
+   */
+  isShortcutsEmpty(): boolean {
+    const count = this.db.prepare('SELECT COUNT(*) as count FROM shortcuts').get() as { count: number }
+    return count.count === 0
   }
 
   close(): void {

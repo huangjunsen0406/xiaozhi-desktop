@@ -1,11 +1,11 @@
 import type { Buffer } from 'node:buffer'
 import type { Application } from '../services/Application'
 import { BrowserWindow } from 'electron'
+import { getLogger } from '../utils/logger'
+
 import { Plugin } from './Plugin'
 
-import { createLogger } from '../utils/logger'
-
-const logger = createLogger('Live2DPlugin')
+const logger = getLogger('Live2DPlugin')
 
 /**
  * Live2D 插件

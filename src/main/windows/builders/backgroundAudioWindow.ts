@@ -3,9 +3,9 @@ import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
 
-import { createLogger } from '../../utils/logger'
+import { getLogger } from '../../utils/logger'
 
-const logger = createLogger('BackgroundAudioWindow')
+const logger = getLogger('BackgroundAudioWindow')
 
 /**
  * 创建后台音频窗口

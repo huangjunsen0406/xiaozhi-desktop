@@ -5,9 +5,9 @@
 import type { Buffer } from 'node:buffer'
 import type { IotDescriptor, JsonMessage, McpPayload } from '../types/protocol'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('Protocol')
+const logger = getLogger('Protocol')
 
 export enum AbortReason {
   WAKE_WORD_DETECTED = 'wake_word_detected',

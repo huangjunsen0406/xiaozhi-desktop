@@ -1,77 +1,37 @@
 import type { ShortcutConfig } from '@shared/types'
 import type { Application } from './Application'
-import Database from 'better-sqlite3'
+import type { DatabaseManager } from './database'
 import { globalShortcut } from 'electron'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import {
   ensureMainWindow,
   toggleSettings,
   toggleToChat,
+  toggleToLive2d,
   toggleToMain,
   toggleToMini,
 } from '../windows/windowManager'
 
-const logger = createLogger('ShortcutManager')
-
 export class ShortcutManager {
-  private db: Database.Database
+  private db: DatabaseManager
   private application: Application
   private shortcuts: Map<string, ShortcutConfig> = new Map()
+  private logger = getLogger('ShortcutManager')
 
-  constructor(dbPath: string, application: Application) {
-    this.db = new Database(dbPath)
+  constructor(db: DatabaseManager, application: Application) {
+    this.db = db
     this.application = application
     this.initDatabase()
   }
 
   private initDatabase(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS shortcuts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        accelerator TEXT,
-        enabled INTEGER DEFAULT 1,
-        is_global INTEGER DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `)
-
-    const count = this.db.prepare('SELECT COUNT(*) as count FROM shortcuts').get() as { count: number }
-    if (count.count === 0) {
-      this.insertDefaultShortcuts()
+    if (this.db.isShortcutsEmpty()) {
+      this.db.insertDefaultShortcuts()
     }
-  }
-
-  private insertDefaultShortcuts(): void {
-    const defaults = [
-      { action: 'settings.toggle', name: '打开设置', category: 'window', accelerator: 'CommandOrControl+,' },
-      { action: 'window.main', name: '标准窗口', category: 'window', accelerator: 'CommandOrControl+1' },
-      { action: 'window.mini', name: '迷你悬浮球', category: 'window', accelerator: 'CommandOrControl+2' },
-      { action: 'window.chat', name: '聊天视图', category: 'window', accelerator: 'CommandOrControl+3' },
-      { action: 'conversation.manual', name: '手动监听', category: 'conversation', accelerator: 'CommandOrControl+M' },
-      { action: 'conversation.auto', name: '自动对话', category: 'conversation', accelerator: 'CommandOrControl+Shift+M' },
-      { action: 'conversation.interrupt', name: '打断对话', category: 'conversation', accelerator: 'CommandOrControl+.' },
-      { action: 'app.activate', name: '唤起应用', category: 'quick', accelerator: 'CommandOrControl+Shift+X' },
-    ]
-
-    const stmt = this.db.prepare(`
-      INSERT INTO shortcuts (action, name, category, accelerator, enabled, is_global, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 1, 1, ?, ?)
-    `)
-
-    const now = Math.floor(Date.now() / 1000)
-    for (const shortcut of defaults) {
-      stmt.run(shortcut.action, shortcut.name, shortcut.category, shortcut.accelerator, now, now)
-    }
-
-    logger.info('已插入默认快捷键')
   }
 
   async loadShortcuts(): Promise<ShortcutConfig[]> {
-    const shortcuts = this.db.prepare('SELECT * FROM shortcuts').all() as ShortcutConfig[]
+    const shortcuts = this.db.getShortcuts() as ShortcutConfig[]
     this.shortcuts.clear()
     shortcuts.forEach(s => this.shortcuts.set(s.action, s))
     return shortcuts
@@ -86,7 +46,7 @@ export class ShortcutManager {
       }
     }
 
-    logger.info('已注册快捷键数量:', this.shortcuts.size)
+    this.logger.info('已注册快捷键数量:', this.shortcuts.size)
   }
 
   registerShortcut(action: string, accelerator: string): void {
@@ -96,20 +56,20 @@ export class ShortcutManager {
       })
 
       if (success) {
-        logger.info(`注册成功: ${action} -> ${accelerator}`)
+        this.logger.info(`注册成功: ${action} -> ${accelerator}`)
       }
       else {
-        logger.warn(`注册失败（可能被占用）: ${accelerator}`)
+        this.logger.warn(`注册失败（可能被占用）: ${accelerator}`)
       }
     }
     catch (error) {
-      logger.error(`注册异常: ${accelerator}`, error)
+      this.logger.error(`注册异常: ${accelerator}`, error)
     }
   }
 
   unregisterShortcut(accelerator: string): void {
     globalShortcut.unregister(accelerator)
-    logger.info(`注销快捷键: ${accelerator}`)
+    this.logger.info(`注销快捷键: ${accelerator}`)
   }
 
   async updateShortcut(action: string, newAccelerator: string | null): Promise<void> {
@@ -119,9 +79,7 @@ export class ShortcutManager {
       this.unregisterShortcut(oldConfig.accelerator)
     }
 
-    const now = Math.floor(Date.now() / 1000)
-    this.db.prepare('UPDATE shortcuts SET accelerator = ?, updated_at = ? WHERE action = ?')
-      .run(newAccelerator, now, action)
+    this.db.updateShortcut(action, newAccelerator)
 
     if (newAccelerator) {
       this.registerShortcut(action, newAccelerator)
@@ -141,13 +99,13 @@ export class ShortcutManager {
 
   async resetToDefaults(): Promise<void> {
     globalShortcut.unregisterAll()
-    this.db.prepare('DELETE FROM shortcuts').run()
-    this.insertDefaultShortcuts()
+    this.db.deleteAllShortcuts()
+    this.db.insertDefaultShortcuts()
     await this.registerAll()
   }
 
   private executeAction(action: string): void {
-    logger.info(`执行操作: ${action}`)
+    this.logger.info(`执行操作: ${action}`)
 
     switch (action) {
       case 'settings.toggle':
@@ -164,6 +122,10 @@ export class ShortcutManager {
 
       case 'window.chat':
         toggleToChat()
+        break
+
+      case 'window.live2d':
+        toggleToLive2d()
         break
 
       case 'conversation.manual': {
@@ -200,12 +162,11 @@ export class ShortcutManager {
       }
 
       default:
-        logger.warn(`未知操作: ${action}`)
+        this.logger.warn(`未知操作: ${action}`)
     }
   }
 
   destroy(): void {
     globalShortcut.unregisterAll()
-    this.db.close()
   }
 }

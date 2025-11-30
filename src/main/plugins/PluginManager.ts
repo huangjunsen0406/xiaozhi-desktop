@@ -4,10 +4,10 @@ import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
 import type { Plugin } from './Plugin'
+import { getLogger } from '../utils/logger'
 import { PluginState } from './Plugin'
-import { createLogger } from '../utils/logger'
 
-const logger = createLogger('PluginManager')
+const logger = getLogger('PluginManager')
 
 /**
  * 插件执行结果

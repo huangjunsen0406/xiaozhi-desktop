@@ -7,9 +7,9 @@ import { exec } from 'node:child_process'
 import * as os from 'node:os'
 import { promisify } from 'node:util'
 
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
-const logger = createLogger('ProcessManager')
+const logger = getLogger('ProcessManager')
 
 const execAsync = promisify(exec)
 

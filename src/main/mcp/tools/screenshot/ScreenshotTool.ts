@@ -6,9 +6,9 @@
 import { Buffer } from 'node:buffer'
 import { Monitor } from 'node-screenshots'
 
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
-const logger = createLogger('ScreenshotTool')
+const logger = getLogger('ScreenshotTool')
 
 export interface ScreenshotOptions {
   /**

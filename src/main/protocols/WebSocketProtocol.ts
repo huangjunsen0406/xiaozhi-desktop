@@ -3,10 +3,10 @@ import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
 import { AudioConfig } from '../constants/DeviceState'
 import { getConfigManager } from '../services/configManagerDB'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
 
-const logger = createLogger('WebSocket')
+const logger = getLogger('WebSocket')
 
 /**
  * WebSocket 协议实现

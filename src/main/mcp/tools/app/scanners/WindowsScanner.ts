@@ -7,9 +7,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 
-import { createLogger } from '../../../../utils/logger'
+import { getLogger } from '../../../../utils/logger'
 
-const logger = createLogger('WindowsScanner')
+const logger = getLogger('WindowsScanner')
 
 export class WindowsScanner {
   /**

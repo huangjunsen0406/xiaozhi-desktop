@@ -4,9 +4,10 @@ import type { PropertyList, PropertyType } from '../types'
 import { Buffer } from 'node:buffer'
 import { getApplication } from '../../services/Application'
 import { DatabaseManager } from '../../services/database'
-import { createLogger } from '../../utils/logger'
+import { getLogger } from '../../utils/logger'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
-import { McpServer } from '../McpServer'
+// 移除 McpServer 的静态导入以避免循环依赖
+// import { McpServer } from '../McpServer'
 import { AppLauncher } from './app/AppLauncher'
 import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
@@ -14,7 +15,7 @@ import { MusicToolsManager } from './music'
 import { ScreenshotTool } from './screenshot'
 import { TimerService } from './timer'
 
-const logger = createLogger('SystemTools')
+const logger = getLogger('SystemTools')
 /**
  * 系统工具管理器
  * 负责注册系统相关的 MCP 工具（音量控制、应用管理等）
@@ -736,7 +737,8 @@ Examples:
       const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(result.base64, 'screenshot')
 
-      // 从 MCP Server 获取 vision 配置
+      // 从 MCP Server 获取 vision 配置（动态导入避免循环依赖）
+      const { McpServer } = await import('../McpServer')
       const mcpServer = McpServer.getInstance()
       const visionConfig = mcpServer.getVisionConfig()
 
@@ -1082,7 +1084,8 @@ Examples:
 
       logger.info(`设置主题为: ${theme}`)
 
-      // 通过 McpServer 回调广播主题更改
+      // 通过 McpServer 回调广播主题更改（动态导入避免循环依赖）
+      const { McpServer } = await import('../McpServer')
       const mcpServer = McpServer.getInstance()
       mcpServer.broadcastTheme(theme as 'light' | 'dark' | 'auto')
 

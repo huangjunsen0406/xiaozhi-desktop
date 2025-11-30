@@ -1,9 +1,9 @@
 import type { MqttInfo } from '../services/configManagerDB'
 import { ipcMain } from 'electron'
 import { getConfigManager } from '../services/configManagerDB'
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('ConfigIpc')
+const logger = getLogger('ConfigIpc')
 
 /**
  * 注册配置相关的 IPC 通道

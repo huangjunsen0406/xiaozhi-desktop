@@ -9,9 +9,9 @@ import { BrowserWindow, ipcMain } from 'electron'
 import sharp from 'sharp'
 import { BaseCamera } from './BaseCamera'
 
-import { createLogger } from '../../../utils/logger'
+import { getLogger } from '../../../utils/logger'
 
-const logger = createLogger('WebCamera')
+const logger = getLogger('WebCamera')
 
 export class WebCamera extends BaseCamera {
   private static instance: WebCamera | null = null

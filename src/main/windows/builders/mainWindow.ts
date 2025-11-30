@@ -23,7 +23,7 @@ export function buildMainWindow(): BrowserWindow {
     ...(process.platform === 'win32' ? { icon: winIcon as unknown as string } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: true,
+      sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,

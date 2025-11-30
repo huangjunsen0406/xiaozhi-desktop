@@ -5,9 +5,9 @@ import type { MusicStatus } from '../mcp/tools/music/types'
 import { ipcMain } from 'electron'
 import { MusicPlayer } from '../mcp/tools/music'
 
-import { createLogger } from '../utils/logger'
+import { getLogger } from '../utils/logger'
 
-const logger = createLogger('MusicIpc')
+const logger = getLogger('MusicIpc')
 
 /**
  * 注册音乐相关的 IPC 处理器
