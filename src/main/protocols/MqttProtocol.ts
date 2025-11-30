@@ -11,7 +11,10 @@ import dgram from 'node:dgram'
 import * as mqtt from 'mqtt'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { getConfigManager } from '../services/configManagerDB'
+import { createLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
+
+const logger = createLogger('MQTT')
 
 interface UdpConfig {
   server: string
@@ -55,7 +58,7 @@ export class MqttProtocol extends Protocol {
 
   constructor() {
     super()
-    console.log('[MqttProtocol] 初始化')
+    logger.info('初始化')
   }
 
   /**
@@ -96,7 +99,7 @@ export class MqttProtocol extends Protocol {
     const mqttInfo = configManager.getMqttInfo()
 
     if (!mqttInfo) {
-      console.error('[MqttProtocol] MQTT 配置未设置')
+      logger.error('MQTT 配置未设置')
       return false
     }
 
@@ -107,7 +110,7 @@ export class MqttProtocol extends Protocol {
     this.publishTopic = mqttInfo.publish_topic || ''
     this.subscribeTopic = mqttInfo.subscribe_topic === 'null' ? null : mqttInfo.subscribe_topic
 
-    console.log('[MqttProtocol] MQTT 配置:', {
+    logger.info('MQTT 配置:', {
       endpoint: this.endpoint,
       client_id: this.clientId,
       publish_topic: this.publishTopic,
@@ -122,7 +125,7 @@ export class MqttProtocol extends Protocol {
    */
   async connect(): Promise<boolean> {
     if (this.isClosing) {
-      console.warn('[MqttProtocol] 连接正在关闭中，取消新的连接尝试')
+      logger.warn('连接正在关闭中，取消新的连接尝试')
       return false
     }
 
@@ -136,7 +139,7 @@ export class MqttProtocol extends Protocol {
       // 验证配置
       if (!this.endpoint || !this.username || !this.password || !this.publishTopic) {
         const error = 'MQTT 配置不完整'
-        console.error(`[MqttProtocol] ${error}`)
+        logger.error(`${error}`)
         this.onNetworkErrorCallback?.(error)
         return false
       }
@@ -149,7 +152,7 @@ export class MqttProtocol extends Protocol {
 
       // 解析 endpoint
       const { host, port, useTls } = this.parseEndpoint(this.endpoint)
-      console.log(`[MqttProtocol] 解析 endpoint: ${this.endpoint} -> 主机: ${host}, 端口: ${port}, TLS: ${useTls}`)
+      logger.info(`解析 endpoint: ${this.endpoint} -> 主机: ${host}, 端口: ${port}, TLS: ${useTls}`)
 
       // 创建 MQTT 客户端
       const connectUrl = useTls ? `mqtts://${host}:${port}` : `mqtt://${host}:${port}`
@@ -174,7 +177,7 @@ export class MqttProtocol extends Protocol {
       // 订阅主题
       if (this.subscribeTopic) {
         await this.mqttClient.subscribeAsync(this.subscribeTopic, { qos: 1 })
-        console.log(`[MqttProtocol] 已订阅主题: ${this.subscribeTopic}`)
+        logger.info(`已订阅主题: ${this.subscribeTopic}`)
       }
 
       // 启动连接监控
@@ -184,7 +187,7 @@ export class MqttProtocol extends Protocol {
       const helloMessage = this.createHelloMessage()
       const sent = await this.sendText(JSON.stringify(helloMessage))
       if (!sent) {
-        console.error('[MqttProtocol] 发送 hello 消息失败')
+        logger.error('发送 hello 消息失败')
         return false
       }
 
@@ -193,7 +196,7 @@ export class MqttProtocol extends Protocol {
         await this.waitForServerHello()
       }
       catch (error) {
-        console.error('[MqttProtocol] 等待服务器 hello 超时:', error)
+        logger.error('等待服务器 hello 超时:', error)
         this.onNetworkErrorCallback?.('等待服务器响应超时')
         return false
       }
@@ -208,13 +211,13 @@ export class MqttProtocol extends Protocol {
         return true
       }
       catch (error) {
-        console.error('[MqttProtocol] 创建 UDP socket 失败:', error)
+        logger.error('创建 UDP socket 失败:', error)
         this.onNetworkErrorCallback?.(`创建 UDP 连接失败: ${error}`)
         return false
       }
     }
     catch (error) {
-      console.error('[MqttProtocol] 连接失败:', error)
+      logger.error('连接失败:', error)
       this.onNetworkErrorCallback?.(`连接 MQTT 服务器失败: ${error}`)
       return false
     }
@@ -225,7 +228,7 @@ export class MqttProtocol extends Protocol {
       return
 
     this.mqttClient.on('connect', () => {
-      console.log('[MqttProtocol] MQTT 已连接')
+      logger.info('MQTT 已连接')
       this.lastActivityTime = Date.now()
     })
 
@@ -235,17 +238,17 @@ export class MqttProtocol extends Protocol {
     })
 
     this.mqttClient.on('disconnect', () => {
-      console.log('[MqttProtocol] MQTT 连接断开')
+      logger.info('MQTT 连接断开')
       this.handleDisconnect()
     })
 
     this.mqttClient.on('offline', () => {
-      console.warn('[MqttProtocol] MQTT 离线')
+      logger.warn('MQTT 离线')
       this.handleDisconnect()
     })
 
     this.mqttClient.on('error', (error) => {
-      console.error('[MqttProtocol] MQTT 错误:', error)
+      logger.error('MQTT 错误:', error)
     })
   }
 
@@ -315,7 +318,7 @@ export class MqttProtocol extends Protocol {
         const sessionId = (data as any).session_id
         if (!sessionId || sessionId === this.sessionId) {
           this.handleGoodbye().catch((error) => {
-            console.error('[MqttProtocol] 处理 goodbye 失败:', error)
+            logger.error('处理 goodbye 失败:', error)
           })
         }
         return
@@ -329,16 +332,16 @@ export class MqttProtocol extends Protocol {
       this.onIncomingJsonCallback?.(data)
     }
     catch (error) {
-      console.error('[MqttProtocol] 解析 MQTT 消息失败:', error, payload)
+      logger.error('解析 MQTT 消息失败:', error, payload)
     }
   }
 
   private parseServerHello(data: any): void {
-    console.log('[MqttProtocol] 收到服务器 hello 响应', data)
+    logger.info('收到服务器 hello 响应', data)
 
     const transport = data.transport
     if (transport !== 'udp') {
-      console.error(`[MqttProtocol] 不支持的传输方式: ${transport}`)
+      logger.error(`不支持的传输方式: ${transport}`)
       return
     }
 
@@ -346,7 +349,7 @@ export class MqttProtocol extends Protocol {
 
     const udp: UdpConfig = data.udp
     if (!udp) {
-      console.error('[MqttProtocol] UDP 配置缺失')
+      logger.error('UDP 配置缺失')
       return
     }
 
@@ -356,14 +359,14 @@ export class MqttProtocol extends Protocol {
     this.aesKey = Buffer.from(udp.key, 'hex')
     this.localSequence = 0
 
-    console.log(`[MqttProtocol] UDP 服务器: ${this.udpServer}:${this.udpPort}`)
+    logger.info(`UDP 服务器: ${this.udpServer}:${this.udpPort}`)
 
     this.serverHelloReceived = true
     this.serverHelloResolve?.()
 
     if (this.onAudioChannelOpenedCallback) {
       Promise.resolve(this.onAudioChannelOpenedCallback()).catch((error) => {
-        console.error('[MqttProtocol] 音频通道打开回调出错:', error)
+        logger.error('音频通道打开回调出错:', error)
       })
     }
   }
@@ -375,7 +378,7 @@ export class MqttProtocol extends Protocol {
           this.udpSocket.close()
         }
         catch (e) {
-          console.error('[MqttProtocol] 关闭旧 socket 失败:', e)
+          logger.error('关闭旧 socket 失败:', e)
         }
       }
 
@@ -383,12 +386,12 @@ export class MqttProtocol extends Protocol {
 
       this.udpSocket.on('message', (data: Buffer) => {
         this.handleUdpMessage(data).catch((error) => {
-          console.error('[MqttProtocol] 处理 UDP 消息失败:', error)
+          logger.error('处理 UDP 消息失败:', error)
         })
       })
 
       this.udpSocket.on('error', (error) => {
-        console.error('[MqttProtocol] UDP socket 错误:', error)
+        logger.error('UDP socket 错误:', error)
         // 不要在 error 时 reject，因为可能是在运行中发生的
         if (!this.connected) {
           reject(error)
@@ -398,8 +401,8 @@ export class MqttProtocol extends Protocol {
       this.udpSocket.on('listening', () => {
         try {
           const address = this.udpSocket!.address()
-          console.log(`[MqttProtocol] 🎧 UDP socket 已启动 (隐式绑定)`)
-          console.log(`[MqttProtocol] 📍 本地地址: ${address.address}:${address.port}`)
+          logger.info(`🎧 UDP socket 已启动 (隐式绑定)`)
+          logger.info(`📍 本地地址: ${address.address}:${address.port}`)
         }
         catch {
           // 忽略错误
@@ -411,11 +414,11 @@ export class MqttProtocol extends Protocol {
       const dummyPacket = Buffer.from([0])
       this.udpSocket.send(dummyPacket, this.udpPort, this.udpServer, (err) => {
         if (err) {
-          console.error('[MqttProtocol] 发送打洞包失败:', err)
+          logger.error('发送打洞包失败:', err)
           reject(err)
         }
         else {
-          console.log(`[MqttProtocol] 🚀 已发送打洞包到 ${this.udpServer}:${this.udpPort}`)
+          logger.info(`🚀 已发送打洞包到 ${this.udpServer}:${this.udpPort}`)
           resolve()
         }
       })
@@ -438,7 +441,7 @@ export class MqttProtocol extends Protocol {
       }
     }
     catch (error) {
-      console.error('[MqttProtocol] 处理音频数据包错误:', error)
+      logger.error('处理音频数据包错误:', error)
     }
   }
 
@@ -473,7 +476,7 @@ export class MqttProtocol extends Protocol {
 
   async sendText(message: string): Promise<boolean> {
     if (!this.mqttClient || !this.mqttClient.connected) {
-      console.error('[MqttProtocol] MQTT 客户端未连接')
+      logger.error('MQTT 客户端未连接')
       return false
     }
 
@@ -482,7 +485,7 @@ export class MqttProtocol extends Protocol {
       return true
     }
     catch (error) {
-      console.error('[MqttProtocol] 发送 MQTT 消息失败:', error)
+      logger.error('发送 MQTT 消息失败:', error)
       this.onNetworkErrorCallback?.(`发送消息失败: ${error}`)
       return false
     }
@@ -490,7 +493,7 @@ export class MqttProtocol extends Protocol {
 
   async sendAudio(audioData: Buffer): Promise<boolean> {
     if (!this.udpSocket || !this.udpServer || !this.udpPort || !this.aesKey) {
-      console.error('[MqttProtocol] UDP 通道未初始化')
+      logger.error('UDP 通道未初始化')
       return false
     }
 
@@ -552,7 +555,7 @@ export class MqttProtocol extends Protocol {
       await this.handleGoodbye()
     }
     catch (error) {
-      console.error('[MqttProtocol] 关闭音频通道时出错:', error)
+      logger.error('关闭音频通道时出错:', error)
       if (this.onAudioChannelClosedCallback) {
         await this.onAudioChannelClosedCallback()
       }
@@ -592,7 +595,7 @@ export class MqttProtocol extends Protocol {
       }
     }
     catch (error) {
-      console.error('[MqttProtocol] 处理 goodbye 失败:', error)
+      logger.error('处理 goodbye 失败:', error)
     }
   }
 
@@ -611,7 +614,7 @@ export class MqttProtocol extends Protocol {
 
     if (!this.isClosing && this.autoReconnectEnabled && this.reconnectAttempts < this.maxReconnectAttempts) {
       this.attemptReconnect('MQTT 断开').catch((error) => {
-        console.error('[MqttProtocol] 重连失败:', error)
+        logger.error('重连失败:', error)
       })
     }
     else {
@@ -636,7 +639,7 @@ export class MqttProtocol extends Protocol {
 
     this.connectionMonitorTimer = setInterval(() => {
       if (!this.mqttClient?.connected) {
-        console.warn('[MqttProtocol] 检测到 MQTT 连接已断开')
+        logger.warn('检测到 MQTT 连接已断开')
         this.handleConnectionLoss('MQTT 连接检测失败')
         return
       }
@@ -644,7 +647,7 @@ export class MqttProtocol extends Protocol {
       if (this.lastActivityTime) {
         const elapsed = Date.now() - this.lastActivityTime
         if (elapsed > this.connectionTimeout * 1000) {
-          console.warn(`[MqttProtocol] 连接超时，最后活动: ${elapsed / 1000}秒前`)
+          logger.warn(`连接超时，最后活动: ${elapsed / 1000}秒前`)
           this.handleConnectionLoss('连接超时')
         }
       }
@@ -652,7 +655,7 @@ export class MqttProtocol extends Protocol {
   }
 
   private async handleConnectionLoss(reason: string): Promise<void> {
-    console.warn(`[MqttProtocol] 连接丢失: ${reason}`)
+    logger.warn(`连接丢失: ${reason}`)
 
     const wasConnected = this.connected
     this.connected = false
@@ -688,26 +691,26 @@ export class MqttProtocol extends Protocol {
       this.onReconnectingCallback(this.reconnectAttempts, this.maxReconnectAttempts)
     }
 
-    console.log(`[MqttProtocol] 尝试自动重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+    logger.info(`尝试自动重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
 
     const delay = Math.min(this.reconnectAttempts * 2000, 30000)
     await new Promise(resolve => setTimeout(resolve, delay))
 
     if (this.isClosing) {
-      console.log('[MqttProtocol] 重连被取消')
+      logger.info('重连被取消')
       return
     }
 
     try {
       const success = await this.connect()
       if (success) {
-        console.log('[MqttProtocol] 自动重连成功')
+        logger.info('自动重连成功')
         if (this.onConnectionStateChangedCallback) {
           this.onConnectionStateChangedCallback(true, '重连成功')
         }
       }
       else {
-        console.warn(`[MqttProtocol] 自动重连失败 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+        logger.warn(`自动重连失败 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
           if (this.onNetworkErrorCallback) {
             this.onNetworkErrorCallback(`重连失败，已达到最大重连次数: ${originalReason}`)
@@ -716,7 +719,7 @@ export class MqttProtocol extends Protocol {
       }
     }
     catch (error) {
-      console.error('[MqttProtocol] 重连过程中出错:', error)
+      logger.error('重连过程中出错:', error)
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         if (this.onNetworkErrorCallback) {
           this.onNetworkErrorCallback(`重连异常: ${error}`)
@@ -743,7 +746,7 @@ export class MqttProtocol extends Protocol {
         await this.mqttClient.endAsync(true)
       }
       catch (error) {
-        console.error('[MqttProtocol] 断开 MQTT 连接失败:', error)
+        logger.error('断开 MQTT 连接失败:', error)
       }
     }
 
@@ -754,11 +757,11 @@ export class MqttProtocol extends Protocol {
     this.autoReconnectEnabled = enabled
     if (enabled) {
       this.maxReconnectAttempts = maxAttempts
-      console.log(`[MqttProtocol] 启用自动重连，最大尝试次数: ${maxAttempts}`)
+      logger.info(`启用自动重连，最大尝试次数: ${maxAttempts}`)
     }
     else {
       this.maxReconnectAttempts = 0
-      console.log('[MqttProtocol] 禁用自动重连')
+      logger.info('禁用自动重连')
     }
   }
 

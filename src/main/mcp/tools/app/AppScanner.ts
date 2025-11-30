@@ -4,9 +4,13 @@ import type { AppInfo, Platform } from './types'
  * 统一接口，根据平台调用对应的扫描器
  */
 import * as os from 'node:os'
+import { createLogger } from '../../../utils/logger'
 import { LinuxScanner } from './scanners/LinuxScanner'
 import { MacScanner } from './scanners/MacScanner'
+
 import { WindowsScanner } from './scanners/WindowsScanner'
+
+const logger = createLogger('AppScanner')
 
 export class AppScanner {
   private static cachedApps: AppInfo[] | null = null
@@ -23,11 +27,11 @@ export class AppScanner {
 
     // 检查缓存
     if (!forceRefresh && this.cachedApps && (now - this.lastScanTime < this.CACHE_DURATION)) {
-      console.log('[AppScanner] 使用缓存的应用列表')
+      logger.info('使用缓存的应用列表')
       return this.cachedApps
     }
 
-    console.log('[AppScanner] 开始扫描已安装的应用...')
+    logger.info('开始扫描已安装的应用...')
 
     try {
       const platform = os.platform() as Platform
@@ -43,7 +47,7 @@ export class AppScanner {
         apps = await LinuxScanner.scanInstalled()
       }
       else {
-        console.error(`[AppScanner] 不支持的平台: ${platform}`)
+        logger.error(`不支持的平台: ${platform}`)
         return []
       }
 
@@ -54,11 +58,11 @@ export class AppScanner {
       this.cachedApps = apps
       this.lastScanTime = now
 
-      console.log(`[AppScanner] 扫描完成，共 ${apps.length} 个应用`)
+      logger.info(`扫描完成，共 ${apps.length} 个应用`)
       return apps
     }
     catch (error) {
-      console.error('[AppScanner] 扫描应用失败:', error)
+      logger.error('扫描应用失败', error)
       return this.cachedApps || []
     }
   }
@@ -69,7 +73,7 @@ export class AppScanner {
   static clearCache(): void {
     this.cachedApps = null
     this.lastScanTime = 0
-    console.log('[AppScanner] 缓存已清除')
+    logger.info('缓存已清除')
   }
 
   /**

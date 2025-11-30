@@ -2,7 +2,10 @@ import type { AudioConfig } from '../types/audio'
 import { OpusCodec } from '../audio/OpusCodec'
 import { DatabaseManager } from '../services/database'
 import { SystemVolumeController } from '../utils/SystemVolumeController'
+import { createLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
+
+const logger = createLogger('AudioIpc')
 
 // Opus 编解码器实例
 let opusCodec: OpusCodec | null = null
@@ -18,7 +21,7 @@ const systemVolumeController = new SystemVolumeController()
  */
 export function initOpusCodec(): OpusCodec {
   if (!opusCodec) {
-    console.log('[Audio IPC] 创建 OpusCodec...')
+    logger.info('创建 OpusCodec...')
     opusCodec = new OpusCodec()
   }
   return opusCodec
@@ -28,7 +31,7 @@ export function initOpusCodec(): OpusCodec {
  * 注册音频相关的 IPC 通道
  */
 export function registerAudioIpc(): void {
-  console.log('[Audio IPC] 注册音频 IPC 通道...')
+  logger.info('注册音频 IPC 通道...')
 
   // 使用中间件注册处理器
   createIpcHandler({
@@ -85,7 +88,7 @@ export function registerAudioIpc(): void {
       }
 
       db.updateAudioConfig(dbUpdates)
-      console.log('[Audio IPC] 音频配置已保存到数据库:', dbUpdates)
+      logger.info('音频配置已保存到数据库:', dbUpdates)
       
       // 重新加载 AudioConfig
       const { AudioConfig: AudioConfigInstance } = await import('../constants/DeviceState')
@@ -133,7 +136,7 @@ export function registerAudioIpc(): void {
     handler: async (_event, ...args) => {
       const volume = args[0] as number
       await systemVolumeController.setVolume(volume)
-      console.log(`[Audio IPC] 系统音量已设置为: ${volume}%`)
+      logger.info(`系统音量已设置为: ${volume}%`)
       return success()
     },
   })
@@ -145,7 +148,7 @@ export function registerAudioIpc(): void {
     },
   })
 
-  console.log('[Audio IPC] 音频 IPC 通道已注册')
+  logger.info('音频 IPC 通道已注册')
 }
 
 /**
@@ -164,7 +167,7 @@ export function getAudioConfig(): Partial<AudioConfig> {
     return db.getFormattedAudioConfig()
   }
   catch (error) {
-    console.error('[Audio IPC] 获取音频配置失败:', error)
+    logger.error('获取音频配置失败:', error)
     // 返回默认配置（不包含音量）
     return {
       enableNoiseReduction: true,
@@ -200,6 +203,6 @@ export function setAudioConfig(config: Partial<AudioConfig>): void {
     db.updateAudioConfig(dbUpdates)
   }
   catch (error) {
-    console.error('[Audio IPC] 设置音频配置失败:', error)
+    logger.error('设置音频配置失败:', error)
   }
 }

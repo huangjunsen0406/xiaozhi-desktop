@@ -3,6 +3,10 @@ import type { JsonMessage } from '../types/protocol'
 import { ThingManager } from '../iot'
 import { Plugin } from './Plugin'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('IoTPlugin')
+
 /**
  * IoT 插件
  * 负责接收服务端的 IoT 消息并控制设备
@@ -28,17 +32,17 @@ export class IoTPlugin extends Plugin {
   async setup(app: Application): Promise<void> {
     await super.setup(app)
 
-    console.log('[IoTPlugin] 初始化...')
+    logger.info('初始化...')
 
     try {
       // 初始化设备管理器
       this.thingManager = ThingManager.getInstance()
       await this.thingManager.initialize()
 
-      console.log('[IoTPlugin] ✓ 初始化完成')
+      logger.info('✓ 初始化完成')
     }
     catch (error) {
-      console.error('[IoTPlugin] ✗ 初始化失败:', error)
+      logger.error('✗ 初始化失败', error)
       // 不抛出错误，允许应用继续运行
     }
   }
@@ -48,14 +52,14 @@ export class IoTPlugin extends Plugin {
    */
   async onProtocolConnected(): Promise<void> {
     if (!this.thingManager) {
-      console.warn('[IoTPlugin] ThingManager 未初始化')
+      logger.warn('ThingManager 未初始化')
       return
     }
 
     try {
       const protocol = this.app?.getProtocol()
       if (!protocol) {
-        console.warn('[IoTPlugin] Protocol 不可用')
+        logger.warn('Protocol 不可用')
         return
       }
 
@@ -68,10 +72,10 @@ export class IoTPlugin extends Plugin {
       // @ts-expect-error - states 是 ThingState[] 数组,但 sendIotStates 期望 Record 或 string
       await protocol.sendIotStates(states)
 
-      console.log('[IoTPlugin] ✓ 已发送设备描述符和状态')
+      logger.info('✓ 已发送设备描述符和状态')
     }
     catch (error) {
-      console.error('[IoTPlugin] 发送设备信息失败:', error)
+      logger.error('发送设备信息失败', error)
     }
   }
 
@@ -87,12 +91,12 @@ export class IoTPlugin extends Plugin {
 
       const commands = message.commands
       if (!commands || !Array.isArray(commands) || commands.length === 0) {
-        console.warn('[IoTPlugin] 消息中没有命令')
+        logger.warn('消息中没有命令')
         return
       }
 
       if (!this.thingManager) {
-        console.error('[IoTPlugin] ThingManager 未初始化')
+        logger.error('ThingManager 未初始化')
         return
       }
 
@@ -100,10 +104,10 @@ export class IoTPlugin extends Plugin {
       for (const command of commands) {
         try {
           const result = await this.thingManager.invoke(command)
-          console.log(`[IoTPlugin] 执行命令结果:`, result)
+          logger.info(`执行命令结果:`, result)
         }
         catch (error) {
-          console.error(`[IoTPlugin] 执行命令失败:`, error)
+          logger.error(`执行命令失败:`, error)
         }
       }
 
@@ -115,16 +119,16 @@ export class IoTPlugin extends Plugin {
           if (protocol) {
             // @ts-expect-error - states 是 ThingState[] 数组,但 sendIotStates 期望 Record 或 string
             await protocol.sendIotStates(states)
-            console.log('[IoTPlugin] ✓ 已发送设备状态更新')
+            logger.info('✓ 已发送设备状态更新')
           }
         }
       }
       catch (error) {
-        console.error('[IoTPlugin] 发送状态更新失败:', error)
+        logger.error('发送状态更新失败', error)
       }
     }
     catch (error) {
-      console.error('[IoTPlugin] 处理消息失败:', error)
+      logger.error('处理消息失败', error)
     }
   }
 
@@ -132,12 +136,12 @@ export class IoTPlugin extends Plugin {
    * 插件关闭
    */
   async shutdown(): Promise<void> {
-    console.log('[IoTPlugin] 正在关闭...')
+    logger.info('正在关闭...')
 
     this.thingManager = null
 
     await super.shutdown()
 
-    console.log('[IoTPlugin] ✓ 已关闭')
+    logger.info('✓ 已关闭')
   }
 }

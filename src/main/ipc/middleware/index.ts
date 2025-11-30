@@ -1,6 +1,9 @@
 import type { IpcResult } from '@shared/types'
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
+import { createLogger } from '../../utils/logger'
+
+const logger = createLogger('IpcMiddleware')
 
 /**
  * IPC 参数验证规则
@@ -177,7 +180,7 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
       if (schema) {
         const validationError = validateArgs(args, schema)
         if (validationError) {
-          console.warn(`${prefix} 参数校验失败: ${validationError}`)
+          logger.warn(`${prefix} 参数校验失败: ${validationError}`)
           return {
             success: false,
             error: validationError,
@@ -188,7 +191,7 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
 
       // 详细日志：输出请求参数
       if (verbose) {
-        console.log(`${prefix} 开始处理`, args)
+        logger.debug(`${prefix} 开始处理`, args)
       }
 
       // 执行处理函数
@@ -197,7 +200,7 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
       // 性能监控：记录处理时长
       const duration = Date.now() - startTime
       if (verbose || duration > 1000) {
-        console.log(`${prefix} 处理完成 (${duration}ms)`)
+        logger.info(`${prefix} 处理完成 (${duration}ms)`)
       }
 
       return result
@@ -205,7 +208,7 @@ export function createIpcHandler(config: IpcHandlerConfig): void {
     catch (error) {
       // 错误处理：捕获异常并返回标准错误响应
       const duration = Date.now() - startTime
-      console.error(`${prefix} 处理失败 (${duration}ms):`, error)
+      logger.error(`${prefix} 处理失败 (${duration}ms):`, error)
 
       return {
         success: false,

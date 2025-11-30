@@ -40,7 +40,7 @@ watch(
  * 组件挂载
  */
 onMounted(async () => {
-  console.log('[ChatView] 组件已挂载')
+  console.log('组件已挂载')
 
   // 加载会话列表
   await appStore.loadSessions()
@@ -49,19 +49,19 @@ onMounted(async () => {
   if (!appStore.currentSessionId) {
     if (appStore.sessions.length > 0) {
       // 如果没有当前会话但有会话列表，切换到第一个
-      console.log('[ChatView] 切换到第一个会话:', appStore.sessions[0].sessionId)
+      console.log('切换到第一个会话:', appStore.sessions[0].sessionId)
       await switchSession(appStore.sessions[0].sessionId)
     }
     else {
       // 如果没有任何会话，创建今天的会话
       const sessionId = await appStore.getTodaySession()
-      console.log('[ChatView] 创建今天的会话:', sessionId)
+      console.log('创建今天的会话:', sessionId)
       appStore.currentSessionId = sessionId
     }
   }
   else {
     // 如果已经有当前会话，直接使用全局共享的 messages，不重新加载
-    console.log('[ChatView] 使用当前会话:', appStore.currentSessionId, '消息数:', appStore.messages.length)
+    console.log('使用当前会话:', appStore.currentSessionId, '消息数:', appStore.messages.length)
   }
 
   // 滚动到底部
@@ -73,7 +73,7 @@ onMounted(async () => {
  * 组件卸载
  */
 onUnmounted(() => {
-  console.log('[ChatView] 组件卸载')
+  console.log('组件卸载')
 })
 
 /**
@@ -86,15 +86,15 @@ async function sendMessage() {
     return
 
   try {
-    console.log('[ChatView] 发送消息:', text)
+    console.log('发送消息:', text)
 
     // 互斥逻辑：停止任何正在运行的模式
     if (appStore.isAutoMode) {
-      console.log('[ChatView] 发送文本前停止自动模式')
+      console.log('发送文本前停止自动模式')
       await appStore.stopAutoConversation()
     }
     if (isLocalListening.value || appStore.isManualMode) {
-      console.log('[ChatView] 发送文本前停止手动模式')
+      console.log('发送文本前停止手动模式')
       isLocalListening.value = false
       await appStore.stopListeningManual()
     }
@@ -123,7 +123,7 @@ async function sendMessage() {
     await appStore.sendText(text)
   }
   catch (error) {
-    console.error('[ChatView] 发送消息失败:', error)
+    console.error('发送消息失败', error)
   }
 }
 
@@ -131,14 +131,14 @@ async function sendMessage() {
  * 切换会话
  */
 async function switchSession(sessionId: string) {
-  console.log('[ChatView] 请求切换会话:', sessionId)
+  console.log('请求切换会话:', sessionId)
   await appStore.switchSession(sessionId)
 
   // 滚动到底部
   await nextTick()
   scrollToBottom()
 
-  console.log('[ChatView] 会话已切换，当前会话ID:', appStore.currentSessionId, '消息数:', appStore.messages.length)
+  console.log('会话已切换，当前会话ID:', appStore.currentSessionId, '消息数:', appStore.messages.length)
 }
 
 /**
@@ -151,7 +151,7 @@ async function deleteSession(sessionId: string) {
   await nextTick()
   scrollToBottom()
 
-  console.log('[ChatView] 会话已删除')
+  console.log('会话已删除')
 }
 
 /**
@@ -179,7 +179,7 @@ async function handleMicrophoneClick() {
   try {
     // 如果自动模式正在运行，先停止
     if (appStore.isAutoMode) {
-      console.log('[ChatView] 检测到自动模式激活，先停止自动模式')
+      console.log('检测到自动模式激活，先停止自动模式')
       await appStore.stopAutoConversation()
       // 等待状态更新
       await new Promise(resolve => setTimeout(resolve, 100))
@@ -197,7 +197,7 @@ async function handleMicrophoneClick() {
     }
   }
   catch (error) {
-    console.error('[ChatView] 麦克风按钮点击处理失败:', error)
+    console.error('麦克风按钮点击处理失败', error)
     isLocalListening.value = false
   }
 }
@@ -210,7 +210,7 @@ async function handlePhoneClick() {
   try {
     // 如果手动模式正在运行，先停止
     if (isLocalListening.value || appStore.isManualMode) {
-      console.log('[ChatView] 检测到手动模式激活，先停止手动模式')
+      console.log('检测到手动模式激活，先停止手动模式')
       isLocalListening.value = false
       await appStore.stopListeningManual()
       // 等待状态更新
@@ -226,7 +226,7 @@ async function handlePhoneClick() {
     }
   }
   catch (error) {
-    console.error('[ChatView] 电话按钮点击处理失败:', error)
+    console.error('电话按钮点击处理失败', error)
   }
 }
 

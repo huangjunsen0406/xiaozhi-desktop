@@ -45,7 +45,7 @@ async function loadShortcuts() {
     shortcuts.value = await window.api.shortcutGetAll()
   }
   catch (error) {
-    console.error('[HotkeySettings] 加载失败:', error)
+    console.error('加载失败', error)
     message.error('加载快捷键配置失败')
   }
 }
@@ -64,7 +64,7 @@ async function updateShortcut(action: string, accelerator: string | null) {
     message.success('快捷键已更新')
   }
   catch (error) {
-    console.error('[HotkeySettings] 更新失败:', error)
+    console.error('更新失败', error)
     message.error(`更新快捷键失败: ${error instanceof Error ? error.message : '未知错误'}`)
   }
 }
@@ -87,7 +87,7 @@ async function resetToDefaults() {
     await loadShortcuts()
   }
   catch (error) {
-    console.error('[HotkeySettings] 重置失败:', error)
+    console.error('重置失败', error)
     message.error(`重置失败: ${error instanceof Error ? error.message : '未知错误'}`)
   }
 }

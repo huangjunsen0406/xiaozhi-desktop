@@ -3,6 +3,10 @@ import path from 'node:path'
 import { app, dialog, ipcMain, webContents } from 'electron'
 import fs from 'fs-extra'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('EmotionIpc')
+
 const EMOTIONS_DIR = path.join(app.getPath('userData'), 'emotions')
 const CUSTOM_DIR = path.join(EMOTIONS_DIR, 'custom')
 const MAPPING_FILE = path.join(EMOTIONS_DIR, 'mapping.json')
@@ -24,7 +28,7 @@ async function getMapping(): Promise<Record<string, string>> {
     }
   }
   catch (error) {
-    console.error('[EmotionIpc] 读取映射配置失败:', error)
+    logger.error('读取映射配置失败', error)
   }
   return {}
 }
@@ -47,7 +51,7 @@ let emotionBroadcastCallback: ((emotionType: string) => void) | null = null
  */
 export function setEmotionBroadcastCallback(callback: (emotionType: string) => void): void {
   emotionBroadcastCallback = callback
-  console.log('[EmotionIpc] 表情广播回调已设置')
+  logger.info('表情广播回调已设置')
 }
 
 /**
@@ -59,7 +63,7 @@ function broadcastEmotionChanged(emotionType: string): void {
   }
   else {
     // 降级方案：直接使用 webContents（兼容性）
-    console.warn('[EmotionIpc] 表情广播回调未设置，使用降级方案')
+    logger.warn('表情广播回调未设置，使用降级方案')
     const allWebContents = webContents.getAllWebContents()
     allWebContents.forEach((wc) => {
       if (!wc.isDestroyed()) {
@@ -67,7 +71,7 @@ function broadcastEmotionChanged(emotionType: string): void {
           wc.send('emotion:changed', emotionType)
         }
         catch (error) {
-          console.error(`[EmotionIpc] 广播表情变更失败:`, error)
+          logger.error('广播表情变更失败:', error)
         }
       }
     })
@@ -111,7 +115,7 @@ async function validateImageFile(filePath: string): Promise<{ valid: boolean, er
  */
 export function registerEmotionIpc(): void {
   // 初始化目录
-  ensureDirectories().catch(console.error)
+  ensureDirectories().catch(err => logger.error('初始化目录失败', err))
 
   /**
    * 打开文件选择器
@@ -133,7 +137,7 @@ export function registerEmotionIpc(): void {
     'emotion:upload-custom',
     async (_event: IpcMainInvokeEvent, emotionType: string, sourcePath: string) => {
       try {
-        console.log(`[EmotionIpc] 上传表情: ${emotionType}, 源文件: ${sourcePath}`)
+        logger.info(`上传表情: ${emotionType}, 源文件: ${sourcePath}`)
 
         // 确保目录存在
         await ensureDirectories()
@@ -141,7 +145,7 @@ export function registerEmotionIpc(): void {
         // 1. 验证文件
         const validation = await validateImageFile(sourcePath)
         if (!validation.valid) {
-          console.warn(`[EmotionIpc] 文件验证失败: ${validation.error}`)
+          logger.warn(`文件验证失败: ${validation.error}`)
           return { success: false, error: validation.error }
         }
 
@@ -152,13 +156,13 @@ export function registerEmotionIpc(): void {
 
         // 3. 复制文件
         await fs.copy(sourcePath, targetPath, { overwrite: true })
-        console.log(`[EmotionIpc] 文件已复制到: ${targetPath}`)
+        logger.info(`文件已复制到: ${targetPath}`)
 
         // 4. 更新映射
         const mapping = await getMapping()
         mapping[emotionType] = targetFileName
         await saveMapping(mapping)
-        console.log(`[EmotionIpc] 映射已更新`)
+        logger.info(`映射已更新`)
 
         // 5. 广播变更事件
         broadcastEmotionChanged(emotionType)
@@ -166,7 +170,7 @@ export function registerEmotionIpc(): void {
         return { success: true }
       }
       catch (error) {
-        console.error('[EmotionIpc] 上传失败:', error)
+        logger.error('上传失败', error)
         return { success: false, error: String(error) }
       }
     },
@@ -194,7 +198,7 @@ export function registerEmotionIpc(): void {
 
       // 检查文件是否存在
       if (!(await fs.pathExists(filePath))) {
-        console.warn(`[EmotionIpc] 自定义表情文件不存在: ${filePath}`)
+        logger.warn(`自定义表情文件不存在: ${filePath}`)
         return null
       }
 
@@ -207,7 +211,7 @@ export function registerEmotionIpc(): void {
       return `data:${mimeType};base64,${base64}`
     }
     catch (error) {
-      console.error('[EmotionIpc] 获取自定义路径失败:', error)
+      logger.error('获取自定义路径失败', error)
       return null
     }
   })
@@ -217,7 +221,7 @@ export function registerEmotionIpc(): void {
    */
   ipcMain.handle('emotion:reset', async (_event: IpcMainInvokeEvent, emotionType: string) => {
     try {
-      console.log(`[EmotionIpc] 重置表情: ${emotionType}`)
+      logger.info(`重置表情: ${emotionType}`)
 
       const mapping = await getMapping()
       const fileName = mapping[emotionType]
@@ -227,13 +231,13 @@ export function registerEmotionIpc(): void {
         const filePath = path.join(CUSTOM_DIR, fileName)
         if (await fs.pathExists(filePath)) {
           await fs.remove(filePath)
-          console.log(`[EmotionIpc] 已删除文件: ${filePath}`)
+          logger.info(`已删除文件: ${filePath}`)
         }
 
         // 更新映射
         delete mapping[emotionType]
         await saveMapping(mapping)
-        console.log(`[EmotionIpc] 映射已更新`)
+        logger.info(`映射已更新`)
 
         // 广播变更事件
         broadcastEmotionChanged(emotionType)
@@ -242,10 +246,10 @@ export function registerEmotionIpc(): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[EmotionIpc] 重置失败:', error)
+      logger.error('重置失败', error)
       return { success: false, error: String(error) }
     }
   })
 
-  console.log('[EmotionIpc] 表情 IPC 处理器已注册')
+  logger.info('表情 IPC 处理器已注册')
 }

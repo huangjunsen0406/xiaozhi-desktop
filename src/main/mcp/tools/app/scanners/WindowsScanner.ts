@@ -7,6 +7,10 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 
+import { createLogger } from '../../../../utils/logger'
+
+const logger = createLogger('WindowsScanner')
+
 export class WindowsScanner {
   /**
    * 扫描已安装的应用程序
@@ -55,11 +59,11 @@ export class WindowsScanner {
       const systemTools = this.getSystemTools()
       this.addUniqueApps(apps, systemTools, appNames)
 
-      console.log(`[WindowsScanner] 扫描完成，找到 ${apps.length} 个应用`)
+      logger.info(`扫描完成，找到 ${apps.length} 个应用`)
       return apps
     }
     catch (error) {
-      console.error('[WindowsScanner] 扫描应用失败:', error)
+      logger.error('扫描应用失败', error)
       return []
     }
   }
@@ -75,17 +79,17 @@ export class WindowsScanner {
 
     try {
       if (!fs.existsSync(directory)) {
-        console.warn(`[WindowsScanner] 目录不存在: ${directory}`)
+        logger.warn(`目录不存在: ${directory}`)
         return []
       }
 
       // 递归扫描 .lnk 文件
       await this.scanDirectoryRecursive(directory, apps, type)
 
-      console.log(`[WindowsScanner] ${directory}: 找到 ${apps.length} 个快捷方式`)
+      logger.info(`${directory}: 找到 ${apps.length} 个快捷方式`)
     }
     catch (error) {
-      console.error(`[WindowsScanner] 扫描开始菜单失败 (${directory}):`, error)
+      logger.error(`扫描开始菜单失败 (${directory}):`, error)
     }
 
     return apps
@@ -137,7 +141,7 @@ export class WindowsScanner {
       }
     }
     catch (error) {
-      console.error(`[WindowsScanner] 递归扫描失败 (${directory}):`, error)
+      logger.error(`递归扫描失败 (${directory}):`, error)
     }
   }
 
@@ -152,7 +156,7 @@ export class WindowsScanner {
 
     try {
       if (!fs.existsSync(directory)) {
-        console.warn(`[WindowsScanner] 目录不存在: ${directory}`)
+        logger.warn(`目录不存在: ${directory}`)
         return []
       }
 
@@ -186,10 +190,10 @@ export class WindowsScanner {
         }
       }
 
-      console.log(`[WindowsScanner] ${directory}: 找到 ${apps.length} 个应用`)
+      logger.info(`${directory}: 找到 ${apps.length} 个应用`)
     }
     catch (error) {
-      console.error(`[WindowsScanner] 扫描 Program Files 失败 (${directory}):`, error)
+      logger.error(`扫描 Program Files 失败 (${directory}):`, error)
     }
 
     return apps

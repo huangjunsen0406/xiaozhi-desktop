@@ -3,6 +3,7 @@ import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
+import { createLogger } from '../utils/logger'
 
 /**
  * 插件状态
@@ -75,6 +76,21 @@ export abstract class Plugin {
   protected app: Application | null = null
 
   /**
+   * Logger 实例（懒加载）
+   */
+  private _logger?: ReturnType<typeof createLogger>
+
+  /**
+   * 获取 logger 实例
+   */
+  protected get logger(): ReturnType<typeof createLogger> {
+    if (!this._logger) {
+      this._logger = createLogger(this.name)
+    }
+    return this._logger
+  }
+
+  /**
    * 获取插件状态
    */
   get state(): PluginState {
@@ -87,7 +103,7 @@ export abstract class Plugin {
   protected setState(state: PluginState): void {
     const oldState = this._state
     this._state = state
-    console.log(`[${this.name}] 状态变更: ${oldState} -> ${state}`)
+    this.logger.info(`状态变更: ${oldState} -> ${state}`)
   }
 
   /**
@@ -103,7 +119,7 @@ export abstract class Plugin {
   enable(): void {
     if (!this._enabled) {
       this._enabled = true
-      console.log(`[${this.name}] 已启用`)
+      this.logger.info('已启用')
     }
   }
 
@@ -113,7 +129,7 @@ export abstract class Plugin {
   disable(): void {
     if (this._enabled) {
       this._enabled = false
-      console.log(`[${this.name}] 已禁用`)
+      this.logger.info('已禁用')
     }
   }
 

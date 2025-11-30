@@ -75,7 +75,7 @@ async function loadConfig() {
     captureHeight.value = config.captureHeight
   }
   catch (error) {
-    console.error('[CameraSettings] 加载配置失败:', error)
+    console.error('加载配置失败', error)
     message.error('加载摄像头配置失败')
   }
 }
@@ -87,7 +87,7 @@ async function scanDevices() {
   try {
     const devices = await getCameraDevices()
     cameraDevices.value = devices
-    console.log('[CameraSettings] 扫描到设备:', devices)
+    console.log('扫描到设备:', devices)
 
     // 如果当前选中的设备不在列表中，选择第一个
     if (devices.length > 0 && !devices.some(d => d.deviceId === deviceId.value)) {
@@ -96,7 +96,7 @@ async function scanDevices() {
     }
   }
   catch (error) {
-    console.error('[CameraSettings] 扫描设备失败:', error)
+    console.error('扫描设备失败', error)
     message.error('扫描摄像头设备失败')
   }
 }
@@ -138,11 +138,11 @@ async function startPreview() {
       videoRef.value.srcObject = mediaStream
       await videoRef.value.play()
       isPreviewing.value = true
-      console.log('[CameraSettings] 预览已启动')
+      console.log('预览已启动')
     }
   }
   catch (error) {
-    console.error('[CameraSettings] 启动预览失败:', error)
+    console.error('启动预览失败', error)
 
     let errorMessage = '启动摄像头预览失败'
     if (error instanceof DOMException) {
@@ -177,7 +177,7 @@ function stopPreview() {
   }
 
   isPreviewing.value = false
-  console.log('[CameraSettings] 预览已停止')
+  console.log('预览已停止')
 }
 
 /**
@@ -213,10 +213,10 @@ async function handleSave() {
     })
 
     message.success('摄像头配置已保存')
-    console.log('[CameraSettings] 配置已保存')
+    console.log('配置已保存')
   }
   catch (error) {
-    console.error('[CameraSettings] 保存失败:', error)
+    console.error('保存失败', error)
     message.error('保存摄像头配置失败')
   }
 }

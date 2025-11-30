@@ -1,5 +1,9 @@
 import { DatabaseManager } from '../services/database'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('DeviceState')
+
 /**
  * 设备状态枚举
  */
@@ -53,7 +57,7 @@ class AudioConfigClass {
     }
     catch (error) {
       // 如果数据库未初始化，使用默认值
-      console.warn('[AudioConfig] 使用默认配置:', error)
+      logger.warn('使用默认配置', error)
       return {
         INPUT_SAMPLE_RATE: 16000,
         OUTPUT_SAMPLE_RATE: 24000,
@@ -71,7 +75,7 @@ class AudioConfigClass {
    */
   reload(): void {
     this.config = this.loadConfig()
-    console.log('[AudioConfig] 配置已重新加载:', this.config)
+    logger.info('配置已重新加载:', this.config)
   }
 
   // Getter 方法

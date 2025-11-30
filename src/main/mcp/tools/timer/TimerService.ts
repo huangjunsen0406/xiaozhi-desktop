@@ -10,6 +10,9 @@ import type {
   StartCountdownResult,
   TimerInfo,
 } from './types'
+import { createLogger } from '../../../utils/logger'
+
+const logger = createLogger('TimerService')
 
 /**
  * 单个倒计时任务
@@ -50,7 +53,7 @@ class TimerTask {
           await this.onExecute(this)
         }
         catch (error) {
-          console.error(`[TimerTask] Timer ${this.timerId} execution failed:`, error)
+          logger.error(`Timer ${this.timerId} execution failed:`, error)
         }
         finally {
           this.onComplete(this.timerId)
@@ -58,7 +61,7 @@ class TimerTask {
       }
     }, this.delay * 1000)
 
-    console.log(`[TimerTask] Timer ${this.timerId} started, will execute in ${this.delay} seconds`)
+    logger.info(`Timer ${this.timerId} started, will execute in ${this.delay} seconds`)
   }
 
   /**
@@ -69,7 +72,7 @@ class TimerTask {
       clearTimeout(this.timeout)
       this.timeout = null
       this.cancelled = true
-      console.log(`[TimerTask] Timer ${this.timerId} cancelled`)
+      logger.info(`Timer ${this.timerId} cancelled`)
     }
   }
 
@@ -128,7 +131,7 @@ export class TimerService {
   private readonly DEFAULT_DELAY = 5
 
   private constructor() {
-    console.log('[TimerService] Timer service initialized')
+    logger.info('Timer service initialized')
   }
 
   /**
@@ -155,7 +158,7 @@ export class TimerService {
     // 验证延迟时间
     if (actualDelay <= 0 || actualDelay > 3600) {
       const message = `Invalid delay: ${actualDelay}. Must be between 1 and 3600 seconds.`
-      console.error(`[TimerService] ${message}`)
+      logger.error(`${message}`)
       return { success: false, message }
     }
 
@@ -168,7 +171,7 @@ export class TimerService {
     }
     catch (error) {
       const message = `Invalid command format: ${error instanceof Error ? error.message : 'Unknown error'}`
-      console.error(`[TimerService] ${message}`)
+      logger.error(`${message}`)
       return { success: false, message }
     }
 
@@ -188,7 +191,7 @@ export class TimerService {
     this.timers.set(timerId, task)
     task.start()
 
-    console.log(`[TimerService] Countdown ${timerId} started, will execute in ${actualDelay} seconds`)
+    logger.info(`Countdown ${timerId} started, will execute in ${actualDelay} seconds`)
 
     return {
       success: true,
@@ -210,7 +213,7 @@ export class TimerService {
 
     if (!task) {
       const message = `Timer ${timerId} not found or already completed`
-      console.warn(`[TimerService] ${message}`)
+      logger.warn(`${message}`)
       return { success: false, message, timerId }
     }
 
@@ -218,7 +221,7 @@ export class TimerService {
     this.timers.delete(timerId)
 
     const message = `Timer ${timerId} cancelled successfully`
-    console.log(`[TimerService] ${message}`)
+    logger.info(`${message}`)
 
     return {
       success: true,
@@ -240,7 +243,7 @@ export class TimerService {
       }
     }
 
-    console.log(`[TimerService] Found ${activeTimers.length} active timers`)
+    logger.info(`Found ${activeTimers.length} active timers`)
 
     return {
       success: true,
@@ -254,7 +257,7 @@ export class TimerService {
    * 执行倒计时结束后的命令
    */
   private async executeCommand(task: TimerTask): Promise<void> {
-    console.log(`[TimerService] Timer ${task.timerId} executing command: ${task.command}`)
+    logger.info(`Timer ${task.timerId} executing command: ${task.command}`)
 
     try {
       // 解析 MCP 工具调用命令
@@ -274,14 +277,14 @@ export class TimerService {
       // 执行 MCP 工具
       const result = await tool.callback(commandObj.arguments)
 
-      console.log(`[TimerService] Timer ${task.timerId} executed successfully:`, result)
+      logger.info(`Timer ${task.timerId} executed successfully:`, result)
 
       // 通知执行结果
       await this.notifyExecutionResult(task, true, `Executed ${commandObj.name}`)
     }
     catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[TimerService] Timer ${task.timerId} execution failed:`, errorMsg)
+      logger.error(`Timer ${task.timerId} execution failed:`, errorMsg)
       await this.notifyExecutionResult(task, false, errorMsg)
     }
   }
@@ -311,11 +314,11 @@ export class TimerService {
           : `倒计时 ${task.timerId} 执行失败`
       }
 
-      console.log('[TimerService] Notifying:', message)
+      logger.info('Notifying:', message)
       await app.sendText(message)
     }
     catch (error) {
-      console.warn('[TimerService] Failed to notify execution result:', error)
+      logger.warn('Failed to notify execution result:', error)
     }
   }
 
@@ -324,21 +327,21 @@ export class TimerService {
    */
   private cleanupTimer(timerId: number): void {
     this.timers.delete(timerId)
-    console.log(`[TimerService] Timer ${timerId} cleaned up`)
+    logger.info(`Timer ${timerId} cleaned up`)
   }
 
   /**
    * 清理所有倒计时任务（应用关闭时调用）
    */
   async cleanupAll(): Promise<void> {
-    console.log('[TimerService] Cleaning up all timers...')
+    logger.info('Cleaning up all timers...')
 
     for (const task of this.timers.values()) {
       task.cancel()
     }
 
     this.timers.clear()
-    console.log('[TimerService] All timers cleaned up')
+    logger.info('All timers cleaned up')
   }
 
   /**

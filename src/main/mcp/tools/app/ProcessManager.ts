@@ -7,6 +7,10 @@ import { exec } from 'node:child_process'
 import * as os from 'node:os'
 import { promisify } from 'node:util'
 
+import { createLogger } from '../../../utils/logger'
+
+const logger = createLogger('ProcessManager')
+
 const execAsync = promisify(exec)
 
 export class ProcessManager {
@@ -19,7 +23,7 @@ export class ProcessManager {
   static async listRunning(filter?: string, includeSystemProcesses = false): Promise<ProcessInfo[]> {
     const platform = os.platform() as Platform
 
-    console.log(`[ProcessManager] 列出运行进程, 平台: ${platform}, 过滤: ${filter || '无'}`)
+    logger.info(`列出运行进程, 平台: ${platform}, 过滤: ${filter || '无'}`)
 
     try {
       let processes: ProcessInfo[] = []
@@ -31,20 +35,20 @@ export class ProcessManager {
         processes = await this.listRunningWindows(filter)
       }
       else {
-        console.error(`[ProcessManager] 不支持的平台: ${platform}`)
+        logger.error(`不支持的平台: ${platform}`)
         return []
       }
 
       // 如果不包含系统进程，则过滤掉
       if (!includeSystemProcesses) {
         processes = this.filterUserApplications(processes, platform)
-        console.log(`[ProcessManager] 过滤后剩余 ${processes.length} 个用户应用`)
+        logger.info(`过滤后剩余 ${processes.length} 个用户应用`)
       }
 
       return processes
     }
     catch (error) {
-      console.error('[ProcessManager] 列出进程失败:', error)
+      logger.error('列出进程失败', error)
       return []
     }
   }
@@ -58,7 +62,7 @@ export class ProcessManager {
   static async kill(pid: number, force = false): Promise<boolean> {
     const platform = os.platform() as Platform
 
-    console.log(`[ProcessManager] 关闭进程: PID=${pid}, 强制=${force}, 平台=${platform}`)
+    logger.info(`关闭进程: PID=${pid}, 强制=${force}, 平台=${platform}`)
 
     try {
       if (platform === 'darwin' || platform === 'linux') {
@@ -68,12 +72,12 @@ export class ProcessManager {
         return await this.killWindows(pid, force)
       }
       else {
-        console.error(`[ProcessManager] 不支持的平台: ${platform}`)
+        logger.error(`不支持的平台: ${platform}`)
         return false
       }
     }
     catch (error) {
-      console.error('[ProcessManager] 关闭进程失败:', error)
+      logger.error('关闭进程失败', error)
       return false
     }
   }
@@ -85,18 +89,18 @@ export class ProcessManager {
    * @returns 成功关闭的进程数
    */
   static async killByName(appName: string, force = false): Promise<number> {
-    console.log(`[ProcessManager] 根据名称关闭应用: ${appName}, 强制=${force}`)
+    logger.info(`根据名称关闭应用: ${appName}, 强制=${force}`)
 
     try {
       // 1. 列出所有匹配的进程（包括系统进程，因为用户可能想关闭它们）
       const processes = await this.listRunning(appName, true)
 
       if (processes.length === 0) {
-        console.warn(`[ProcessManager] 未找到运行中的应用: ${appName}`)
+        logger.warn(`未找到运行中的应用: ${appName}`)
         return 0
       }
 
-      console.log(`[ProcessManager] 找到 ${processes.length} 个匹配的进程`)
+      logger.info(`找到 ${processes.length} 个匹配的进程`)
 
       // 2. 逐个关闭进程
       let successCount = 0
@@ -104,18 +108,18 @@ export class ProcessManager {
         const success = await this.kill(proc.pid, force)
         if (success) {
           successCount++
-          console.log(`[ProcessManager] 成功关闭进程: ${proc.name} (PID: ${proc.pid})`)
+          logger.info(`成功关闭进程: ${proc.name} (PID: ${proc.pid})`)
         }
         else {
-          console.warn(`[ProcessManager] 关闭进程失败: ${proc.name} (PID: ${proc.pid})`)
+          logger.warn(`关闭进程失败: ${proc.name} (PID: ${proc.pid})`)
         }
       }
 
-      console.log(`[ProcessManager] 关闭操作完成: ${successCount}/${processes.length}`)
+      logger.info(`关闭操作完成: ${successCount}/${processes.length}`)
       return successCount
     }
     catch (error) {
-      console.error('[ProcessManager] 根据名称关闭应用失败:', error)
+      logger.error('根据名称关闭应用失败', error)
       return 0
     }
   }
@@ -349,7 +353,7 @@ export class ProcessManager {
       return this.parsePS(stdout, filter)
     }
     catch (error) {
-      console.error('[ProcessManager] Unix 列出进程失败:', error)
+      logger.error('Unix 列出进程失败', error)
       return []
     }
   }
@@ -363,11 +367,11 @@ export class ProcessManager {
       // -KILL: 强制终止 (9)
       const signal = force ? '-9' : '-15'
       await execAsync(`kill ${signal} ${pid}`)
-      console.log(`[ProcessManager] Unix: 成功发送信号 ${signal} 到进程 ${pid}`)
+      logger.info(`Unix: 成功发送信号 ${signal} 到进程 ${pid}`)
       return true
     }
     catch (error) {
-      console.error(`[ProcessManager] Unix: 关闭进程失败 (PID: ${pid}):`, error)
+      logger.error(`Unix: 关闭进程失败 (PID: ${pid}):`, error)
       return false
     }
   }
@@ -426,7 +430,7 @@ export class ProcessManager {
       }
     }
 
-    console.log(`[ProcessManager] 解析 ps 输出: 找到 ${processes.length} 个进程`)
+    logger.info(`解析 ps 输出: 找到 ${processes.length} 个进程`)
     return processes
   }
 
@@ -442,7 +446,7 @@ export class ProcessManager {
       return this.parseTasklist(stdout, filter)
     }
     catch (error) {
-      console.error('[ProcessManager] Windows 列出进程失败:', error)
+      logger.error('Windows 列出进程失败', error)
       return []
     }
   }
@@ -456,11 +460,11 @@ export class ProcessManager {
       // /F: 强制终止
       const forceFlag = force ? '/F /T' : '/T'
       await execAsync(`taskkill /PID ${pid} ${forceFlag}`)
-      console.log(`[ProcessManager] Windows: 成功关闭进程 ${pid}`)
+      logger.info(`Windows: 成功关闭进程 ${pid}`)
       return true
     }
     catch (error) {
-      console.error(`[ProcessManager] Windows: 关闭进程失败 (PID: ${pid}):`, error)
+      logger.error(`Windows: 关闭进程失败 (PID: ${pid}):`, error)
       return false
     }
   }
@@ -524,7 +528,7 @@ export class ProcessManager {
       }
     }
 
-    console.log(`[ProcessManager] 解析 tasklist 输出: 找到 ${processes.length} 个进程`)
+    logger.info(`解析 tasklist 输出: 找到 ${processes.length} 个进程`)
     return processes
   }
 }

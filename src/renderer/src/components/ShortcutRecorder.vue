@@ -58,7 +58,7 @@ async function handleKeyDown(e: KeyboardEvent) {
   const accelerator = convertEventToAccelerator(e)
 
   if (!accelerator) {
-    // console.log('[ShortcutRecorder] 无效的快捷键组合')
+    // console.log('无效的快捷键组合')
     return
   }
 
@@ -99,7 +99,7 @@ async function handleKeyDown(e: KeyboardEvent) {
   catch (error) {
     // Only handle error if component is still mounted
     if (isRecording.value) {
-      console.error('[ShortcutRecorder] 冲突检测失败:', error)
+      console.error('冲突检测失败', error)
       emit('error', '快捷键冲突检测失败，请重试')
       stopRecording()
     }

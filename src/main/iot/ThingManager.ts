@@ -1,6 +1,10 @@
 import type { Thing } from './Thing'
 import type { IoTCommand, ThingDescriptor, ThingState } from './types'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('ThingManager')
+
 /**
  * IoT 设备管理器
  * 单例模式，管理所有 IoT 设备
@@ -11,7 +15,7 @@ export class ThingManager {
   private lastStates: Map<string, string> = new Map()
 
   private constructor() {
-    console.log('[ThingManager] IoT 设备管理器初始化')
+    logger.info('IoT 设备管理器初始化')
   }
 
   /**
@@ -33,10 +37,10 @@ export class ThingManager {
       const { Lamp } = await import('./devices/Lamp')
       this.addThing(new Lamp())
 
-      console.log('[ThingManager] IoT 设备初始化完成')
+      logger.info('IoT 设备初始化完成')
     }
     catch (error) {
-      console.error('[ThingManager] IoT 设备初始化失败:', error)
+      logger.error('IoT 设备初始化失败', error)
       throw error
     }
   }
@@ -46,7 +50,7 @@ export class ThingManager {
    */
   addThing(thing: Thing): void {
     this.things.push(thing)
-    console.log(`[ThingManager] 添加设备: ${thing.name}`)
+    logger.info(`添加设备: ${thing.name}`)
   }
 
   /**
@@ -111,11 +115,11 @@ export class ThingManager {
 
     if (!thing) {
       const error = `设备不存在: ${command.name}`
-      console.error(`[ThingManager] ${error}`)
+      logger.error(error)
       throw new Error(error)
     }
 
-    console.log(`[ThingManager] 调用设备方法: ${command.name}.${command.method}`)
+    logger.info(`调用设备方法: ${command.name}.${command.method}`)
     const result = await thing.invoke(command)
 
     return result

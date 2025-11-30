@@ -32,12 +32,12 @@ const theme = computed(() => (isDark.value ? darkTheme : lightTheme))
 const appStore = useAppStore()
 
 onMounted(async () => {
-  console.log('[App] 初始化应用状态')
+  console.log('初始化应用状态')
 
   try {
     // 获取初始状态
     const state = await window.api.appGetState()
-    console.log('[App] 初始状态:', state)
+    console.log('初始状态:', state)
 
     // 更新 Store
     appStore.updateState({
@@ -48,7 +48,7 @@ onMounted(async () => {
 
     // 监听状态变化
     window.api.appOnStateChanged((state) => {
-      console.log('[App] 状态更新:', state)
+      console.log('状态更新:', state)
       appStore.updateState({
         deviceState: state.deviceState as DeviceState,
         listeningMode: state.listeningMode as ListeningMode,
@@ -58,16 +58,16 @@ onMounted(async () => {
 
     // 监听摄像头捕获请求
     const removeCameraListener = window.api.cameraOnCaptureRequest(async () => {
-      console.log('[App] 收到摄像头捕获请求')
+      console.log('收到摄像头捕获请求')
       try {
         const imageBlob = await captureFromWebcam()
         const arrayBuffer = await imageBlob.arrayBuffer()
         const uint8Array = new Uint8Array(arrayBuffer)
         window.api.cameraSendCaptureResult(true, uint8Array)
-        console.log('[App] 摄像头捕获成功，已发送结果')
+        console.log('摄像头捕获成功，已发送结果')
       }
       catch (error) {
-        console.error('[App] 摄像头捕获失败:', error)
+        console.error('摄像头捕获失败', error)
         window.api.cameraSendCaptureResult(
           false,
           undefined,
@@ -78,7 +78,7 @@ onMounted(async () => {
 
     // 监听主题变更（来自 MCP 工具）
     const removeThemeListener = window.api.themeOnChange((theme: string) => {
-      console.log('[App] 收到主题变更请求:', theme)
+      console.log('收到主题变更请求:', theme)
       if (['light', 'dark', 'auto'].includes(theme)) {
         mode.value = theme as 'light' | 'dark' | 'auto'
       }
@@ -91,7 +91,7 @@ onMounted(async () => {
 
     // 监听单条消息添加事件
     window.api.chatOnMessageAdded((data) => {
-      console.log('[App] 收到消息添加事件:', data)
+      console.log('收到消息添加事件:', data)
 
       // 对齐当前会话到事件会话，避免忽略新会话
       if (appStore.currentSessionId !== data.sessionId) {
@@ -108,7 +108,7 @@ onMounted(async () => {
 
     // 监听批量消息添加事件（图片+文本）
     window.api.chatOnMessagesBatchAdded((data) => {
-      console.log('[App] 收到批量消息添加事件:', data)
+      console.log('收到批量消息添加事件:', data)
 
       if (appStore.currentSessionId !== data.sessionId) {
         appStore.currentSessionId = data.sessionId
@@ -124,7 +124,7 @@ onMounted(async () => {
 
     // 监听会话创建事件（跨天自动创建新会话）
     window.api.chatOnSessionCreated((data) => {
-      console.log('[App] 收到会话创建事件:', data)
+      console.log('收到会话创建事件:', data)
       // 刷新会话列表以显示新会话
       appStore.loadSessions()
       // 如果当前没有会话，自动切换到新会话
@@ -145,12 +145,12 @@ onMounted(async () => {
     })
   }
   catch (error) {
-    console.error('[App] 初始化应用状态失败:', error)
+    console.error('初始化应用状态失败', error)
   }
 })
 
 onUnmounted(() => {
-  console.log('[App] 清理状态监听器')
+  console.log('清理状态监听器')
   window.api.appRemoveStateChangedListener()
 })
 </script>

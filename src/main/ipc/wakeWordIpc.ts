@@ -5,7 +5,10 @@ import process from 'node:process'
 import { ipcMain } from 'electron'
 import { DatabaseManager } from '../services/database'
 import { BpeConverter } from '../utils/BpeConverter'
+import { createLogger } from '../utils/logger'
 import { PinyinConverter } from '../utils/PinyinConverter'
+
+const logger = createLogger('WakeWordIpc')
 
 /**
  * 注册唤醒词相关的 IPC 通道
@@ -19,11 +22,11 @@ export function registerWakeWordIpc(context: IpcContext): void {
   ipcMain.handle('wake-word:get-config', () => {
     try {
       const config = db.getFormattedWakeWordConfig()
-      console.log('IPC: 获取唤醒词配置', config)
+      logger.info('获取唤醒词配置', config)
       return { success: true, data: config }
     }
     catch (error) {
-      console.error('IPC: 获取唤醒词配置失败', error)
+      logger.error('获取唤醒词配置失败', error)
       return { success: false, error: String(error) }
     }
   })
@@ -40,7 +43,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
     cooldownMs?: number
   }) => {
     try {
-      console.log('IPC: 更新唤醒词配置', updates)
+      logger.info('更新唤醒词配置', updates)
 
       // 转换前端字段名到数据库字段名
       const dbUpdates: {
@@ -106,12 +109,12 @@ export function registerWakeWordIpc(context: IpcContext): void {
 
           // 写入文件
           writeFileSync(keywordsPath, `${keywordLine}\n`, 'utf-8')
-          console.log(`IPC: ✅ 已生成 keywords.txt: ${keywordsPath}`)
-          console.log(`IPC: ✅ 唤醒词内容: ${keywordLine}`)
+          logger.info(`✅ 已生成 keywords.txt: ${keywordsPath}`)
+          logger.info(`✅ 唤醒词内容: ${keywordLine}`)
         }
         catch (fileError) {
-          console.error('IPC: ❌ 生成 keywords.txt 失败:', fileError)
-          console.error('IPC: ❌ 错误堆栈:', (fileError as Error).stack)
+          logger.error('❌ 生成 keywords.txt 失败:', fileError)
+          logger.error('❌ 错误堆栈:', (fileError as Error).stack)
           // 不影响主流程，继续执行
         }
       }
@@ -123,17 +126,17 @@ export function registerWakeWordIpc(context: IpcContext): void {
       const wakeWordPlugin = context.application?.getWakeWordPlugin()
       if (wakeWordPlugin && typeof wakeWordPlugin.reloadConfig === 'function') {
         await wakeWordPlugin.reloadConfig()
-        console.log('IPC: WakeWordPlugin 配置已重新加载')
+        logger.info('WakeWordPlugin 配置已重新加载')
       }
       else {
-        console.warn('IPC: WakeWordPlugin 不存在或不支持热重载')
+        logger.warn('WakeWordPlugin 不存在或不支持热重载')
       }
 
-      console.log('IPC: 唤醒词配置更新成功')
+      logger.info('唤醒词配置更新成功')
       return { success: true }
     }
     catch (error) {
-      console.error('IPC: 更新唤醒词配置失败', error)
+      logger.error('更新唤醒词配置失败', error)
       return { success: false, error: String(error) }
     }
   })
@@ -143,14 +146,14 @@ export function registerWakeWordIpc(context: IpcContext): void {
    */
   ipcMain.handle('wake-word:test', async () => {
     try {
-      console.log('IPC: 测试唤醒词')
+      logger.info('测试唤醒词')
 
       // 获取当前配置的唤醒词
       const config = db.getFormattedWakeWordConfig()
 
       // 模拟唤醒词检测（触发自动对话）
       if (context.application) {
-        console.log(`IPC: 模拟检测到唤醒词: ${config.keyword}`)
+        logger.info(`模拟检测到唤醒词: ${config.keyword}`)
         await context.application.startAutoConversation()
         return { success: true, keyword: config.keyword }
       }
@@ -159,10 +162,10 @@ export function registerWakeWordIpc(context: IpcContext): void {
       }
     }
     catch (error) {
-      console.error('IPC: 测试唤醒词失败', error)
+      logger.error('测试唤醒词失败', error)
       return { success: false, error: String(error) }
     }
   })
 
-  console.log('唤醒词相关 IPC 通道已注册')
+  logger.info('唤醒词相关 IPC 通道已注册')
 }

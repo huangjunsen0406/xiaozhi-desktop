@@ -7,6 +7,10 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import { createLogger } from '../../../../utils/logger'
+
+const logger = createLogger('LinuxScanner')
+
 export class LinuxScanner {
   /**
    * 扫描已安装的应用程序
@@ -39,11 +43,11 @@ export class LinuxScanner {
       const systemTools = this.getSystemTools()
       this.addUniqueApps(apps, systemTools, appNames)
 
-      console.log(`[LinuxScanner] 扫描完成，找到 ${apps.length} 个应用`)
+      logger.info(`扫描完成，找到 ${apps.length} 个应用`)
       return apps
     }
     catch (error) {
-      console.error('[LinuxScanner] 扫描应用失败:', error)
+      logger.error('扫描应用失败', error)
       return []
     }
   }
@@ -59,7 +63,7 @@ export class LinuxScanner {
 
     try {
       if (!fs.existsSync(directory)) {
-        console.warn(`[LinuxScanner] 目录不存在: ${directory}`)
+        logger.warn(`目录不存在: ${directory}`)
         return []
       }
 
@@ -76,10 +80,10 @@ export class LinuxScanner {
         }
       }
 
-      console.log(`[LinuxScanner] ${directory}: 找到 ${apps.length} 个应用`)
+      logger.info(`${directory}: 找到 ${apps.length} 个应用`)
     }
     catch (error) {
-      console.error(`[LinuxScanner] 扫描 desktop 文件失败 (${directory}):`, error)
+      logger.error(`扫描 desktop 文件失败 (${directory}):`, error)
     }
 
     return apps
@@ -139,7 +143,7 @@ export class LinuxScanner {
       }
     }
     catch (error) {
-      console.error(`[LinuxScanner] 解析 desktop 文件失败 (${filePath}):`, error)
+      logger.error(`解析 desktop 文件失败 (${filePath}):`, error)
       return null
     }
   }

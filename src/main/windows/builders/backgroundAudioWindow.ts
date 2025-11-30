@@ -3,6 +3,10 @@ import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
 
+import { createLogger } from '../../utils/logger'
+
+const logger = createLogger('BackgroundAudioWindow')
+
 /**
  * 创建后台音频窗口
  * 专门用于处理音频采集和播放,不显示UI
@@ -48,7 +52,7 @@ export function buildBackgroundAudioWindow(): BrowserWindow {
     window.webContents.openDevTools({ mode: 'detach' })
   }
 
-  console.log('[BackgroundAudioWindow] 后台音频窗口已创建')
+  logger.info('后台音频窗口已创建')
 
   return window
 }

@@ -6,7 +6,11 @@ import type { Application } from '../services/Application'
 import type { AudioListener } from '../types/audio'
 import { ipcMain } from 'electron'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
+import { createLogger } from '../utils/logger'
+
 import { Plugin } from './Plugin'
+
+const logger = createLogger('AudioPlugin')
 
 /**
  * 音频性能指标
@@ -86,12 +90,12 @@ export class AudioPlugin extends Plugin {
     // 调用父类 setup
     await super.setup(app)
 
-    console.log('[AudioPlugin] 初始化...')
+    logger.info('初始化...')
 
     try {
       // 初始化 OpusCodec
       initOpusCodec()
-      console.log('[AudioPlugin] ✓ OpusCodec 已初始化')
+      logger.info('✓ OpusCodec 已初始化')
 
       // 监听来自后台音频窗口的 PCM 数据（保存引用以便精确移除）
       this.pcmHandler = (_event, pcmData: Int16Array) => {
@@ -99,10 +103,10 @@ export class AudioPlugin extends Plugin {
       }
       ipcMain.on('audio:pcm', this.pcmHandler)
 
-      console.log('[AudioPlugin] ✓ 初始化完成')
+      logger.info('✓ 初始化完成')
     }
     catch (error) {
-      console.error('[AudioPlugin] ✗ 初始化失败:', error)
+      logger.error('✗ 初始化失败', error)
       throw error
     }
   }
@@ -114,14 +118,14 @@ export class AudioPlugin extends Plugin {
     // 调用父类 start
     await super.start()
 
-    console.log('[AudioPlugin] ✓ 启动完成')
+    logger.info('✓ 启动完成')
   }
 
   /**
    * 协议连接成功回调
    */
   async onProtocolConnected(protocol: Protocol): Promise<void> {
-    console.log('[AudioPlugin] 协议已连接')
+    logger.info('协议已连接')
     this.protocol = protocol
   }
 
@@ -138,20 +142,20 @@ export class AudioPlugin extends Plugin {
    * 控制后台音频窗口的采集行为
    */
   async onDeviceStateChanged(state: DeviceState): Promise<void> {
-    console.log(`[AudioPlugin] 设备状态变化: ${state}`)
+    logger.info(`设备状态变化: ${state}`)
 
     // 根据状态控制后台音频窗口
     if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
       if (state === 'listening') {
         // 开始监听前，先切换设备（如果配置有变化）
-        console.log('[AudioPlugin] 通知后台音频窗口检查设备配置')
+        logger.info('通知后台音频窗口检查设备配置')
         this.backgroundAudioWindow.webContents.send('audio:command', 'switchDevices')
 
         // 等待设备切换完成后再启动采集
         await new Promise(resolve => setTimeout(resolve, 100))
 
         // 启动音频采集
-        console.log('[AudioPlugin] 通知后台音频窗口启动采集')
+        logger.info('通知后台音频窗口启动采集')
         this.backgroundAudioWindow.webContents.send('audio:command', 'start')
       }
     }
@@ -169,7 +173,7 @@ export class AudioPlugin extends Plugin {
    */
   addAudioListener(listener: AudioListener): void {
     this.audioListeners.add(listener)
-    console.log(`[AudioPlugin] 添加音频监听器: ${listener.name}`)
+    logger.info(`添加音频监听器: ${listener.name}`)
   }
 
   /**
@@ -177,7 +181,7 @@ export class AudioPlugin extends Plugin {
    */
   removeAudioListener(listener: AudioListener): void {
     this.audioListeners.delete(listener)
-    console.log(`[AudioPlugin] 移除音频监听器: ${listener.name}`)
+    logger.info(`移除音频监听器: ${listener.name}`)
   }
 
   /**
@@ -195,7 +199,7 @@ export class AudioPlugin extends Plugin {
           listener.onAudioData(pcmData)
         }
         catch (error) {
-          console.error(`[AudioPlugin] 监听器 ${listener.name} 处理失败:`, error)
+          logger.error(`监听器 ${listener.name} 处理失败:`, error)
         }
       }
     })
@@ -227,7 +231,7 @@ export class AudioPlugin extends Plugin {
 
       // 节流日志：每 DROP_LOG_THRESHOLD 帧打印一次
       if (this.consecutiveDrops % this.DROP_LOG_THRESHOLD === 1) {
-        console.warn(
+        logger.warn(
           `[AudioPlugin] 网络拥塞，丢弃帧 (buffered: ${(bufferedAmount / 1024).toFixed(1)}KB, 连续丢弃: ${this.consecutiveDrops})`,
         )
       }
@@ -236,7 +240,7 @@ export class AudioPlugin extends Plugin {
 
     // 缓冲区恢复正常，重置计数
     if (this.consecutiveDrops > 0) {
-      console.log(`[AudioPlugin] 网络恢复，共丢弃 ${this.consecutiveDrops} 帧`)
+      logger.info(`网络恢复，共丢弃 ${this.consecutiveDrops} 帧`)
       this.consecutiveDrops = 0
     }
     return false
@@ -267,8 +271,8 @@ export class AudioPlugin extends Plugin {
       ? ((this.metrics.encodedFrames / this.metrics.totalFrames) * 100).toFixed(1)
       : '0.0'
 
-    console.log(
-      `[AudioPlugin] 性能指标: 总帧=${this.metrics.totalFrames}, `
+    logger.info(
+      `性能指标: 总帧=${this.metrics.totalFrames}, `
       + `编码=${this.metrics.encodedFrames}(${encodeRate}%), `
       + `平均编码=${avgEncodeTime}ms, 丢帧=${this.metrics.droppedFrames}(${dropRate}%), `
       + `耗时=${elapsed.toFixed(1)}s`,
@@ -315,7 +319,7 @@ export class AudioPlugin extends Plugin {
 
         const opusCodec = getOpusCodec()
         if (!opusCodec) {
-          console.error('[AudioPlugin] OpusCodec 未初始化')
+          logger.error('OpusCodec 未初始化')
           return
         }
 
@@ -329,14 +333,14 @@ export class AudioPlugin extends Plugin {
         if (this.protocol && this.protocol.isAudioChannelOpened()) {
           const sendStart = performance.now()
           this.protocol.sendAudio(opusFrame).catch((error) => {
-            console.error('[AudioPlugin] 发送音频失败:', error)
+            logger.error('发送音频失败', error)
           })
           this.metrics.totalSendTime += performance.now() - sendStart
         }
       }
     }
     catch (error) {
-      console.error('[AudioPlugin] 处理 PCM 数据失败:', error)
+      logger.error('处理 PCM 数据失败', error)
     }
     finally {
       // 2. 通知音频监听器（始终执行，即使不发送到服务器）
@@ -354,7 +358,7 @@ export class AudioPlugin extends Plugin {
     try {
       const opusCodec = getOpusCodec()
       if (!opusCodec) {
-        console.error('[AudioPlugin] OpusCodec 未初始化')
+        logger.error('OpusCodec 未初始化')
         return
       }
 
@@ -366,7 +370,7 @@ export class AudioPlugin extends Plugin {
         this.backgroundAudioWindow.webContents.send('audio:opus-decoded', pcmBuffer)
       }
       else {
-        console.warn('[AudioPlugin] 后台音频窗口不存在，无法播放音频')
+        logger.warn('后台音频窗口不存在，无法播放音频')
       }
 
       // 2. 通知 Live2DPlugin (通过 PluginManager 广播)
@@ -381,7 +385,7 @@ export class AudioPlugin extends Plugin {
       })
     }
     catch (error) {
-      console.error('[AudioPlugin] 处理 Opus 数据失败:', error)
+      logger.error('处理 Opus 数据失败', error)
     }
   }
 
@@ -392,14 +396,14 @@ export class AudioPlugin extends Plugin {
     // 调用父类 stop
     await super.stop()
 
-    console.log('[AudioPlugin] ✓ 已停止')
+    logger.info('✓ 已停止')
   }
 
   /**
    * 插件关闭
    */
   async shutdown(): Promise<void> {
-    console.log('[AudioPlugin] 正在关闭...')
+    logger.info('正在关闭...')
 
     // 打印最终性能报告
     if (this.metrics.totalFrames > 0) {
@@ -412,18 +416,18 @@ export class AudioPlugin extends Plugin {
         ? ((this.metrics.droppedFrames / (this.metrics.encodedFrames + this.metrics.droppedFrames)) * 100).toFixed(1)
         : '0.0'
 
-      console.log('[AudioPlugin] ========== 最终性能报告 ==========')
-      console.log(`[AudioPlugin] 总接收帧数: ${this.metrics.totalFrames}`)
-      console.log(`[AudioPlugin] 编码帧数: ${this.metrics.encodedFrames} (${encodeRate}%)`)
-      console.log(`[AudioPlugin] 丢弃帧数: ${this.metrics.droppedFrames} (${dropRate}%)`)
-      console.log(`[AudioPlugin] 平均编码时间: ${avgEncodeTime}ms`)
-      console.log(`[AudioPlugin] 运行时长: ${elapsed.toFixed(1)}s`)
-      console.log('[AudioPlugin] =====================================')
+      logger.info('========== 最终性能报告 ==========')
+      logger.info(`总接收帧数: ${this.metrics.totalFrames}`)
+      logger.info(`编码帧数: ${this.metrics.encodedFrames} (${encodeRate}%)`)
+      logger.info(`丢弃帧数: ${this.metrics.droppedFrames} (${dropRate}%)`)
+      logger.info(`平均编码时间: ${avgEncodeTime}ms`)
+      logger.info(`运行时长: ${elapsed.toFixed(1)}s`)
+      logger.info('=====================================')
     }
 
     // 停止后台音频窗口的采集
     if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
-      console.log('[AudioPlugin] 通知后台音频窗口停止采集并清理资源')
+      logger.info('通知后台音频窗口停止采集并清理资源')
       this.backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
     }
 
@@ -443,6 +447,6 @@ export class AudioPlugin extends Plugin {
     // 调用父类 shutdown
     await super.shutdown()
 
-    console.log('[AudioPlugin] ✓ 已关闭')
+    logger.info('✓ 已关闭')
   }
 }

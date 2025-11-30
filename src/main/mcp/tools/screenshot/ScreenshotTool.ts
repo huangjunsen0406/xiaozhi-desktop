@@ -6,6 +6,10 @@
 import { Buffer } from 'node:buffer'
 import { Monitor } from 'node-screenshots'
 
+import { createLogger } from '../../../utils/logger'
+
+const logger = createLogger('ScreenshotTool')
+
 export interface ScreenshotOptions {
   /**
    * 显示器ID
@@ -75,7 +79,7 @@ export class ScreenshotTool {
         }
       }
 
-      console.log(`[ScreenshotTool] Capturing monitor ${targetMonitor.id}, size: ${targetMonitor.width}x${targetMonitor.height}`)
+      logger.info(`Capturing monitor ${targetMonitor.id}, size: ${targetMonitor.width}x${targetMonitor.height}`)
 
       // 截图（Electron 环境需要传 true 避免崩溃）
       const image = await targetMonitor.captureImage()
@@ -87,7 +91,7 @@ export class ScreenshotTool {
       const data = Buffer.from(pngBuffer)
       const base64 = data.toString('base64')
 
-      console.log(`[ScreenshotTool] Screenshot captured: ${targetMonitor.width}x${targetMonitor.height}, ${data.length} bytes`)
+      logger.info(`Screenshot captured: ${targetMonitor.width}x${targetMonitor.height}, ${data.length} bytes`)
 
       return {
         success: true,
@@ -98,7 +102,7 @@ export class ScreenshotTool {
       }
     }
     catch (error) {
-      console.error('[ScreenshotTool] Capture failed:', error)
+      logger.error('Capture failed', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Unknown error',
@@ -126,10 +130,10 @@ export class ScreenshotTool {
     if (typeof display === 'number') {
       if (display > 0 && display <= monitors.length) {
         const targetMonitor = monitors[display - 1]
-        console.log(`[ScreenshotTool] Display index ${display} -> Monitor ID ${targetMonitor.id}`)
+        logger.info(`Display index ${display} -> Monitor ID ${targetMonitor.id}`)
         return targetMonitor
       }
-      console.warn(`[ScreenshotTool] Invalid display index: ${display}`)
+      logger.warn(`Invalid display index: ${display}`)
       return monitors[0]
     }
 
@@ -139,17 +143,17 @@ export class ScreenshotTool {
 
       // 主显示器
       if (['main', '主屏', '主显示器', '笔记本', '内屏'].includes(normalized)) {
-        console.log('[ScreenshotTool] Using primary display')
+        logger.info('Using primary display')
         return monitors[0]
       }
 
       // 副显示器
       if (['secondary', '副屏', '副显示器', '外接', '外屏', '第二屏'].includes(normalized)) {
         if (monitors.length > 1) {
-          console.log('[ScreenshotTool] Using secondary display')
+          logger.info('Using secondary display')
           return monitors[1]
         }
-        console.warn('[ScreenshotTool] No secondary display found, using primary')
+        logger.warn('No secondary display found, using primary')
         return monitors[0]
       }
 
@@ -157,12 +161,12 @@ export class ScreenshotTool {
       const num = Number.parseInt(display, 10)
       if (!Number.isNaN(num) && num > 0 && num <= monitors.length) {
         const targetMonitor = monitors[num - 1]
-        console.log(`[ScreenshotTool] Display index ${num} -> Monitor ID ${targetMonitor.id}`)
+        logger.info(`Display index ${num} -> Monitor ID ${targetMonitor.id}`)
         return targetMonitor
       }
     }
 
-    console.warn(`[ScreenshotTool] Unknown display parameter: ${display}, using primary`)
+    logger.warn(`Unknown display parameter: ${display}, using primary`)
     return monitors[0]
   }
 

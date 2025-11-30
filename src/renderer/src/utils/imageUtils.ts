@@ -30,7 +30,7 @@ export function convertToUint8Array(imageData: ImageDataInput): Uint8Array | nul
     return new Uint8Array(imageData.buffer)
   }
 
-  console.error('[imageUtils] 无法识别的图片数据格式:', typeof imageData, imageData)
+  console.error('无法识别的图片数据格式', typeof imageData, imageData)
   return null
 }
 
@@ -76,7 +76,7 @@ export function imageDataToBlob(imageData: ImageDataInput): Blob | null {
     return new Blob([arrayBuffer], { type: mimeType })
   }
   catch (error) {
-    console.error('[imageUtils] 转换 Blob 失败:', error)
+    console.error('转换 Blob 失败', error)
     return null
   }
 }

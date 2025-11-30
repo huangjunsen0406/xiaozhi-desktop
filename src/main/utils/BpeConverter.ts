@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs'
+import { createLogger } from './logger'
+
+const logger = createLogger('BpeConverter')
 
 /**
  * BPE 转换工具类
@@ -32,7 +35,7 @@ export class BpeConverter {
       }
     }
 
-    console.log(`[BpeConverter] 已加载 ${this.tokenToId.size} 个 BPE tokens`)
+    logger.info(`已加载 ${this.tokenToId.size} 个 BPE tokens`)
   }
 
   /**

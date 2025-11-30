@@ -4,6 +4,7 @@ import type { PropertyList, PropertyType } from '../types'
 import { Buffer } from 'node:buffer'
 import { getApplication } from '../../services/Application'
 import { DatabaseManager } from '../../services/database'
+import { createLogger } from '../../utils/logger'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
 import { McpServer } from '../McpServer'
 import { AppLauncher } from './app/AppLauncher'
@@ -12,6 +13,8 @@ import { ProcessManager } from './app/ProcessManager'
 import { MusicToolsManager } from './music'
 import { ScreenshotTool } from './screenshot'
 import { TimerService } from './timer'
+
+const logger = createLogger('SystemTools')
 /**
  * 系统工具管理器
  * 负责注册系统相关的 MCP 工具（音量控制、应用管理等）
@@ -22,7 +25,7 @@ export class SystemToolsManager {
   private volumeController = new SystemVolumeController()
 
   private constructor() {
-    console.log('[SystemToolsManager] 系统工具管理器初始化')
+    logger.info('系统工具管理器初始化')
   }
 
   static getInstance(): SystemToolsManager {
@@ -44,7 +47,7 @@ export class SystemToolsManager {
     PropertyTypeEnum: typeof PropertyType,
   ): Promise<void> {
     try {
-      console.log('[SystemToolsManager] 开始注册系统工具')
+      logger.info('开始注册系统工具')
 
       // 注册音量控制工具
       this.registerVolumeControl(addTool, PropertyListClass, PropertyTypeEnum)
@@ -86,10 +89,10 @@ export class SystemToolsManager {
       this.registerMusicTools(addTool, PropertyListClass, PropertyTypeEnum)
 
       this.initialized = true
-      console.log('[SystemToolsManager] 系统工具注册完成')
+      logger.info('系统工具注册完成')
     }
     catch (error) {
-      console.error('[SystemToolsManager] 系统工具注册失败:', error)
+      logger.error('系统工具注册失败:', error)
       throw error
     }
   }
@@ -126,7 +129,7 @@ Parameter:
       },
     )
 
-    console.log('[SystemToolsManager] 注册音量控制工具成功')
+    logger.info('注册音量控制工具成功')
   }
 
   /**
@@ -154,7 +157,7 @@ Returns:
       },
     )
 
-    console.log('[SystemToolsManager] 注册音量获取工具成功')
+    logger.info('注册音量获取工具成功')
   }
 
   /**
@@ -198,7 +201,7 @@ The system will try multiple launch strategies including direct execution, syste
       },
     )
 
-    console.log('[SystemToolsManager] 注册应用启动工具成功')
+    logger.info('注册应用启动工具成功')
   }
 
   /**
@@ -239,7 +242,7 @@ Returns detailed information about running applications including process IDs wh
       },
     )
 
-    console.log('[SystemToolsManager] 注册进程列表工具成功')
+    logger.info('注册进程列表工具成功')
   }
 
   /**
@@ -285,7 +288,7 @@ The tool will find all running processes matching the application name and attem
       },
     )
 
-    console.log('[SystemToolsManager] 注册应用关闭工具成功')
+    logger.info('注册应用关闭工具成功')
   }
 
   /**
@@ -338,7 +341,7 @@ Returns JSON with application details including name (for launching), displayNam
       },
     )
 
-    console.log('[SystemToolsManager] 注册应用扫描工具成功')
+    logger.info('注册应用扫描工具成功')
   }
 
   /**
@@ -348,21 +351,21 @@ Returns JSON with application details including name (for launching), displayNam
     try {
       const volume = args.volume as number
 
-      console.log(`[SystemToolsManager] 设置音量到 ${volume}`)
+      logger.info(`设置音量到 ${volume}`)
 
       // 验证音量范围
       if (volume < 0 || volume > 100) {
-        console.warn(`[SystemToolsManager] 音量值超出范围: ${volume}`)
+        logger.warn(`音量值超出范围: ${volume}`)
         return 'false'
       }
 
       // 使用 SystemVolumeController 设置音量
       await this.volumeController.setVolume(volume)
-      console.log(`[SystemToolsManager] 音量设置成功: ${volume}`)
+      logger.info(`音量设置成功: ${volume}`)
       return 'true'
     }
     catch (error) {
-      console.error('[SystemToolsManager] 设置音量失败:', error)
+      logger.error('设置音量失败:', error)
       return 'false'
     }
   }
@@ -372,15 +375,15 @@ Returns JSON with application details including name (for launching), displayNam
    */
   private async getVolume(_args: Record<string, unknown>): Promise<string> {
     try {
-      console.log('[SystemToolsManager] 获取当前音量')
+      logger.info('获取当前音量')
 
       // 使用 SystemVolumeController 获取音量
       const currentVolume = await this.volumeController.getVolume()
-      console.log(`[SystemToolsManager] 当前音量: ${currentVolume}`)
+      logger.info(`当前音量: ${currentVolume}`)
       return String(currentVolume)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 获取音量失败:', error)
+      logger.error('获取音量失败:', error)
       return '70' // 默认值
     }
   }
@@ -392,22 +395,22 @@ Returns JSON with application details including name (for launching), displayNam
     try {
       const appName = args.app_name as string
 
-      console.log(`[SystemToolsManager] 启动应用: ${appName}`)
+      logger.info(`启动应用: ${appName}`)
 
       // 使用 AppLauncher 启动应用
       const result = await AppLauncher.launch(appName)
 
       if (result.success) {
-        console.log(`[SystemToolsManager] 应用启动成功: ${appName}`)
+        logger.info(`应用启动成功: ${appName}`)
         return 'true'
       }
       else {
-        console.warn(`[SystemToolsManager] 应用启动失败: ${result.message}`)
+        logger.warn(`应用启动失败: ${result.message}`)
         return 'false'
       }
     }
     catch (error) {
-      console.error('[SystemToolsManager] 启动应用失败:', error)
+      logger.error('启动应用失败:', error)
       return 'false'
     }
   }
@@ -419,12 +422,12 @@ Returns JSON with application details including name (for launching), displayNam
     try {
       const filterName = (args.filter_name as string) || ''
 
-      console.log(`[SystemToolsManager] 列出运行中的应用, 过滤: ${filterName}`)
+      logger.info(`列出运行中的应用, 过滤: ${filterName}`)
 
       // 使用 ProcessManager 列出进程
       const processes = await ProcessManager.listRunning(filterName)
 
-      console.log(`[SystemToolsManager] 找到 ${processes.length} 个进程`)
+      logger.info(`找到 ${processes.length} 个进程`)
 
       // 格式化返回结果（JSON 字符串）
       const result = {
@@ -443,7 +446,7 @@ Returns JSON with application details including name (for launching), displayNam
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 列出运行应用失败:', error)
+      logger.error('列出运行应用失败:', error)
       const errorResult = {
         success: false,
         total_count: 0,
@@ -462,22 +465,22 @@ Returns JSON with application details including name (for launching), displayNam
       const appName = args.app_name as string
       const force = (args.force as boolean) || false
 
-      console.log(`[SystemToolsManager] 关闭应用: ${appName}, 强制: ${force}`)
+      logger.info(`关闭应用: ${appName}, 强制: ${force}`)
 
       // 使用 ProcessManager 关闭进程
       const killedCount = await ProcessManager.killByName(appName, force)
 
       if (killedCount > 0) {
-        console.log(`[SystemToolsManager] 成功关闭 ${killedCount} 个进程`)
+        logger.info(`成功关闭 ${killedCount} 个进程`)
         return 'true'
       }
       else {
-        console.warn(`[SystemToolsManager] 未找到或关闭失败: ${appName}`)
+        logger.warn(`未找到或关闭失败: ${appName}`)
         return 'false'
       }
     }
     catch (error) {
-      console.error('[SystemToolsManager] 关闭应用失败:', error)
+      logger.error('关闭应用失败:', error)
       return 'false'
     }
   }
@@ -490,19 +493,19 @@ Returns JSON with application details including name (for launching), displayNam
       const forceRefresh = (args.force_refresh as boolean) || false
       const searchQuery = (args.search_query as string) || ''
 
-      console.log(`[SystemToolsManager] 扫描已安装应用, 强制刷新: ${forceRefresh}, 搜索: ${searchQuery}`)
+      logger.info(`扫描已安装应用, 强制刷新: ${forceRefresh}, 搜索: ${searchQuery}`)
 
       let apps
 
       // 如果有搜索条件，使用搜索方法
       if (searchQuery) {
         apps = await AppScanner.search(searchQuery)
-        console.log(`[SystemToolsManager] 搜索到 ${apps.length} 个匹配的应用`)
+        logger.info(`搜索到 ${apps.length} 个匹配的应用`)
       }
       else {
         // 否则扫描所有应用
         apps = await AppScanner.scanInstalled(forceRefresh)
-        console.log(`[SystemToolsManager] 扫描到 ${apps.length} 个已安装应用`)
+        logger.info(`扫描到 ${apps.length} 个已安装应用`)
       }
 
       // 格式化返回结果（JSON 字符串）
@@ -524,7 +527,7 @@ Returns JSON with application details including name (for launching), displayNam
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 扫描应用失败:', error)
+      logger.error('扫描应用失败:', error)
       const errorResult = {
         success: false,
         total_count: 0,
@@ -584,7 +587,7 @@ Examples:
       },
     )
 
-    console.log('[SystemToolsManager] 注册摄像头工具成功')
+    logger.info('注册摄像头工具成功')
   }
 
   /**
@@ -644,7 +647,7 @@ Examples:
       },
     )
 
-    console.log('[SystemToolsManager] 注册截图工具成功')
+    logger.info('注册截图工具成功')
   }
 
   /**
@@ -654,7 +657,7 @@ Examples:
     try {
       const question = (args.question as string) || ''
 
-      console.log(`[SystemToolsManager] 拍照, 问题: ${question}`)
+      logger.info(`拍照, 问题: ${question}`)
 
       // 从数据库获取摄像头配置
       const db = DatabaseManager.getInstance()
@@ -670,7 +673,7 @@ Examples:
         clientId: '', // TODO: 从网络配置读取
       }
 
-      console.log(`[SystemToolsManager] 摄像头配置:`, {
+      logger.info(`摄像头配置:`, {
         useLocalVision: cameraConfig.useLocalVision,
         hasVlUrl: !!cameraOptions.vlUrl,
       })
@@ -690,11 +693,11 @@ Examples:
 
       // 分析图片
       const analyzeResult = await camera.analyze(question)
-      console.log(`[SystemToolsManager] 拍照完成`)
+      logger.info(`拍照完成`)
       return JSON.stringify(analyzeResult)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 拍照失败:', error)
+      logger.error('拍照失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '拍照失败',
@@ -710,7 +713,7 @@ Examples:
       const question = (args.question as string) || ''
       const display = (args.display as string) || null
 
-      console.log(`[SystemToolsManager] 截图, 问题: ${question}, 显示器: ${display}`)
+      logger.info(`截图, 问题: ${question}, 显示器: ${display}`)
 
       // 获取截图工具实例
       const screenshotTool = ScreenshotTool.getInstance()
@@ -719,14 +722,14 @@ Examples:
       const result = await screenshotTool.capture({ display })
 
       if (!result.success || !result.base64) {
-        console.error('[SystemToolsManager] 截图失败:', result.message)
+        logger.error('截图失败:', result.message)
         return JSON.stringify({
           success: false,
           message: result.message || '截图失败',
         })
       }
 
-      console.log('[SystemToolsManager] 截图成功，开始分析...')
+      logger.info('截图成功，开始分析...')
 
       // 保存图片到数据库
       const app = getApplication()
@@ -747,7 +750,7 @@ Examples:
 
       if (useLocalVision && cameraConfig.vlApiKey && cameraConfig.vlUrl) {
         // 使用本地 VL API 分析
-        console.log('[SystemToolsManager] 使用本地 VL API 分析截图')
+        logger.info('使用本地 VL API 分析截图')
         analysisResult = await this.analyzeImageWithLocalVL(
           result.base64,
           question || '请描述这张截图的内容',
@@ -756,7 +759,7 @@ Examples:
       }
       else if (visionConfig.url && visionConfig.token) {
         // 使用 MCP 客户端下发的 vision API
-        console.log('[SystemToolsManager] 使用 MCP vision API 分析截图')
+        logger.info('使用 MCP vision API 分析截图')
         analysisResult = await this.analyzeImageWithMCPVision(
           result.base64,
           question || '请描述这张截图的内容',
@@ -764,7 +767,7 @@ Examples:
         )
       }
       else {
-        console.warn('[SystemToolsManager] 未配置 vision API')
+        logger.warn('未配置 vision API')
         return JSON.stringify({
           success: false,
           message: '未配置视觉分析 API，无法分析截图内容',
@@ -774,7 +777,7 @@ Examples:
       return analysisResult
     }
     catch (error) {
-      console.error('[SystemToolsManager] 截图失败:', error)
+      logger.error('截图失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '截图失败',
@@ -791,7 +794,7 @@ Examples:
     config: { vlUrl: string, vlApiKey: string, vlModel: string },
   ): Promise<string> {
     try {
-      console.log('[SystemToolsManager] 使用本地 VL API 分析截图')
+      logger.info('使用本地 VL API 分析截图')
 
       // 动态导入 OpenAI 客户端
       const { default: OpenAI } = await import('openai')
@@ -822,7 +825,7 @@ Examples:
         },
       ]
 
-      console.log(`[SystemToolsManager] 发送请求到智谱 AI: ${config.vlUrl}`)
+      logger.info(`发送请求到智谱 AI: ${config.vlUrl}`)
 
       // 发送请求
       const completion = await client.chat.completions.create({
@@ -839,7 +842,7 @@ Examples:
         }
       }
 
-      console.log(`[SystemToolsManager] 本地 VL 分析完成`)
+      logger.info(`本地 VL 分析完成`)
 
       return JSON.stringify({
         success: true,
@@ -847,7 +850,7 @@ Examples:
       })
     }
     catch (error) {
-      console.error('[SystemToolsManager] 本地 VL API 分析失败:', error)
+      logger.error('本地 VL API 分析失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '分析失败',
@@ -864,7 +867,7 @@ Examples:
     config: { url: string, token: string },
   ): Promise<string> {
     try {
-      console.log('[SystemToolsManager] 使用 MCP vision API 分析截图')
+      logger.info('使用 MCP vision API 分析截图')
 
       // 将 base64 转换为 Buffer
       const imageBuffer = Buffer.from(base64Image, 'base64')
@@ -890,7 +893,7 @@ Examples:
       if (config.token)
         headers.Authorization = `Bearer ${config.token}`
 
-      console.log('[SystemToolsManager] 发送请求到:', config.url)
+      logger.info('发送请求到:', config.url)
 
       // 发送请求
       const response = await fetch(config.url, {
@@ -901,7 +904,7 @@ Examples:
 
       if (!response.ok) {
         const errorMsg = `Failed to analyze screenshot, status code: ${response.status}`
-        console.error(`[SystemToolsManager] ${errorMsg}`)
+        logger.error(`${errorMsg}`)
         return JSON.stringify({
           success: false,
           message: errorMsg,
@@ -909,7 +912,7 @@ Examples:
       }
 
       const result = await response.text()
-      console.log(`[SystemToolsManager] 分析完成: ${result}`)
+      logger.info(`分析完成: ${result}`)
 
       // 尝试解析 JSON
       try {
@@ -933,7 +936,7 @@ Examples:
       }
     }
     catch (error) {
-      console.error('[SystemToolsManager] MCP vision API 分析失败:', error)
+      logger.error('MCP vision API 分析失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '分析失败',
@@ -985,7 +988,7 @@ Examples:
       },
     )
 
-    console.log('[SystemToolsManager] 注册主题控制工具成功')
+    logger.info('注册主题控制工具成功')
   }
 
   /**
@@ -1017,7 +1020,7 @@ Returns:
       },
     )
 
-    console.log('[SystemToolsManager] 注册主题获取工具成功')
+    logger.info('注册主题获取工具成功')
   }
 
   /**
@@ -1058,7 +1061,7 @@ Examples:
       },
     )
 
-    console.log('[SystemToolsManager] 注册系统信息工具成功')
+    logger.info('注册系统信息工具成功')
   }
 
   /**
@@ -1070,20 +1073,20 @@ Examples:
 
       // 验证主题值
       if (!['light', 'dark', 'auto'].includes(theme)) {
-        console.warn(`[SystemToolsManager] 无效的主题值: ${theme}`)
+        logger.warn(`无效的主题值: ${theme}`)
         return JSON.stringify({
           success: false,
           message: `Invalid theme value: ${theme}. Must be 'light', 'dark', or 'auto'`,
         })
       }
 
-      console.log(`[SystemToolsManager] 设置主题为: ${theme}`)
+      logger.info(`设置主题为: ${theme}`)
 
       // 通过 McpServer 回调广播主题更改
       const mcpServer = McpServer.getInstance()
       mcpServer.broadcastTheme(theme as 'light' | 'dark' | 'auto')
 
-      console.log(`[SystemToolsManager] 主题设置成功: ${theme}`)
+      logger.info(`主题设置成功: ${theme}`)
       return JSON.stringify({
         success: true,
         theme,
@@ -1091,7 +1094,7 @@ Examples:
       })
     }
     catch (error) {
-      console.error('[SystemToolsManager] 设置主题失败:', error)
+      logger.error('设置主题失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '设置主题失败',
@@ -1104,7 +1107,7 @@ Examples:
    */
   private async getTheme(_args: Record<string, unknown>): Promise<string> {
     try {
-      console.log('[SystemToolsManager] 获取当前主题')
+      logger.info('获取当前主题')
 
       // 从任一窗口获取主题设置
       const { BrowserWindow } = await import('electron')
@@ -1129,11 +1132,11 @@ Examples:
         })()`,
       )
 
-      console.log(`[SystemToolsManager] 当前主题:`, result)
+      logger.info(`当前主题:`, result)
       return JSON.stringify(result)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 获取主题失败:', error)
+      logger.error('获取主题失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '获取主题失败',
@@ -1255,7 +1258,7 @@ Examples:
       },
     )
 
-    console.log('[SystemToolsManager] 注册倒计时器工具成功')
+    logger.info('注册倒计时器工具成功')
   }
 
   /**
@@ -1268,7 +1271,7 @@ Examples:
   ): void {
     const musicManager = MusicToolsManager.getInstance()
     musicManager.register(addTool, PropertyListClass, PropertyTypeEnum)
-    console.log('[SystemToolsManager] 注册音乐工具成功')
+    logger.info('注册音乐工具成功')
   }
 
   /**
@@ -1280,16 +1283,16 @@ Examples:
       const delay = args.delay as number | undefined
       const description = (args.description as string) || ''
 
-      console.log(`[SystemToolsManager] 启动倒计时 - 命令: ${command}, 延迟: ${delay}秒`)
+      logger.info(`启动倒计时 - 命令: ${command}, 延迟: ${delay}秒`)
 
       const timerService = TimerService.getInstance()
       const result = await timerService.startCountdown(command, delay, description)
 
-      console.log(`[SystemToolsManager] 倒计时启动结果:`, result)
+      logger.info(`倒计时启动结果:`, result)
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 启动倒计时失败:', error)
+      logger.error('启动倒计时失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '启动倒计时失败',
@@ -1304,16 +1307,16 @@ Examples:
     try {
       const timerId = args.timer_id as number
 
-      console.log(`[SystemToolsManager] 取消倒计时 ${timerId}`)
+      logger.info(`取消倒计时 ${timerId}`)
 
       const timerService = TimerService.getInstance()
       const result = await timerService.cancelCountdown(timerId)
 
-      console.log(`[SystemToolsManager] 倒计时取消结果:`, result)
+      logger.info(`倒计时取消结果:`, result)
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 取消倒计时失败:', error)
+      logger.error('取消倒计时失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '取消倒计时失败',
@@ -1326,16 +1329,16 @@ Examples:
    */
   private async getActiveTimers(_args: Record<string, unknown>): Promise<string> {
     try {
-      console.log('[SystemToolsManager] 获取活动倒计时列表')
+      logger.info('获取活动倒计时列表')
 
       const timerService = TimerService.getInstance()
       const result = await timerService.getActiveTimers()
 
-      console.log(`[SystemToolsManager] 当前活动倒计时数量: ${result.totalActiveTimers}`)
+      logger.info(`当前活动倒计时数量: ${result.totalActiveTimers}`)
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 获取活动倒计时失败:', error)
+      logger.error('获取活动倒计时失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '获取活动倒计时失败',
@@ -1348,7 +1351,7 @@ Examples:
    */
   private async getSystemInfo(_args: Record<string, unknown>): Promise<string> {
     try {
-      console.log('[SystemToolsManager] 获取系统信息')
+      logger.info('获取系统信息')
 
       const os = await import('node:os')
       const { app } = await import('electron')
@@ -1445,11 +1448,11 @@ Examples:
         },
       }
 
-      console.log('[SystemToolsManager] 系统信息获取成功')
+      logger.info('系统信息获取成功')
       return JSON.stringify(systemInfo, null, 2)
     }
     catch (error) {
-      console.error('[SystemToolsManager] 获取系统信息失败:', error)
+      logger.error('获取系统信息失败:', error)
       return JSON.stringify({
         success: false,
         message: error instanceof Error ? error.message : '获取系统信息失败',
@@ -1506,5 +1509,4 @@ Examples:
       availableTools,
     }
   }
-
 }

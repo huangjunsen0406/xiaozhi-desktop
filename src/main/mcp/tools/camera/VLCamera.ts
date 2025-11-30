@@ -5,6 +5,10 @@ import OpenAI from 'openai'
 import sharp from 'sharp'
 import { BaseCamera } from './BaseCamera'
 
+import { createLogger } from '../../../utils/logger'
+
+const logger = createLogger('VLCamera')
+
 export class VLCamera extends BaseCamera {
   private static instance: VLCamera | null = null
   private client: OpenAI
@@ -22,7 +26,7 @@ export class VLCamera extends BaseCamera {
       baseURL: baseUrl,
     })
     this.model = model
-    console.log(`[VLCamera] 初始化 VL 摄像头，模型: ${model}`)
+    logger.info(`初始化 VL 摄像头，模型: ${model}`)
   }
 
   static getInstance(
@@ -39,11 +43,11 @@ export class VLCamera extends BaseCamera {
 
   async capture(): Promise<CaptureResult> {
     try {
-      console.log('[VLCamera] 开始捕获图像...')
+      logger.info('开始捕获图像...')
 
       const win = BrowserWindow.getFocusedWindow()
       if (!win) {
-        console.error('[VLCamera] 未找到焦点窗口')
+        logger.error('未找到焦点窗口')
         return { success: false, message: '未找到焦点窗口' }
       }
 
@@ -74,12 +78,12 @@ export class VLCamera extends BaseCamera {
         .toBuffer()
 
       this.setJpegBuffer(resizedBuffer)
-      console.log(`[VLCamera] 图像捕获成功 (大小: ${resizedBuffer.length} 字节)`)
+      logger.info(`图像捕获成功 (大小: ${resizedBuffer.length} 字节)`)
 
       return { success: true, data: resizedBuffer }
     }
     catch (error) {
-      console.error('[VLCamera] 捕获图像失败:', error)
+      logger.error('捕获图像失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '捕获图像失败',
@@ -96,7 +100,7 @@ export class VLCamera extends BaseCamera {
         }
       }
 
-      console.log(`[VLCamera] 开始分析图像, 问题: ${question}`)
+      logger.info(`开始分析图像, 问题: ${question}`)
 
       const imageBase64 = this.jpegBuffer.toString('base64')
 
@@ -132,12 +136,12 @@ export class VLCamera extends BaseCamera {
         }
       }
 
-      console.log(`[VLCamera] 分析完成, 问题: ${question}`)
+      logger.info(`分析完成, 问题: ${question}`)
       return { success: true, text: result }
     }
     catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to analyze image with VL'
-      console.error('[VLCamera] 分析图像失败:', error)
+      logger.error('分析图像失败', error)
       return { success: false, message: errorMsg }
     }
   }

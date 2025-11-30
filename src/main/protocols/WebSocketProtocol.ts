@@ -3,7 +3,10 @@ import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
 import { AudioConfig } from '../constants/DeviceState'
 import { getConfigManager } from '../services/configManagerDB'
+import { createLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
+
+const logger = createLogger('WebSocket')
 
 /**
  * WebSocket 协议实现
@@ -63,7 +66,7 @@ export class WebSocketProtocol extends Protocol {
     this.clientId = config.getClientId()
 
     if (!this.websocketUrl) {
-      console.error('[WebSocketProtocol] WebSocket URL 未配置')
+      logger.error('WebSocket URL 未配置')
     }
   }
 
@@ -72,12 +75,12 @@ export class WebSocketProtocol extends Protocol {
    */
   async connect(): Promise<boolean> {
     if (this.isClosing) {
-      console.warn('[WebSocketProtocol] 连接正在关闭中，取消新的连接尝试')
+      logger.warn('连接正在关闭中，取消新的连接尝试')
       return false
     }
 
     if (!this.websocketUrl) {
-      console.error('[WebSocketProtocol] WebSocket URL 未配置')
+      logger.error('WebSocket URL 未配置')
       if (this.onNetworkErrorCallback) {
         this.onNetworkErrorCallback('WebSocket URL 未配置')
       }
@@ -104,7 +107,7 @@ export class WebSocketProtocol extends Protocol {
         headers.Authorization = `Bearer ${this.accessToken}`
       }
 
-      console.log('[WebSocketProtocol] 正在连接...', this.websocketUrl)
+      logger.info('正在连接...', { url: this.websocketUrl })
 
       // 创建 WebSocket 连接
       this.ws = new WebSocket(this.websocketUrl, {
@@ -161,7 +164,7 @@ export class WebSocketProtocol extends Protocol {
             // hello 握手成功
             this.connected = true
             this.reconnectAttempts = 0
-            console.log('[WebSocketProtocol] 已连接到 WebSocket 服务器')
+            logger.info('已连接到 WebSocket 服务器')
 
             // 启动心跳
             this.startHeartbeat()
@@ -187,7 +190,7 @@ export class WebSocketProtocol extends Protocol {
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('[WebSocketProtocol] 连接失败:', error)
+      logger.error('连接失败', error)
       await this.cleanup()
       if (this.onNetworkErrorCallback) {
         this.onNetworkErrorCallback(`无法连接服务: ${errorMessage}`)
@@ -213,13 +216,13 @@ export class WebSocketProtocol extends Protocol {
 
     this.closeHandler = (code: number, reason: Buffer) => {
       if (!this.isClosing) {
-        console.log(`[WebSocketProtocol] 连接已关闭: ${code} ${reason.toString()}`)
+        logger.info('连接已关闭', { code, reason: reason.toString() })
         this.handleConnectionLoss(`连接关闭: ${code} ${reason.toString()}`)
       }
     }
 
     this.errorHandler = (error: Error) => {
-      console.error('[WebSocketProtocol] WebSocket 错误:', error)
+      logger.error('WebSocket 错误', error)
       if (!this.isClosing) {
         this.handleConnectionLoss(`连接错误: ${error.message}`)
       }
@@ -328,7 +331,7 @@ export class WebSocketProtocol extends Protocol {
       }
     }
     catch (error) {
-      console.error('[WebSocketProtocol] 处理消息时出错:', error)
+      logger.error('处理消息时出错', error)
     }
   }
 
@@ -351,7 +354,7 @@ export class WebSocketProtocol extends Protocol {
       },
     }
 
-    console.log('[WebSocketProtocol] 发送 hello 消息:', helloMessage)
+    logger.debug('发送 hello 消息', helloMessage)
 
     await this.sendText(JSON.stringify(helloMessage))
   }
@@ -363,7 +366,7 @@ export class WebSocketProtocol extends Protocol {
     try {
       const transport = data.transport
       if (transport !== 'websocket') {
-        console.error(`[WebSocketProtocol] 不支持的传输方式: ${transport}`)
+        logger.error('不支持的传输方式', { transport })
         return
       }
 
@@ -373,17 +376,17 @@ export class WebSocketProtocol extends Protocol {
       }
 
       this.helloReceived = true
-      console.log('[WebSocketProtocol] 成功处理服务器 hello 消息')
+      logger.info('成功处理服务器 hello 消息')
 
       // 通知音频通道已打开
       if (this.onAudioChannelOpenedCallback) {
         Promise.resolve(this.onAudioChannelOpenedCallback()).catch((error) => {
-          console.error('[WebSocketProtocol] 音频通道打开回调出错:', error)
+          logger.error('音频通道打开回调出错', error)
         })
       }
     }
     catch (error) {
-      console.error('[WebSocketProtocol] 处理服务器 hello 消息时出错:', error)
+      logger.error('处理服务器 hello 消息时出错', error)
       if (this.onNetworkErrorCallback) {
         this.onNetworkErrorCallback(`处理服务器响应失败: ${error}`)
       }
@@ -414,12 +417,12 @@ export class WebSocketProtocol extends Protocol {
         // 设置 pong 超时
         this.pingTimeout = setTimeout(() => {
           this.pingTimeout = null
-          console.warn('[WebSocketProtocol] 心跳 pong 响应超时')
+          logger.warn('心跳 pong 响应超时')
           this.handleConnectionLoss('心跳超时')
         }, this.PING_TIMEOUT)
       }
       catch (error) {
-        console.error('[WebSocketProtocol] 发送心跳失败:', error)
+        logger.error('发送心跳失败', error)
         this.handleConnectionLoss('心跳发送失败')
       }
     }, this.PING_INTERVAL)
@@ -445,12 +448,12 @@ export class WebSocketProtocol extends Protocol {
   private async handleConnectionLoss(reason: string): Promise<void> {
     // 防止重复调用
     if (this.isHandlingConnectionLoss) {
-      console.log(`[WebSocketProtocol] 已在处理连接丢失，忽略: ${reason}`)
+      logger.debug('已在处理连接丢失，忽略', { reason })
       return
     }
     this.isHandlingConnectionLoss = true
 
-    console.warn(`[WebSocketProtocol] 连接丢失: ${reason}`)
+    logger.warn('连接丢失', { reason })
 
     const wasConnected = this.connected
     this.connected = false
@@ -461,7 +464,7 @@ export class WebSocketProtocol extends Protocol {
         this.onConnectionStateChangedCallback(false, reason)
       }
       catch (error) {
-        console.error('[WebSocketProtocol] 调用连接状态变化回调失败:', error)
+        logger.error('调用连接状态变化回调失败', error)
       }
     }
 
@@ -474,7 +477,7 @@ export class WebSocketProtocol extends Protocol {
         await Promise.resolve(this.onAudioChannelClosedCallback())
       }
       catch (error) {
-        console.error('[WebSocketProtocol] 调用音频通道关闭回调失败:', error)
+        logger.error('调用音频通道关闭回调失败', error)
       }
     }
 
@@ -509,11 +512,14 @@ export class WebSocketProtocol extends Protocol {
         this.onReconnectingCallback(this.reconnectAttempts, this.maxReconnectAttempts)
       }
       catch (error) {
-        console.error('[WebSocketProtocol] 调用重连回调失败:', error)
+        logger.error('调用重连回调失败', error)
       }
     }
 
-    console.log(`[WebSocketProtocol] 尝试自动重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+    logger.info('尝试自动重连', {
+      attempt: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+    })
 
     // 指数退避,最大 30 秒（使用可取消的延迟）
     const delay = Math.min(this.reconnectAttempts * 2000, 30000)
@@ -526,20 +532,23 @@ export class WebSocketProtocol extends Protocol {
 
     // 如果在等待期间被取消，直接返回
     if (this.isClosing) {
-      console.log('[WebSocketProtocol] 重连被取消')
+      logger.info('重连被取消')
       return
     }
 
     try {
       const success = await this.connect()
       if (success) {
-        console.log('[WebSocketProtocol] 自动重连成功')
+        logger.info('自动重连成功')
         if (this.onConnectionStateChangedCallback) {
           this.onConnectionStateChangedCallback(true, '重连成功')
         }
       }
       else {
-        console.warn(`[WebSocketProtocol] 自动重连失败 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+        logger.warn('自动重连失败', {
+          attempt: this.reconnectAttempts,
+          maxAttempts: this.maxReconnectAttempts,
+        })
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
           if (this.onNetworkErrorCallback) {
             this.onNetworkErrorCallback(`重连失败，已达到最大重连次数: ${originalReason}`)
@@ -549,7 +558,7 @@ export class WebSocketProtocol extends Protocol {
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('[WebSocketProtocol] 重连过程中出错:', error)
+      logger.error('重连过程中出错', error)
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         if (this.onNetworkErrorCallback) {
           this.onNetworkErrorCallback(`重连异常: ${errorMessage}`)
@@ -598,7 +607,7 @@ export class WebSocketProtocol extends Protocol {
         }
       }
       catch (error) {
-        console.error('[WebSocketProtocol] 关闭 WebSocket 时出错:', error)
+        logger.error('关闭 WebSocket 时出错', error)
       }
       this.ws = null
     }
@@ -609,12 +618,12 @@ export class WebSocketProtocol extends Protocol {
    */
   async sendText(message: string): Promise<boolean> {
     if (!this.ws || this.isClosing) {
-      console.warn('[WebSocketProtocol] WebSocket 未连接或正在关闭，无法发送消息')
+      logger.warn('WebSocket 未连接或正在关闭，无法发送消息')
       return false
     }
 
     if (this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[WebSocketProtocol] WebSocket 未就绪，无法发送消息')
+      logger.warn('WebSocket 未就绪，无法发送消息')
       return false
     }
 
@@ -624,7 +633,7 @@ export class WebSocketProtocol extends Protocol {
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('[WebSocketProtocol] 发送文本消息失败:', error)
+      logger.error('发送文本消息失败', error)
       this.handleConnectionLoss(`发送文本异常: ${errorMessage}`)
       return false
     }
@@ -644,7 +653,7 @@ export class WebSocketProtocol extends Protocol {
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('[WebSocketProtocol] 发送音频数据失败:', error)
+      logger.error('发送音频数据失败', error)
       this.handleConnectionLoss(`发送音频异常: ${errorMessage}`)
       return false
     }
@@ -690,7 +699,7 @@ export class WebSocketProtocol extends Protocol {
       }
     }
     catch (error) {
-      console.error('[WebSocketProtocol] 关闭音频通道失败:', error)
+      logger.error('关闭音频通道失败', error)
     }
     finally {
       this.isClosing = false
@@ -704,11 +713,11 @@ export class WebSocketProtocol extends Protocol {
     this.autoReconnectEnabled = enabled
     if (enabled) {
       this.maxReconnectAttempts = maxAttempts
-      console.log(`[WebSocketProtocol] 启用自动重连，最大尝试次数: ${maxAttempts}`)
+      logger.info('启用自动重连', { maxAttempts })
     }
     else {
       this.maxReconnectAttempts = 0
-      console.log('[WebSocketProtocol] 禁用自动重连')
+      logger.info('禁用自动重连')
     }
   }
 

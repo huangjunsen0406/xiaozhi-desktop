@@ -3,7 +3,11 @@ import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Buffer } from 'node:buffer'
 import { DatabaseManager } from '../services/database'
+import { createLogger } from '../utils/logger'
+
 import { Plugin } from './Plugin'
+
+const logger = createLogger('ChatPlugin')
 
 /**
  * 聊天插件
@@ -40,7 +44,7 @@ export class ChatPlugin extends Plugin {
    */
   async setup(app: Application): Promise<void> {
     await super.setup(app)
-    console.log('[ChatPlugin] 初始化...')
+    logger.info('初始化...')
   }
 
   /**
@@ -52,9 +56,9 @@ export class ChatPlugin extends Plugin {
     // 初始化会话（获取或创建今天的会话）
     this.currentSessionId = this.getTodaySessionId()
     await this.ensureSessionExists(this.currentSessionId)
-    console.log(`[ChatPlugin] 当前会话: ${this.currentSessionId}`)
+    logger.info(`当前会话: ${this.currentSessionId}`)
 
-    console.log('[ChatPlugin] 启动完成')
+    logger.info('启动完成')
   }
 
   /**
@@ -78,7 +82,7 @@ export class ChatPlugin extends Plugin {
     // 检查会话是否已存在
     const existingSession = db.getChatSession(sessionId)
     if (existingSession) {
-      console.log(`[ChatPlugin] 会话已存在: ${sessionId}`)
+      logger.info(`会话已存在: ${sessionId}`)
       return
     }
 
@@ -90,7 +94,7 @@ export class ChatPlugin extends Plugin {
       started_at: now,
     })
 
-    console.log(`[ChatPlugin] 已创建新会话: ${sessionId}`)
+    logger.info(`已创建新会话: ${sessionId}`)
   }
 
   /**
@@ -114,7 +118,7 @@ export class ChatPlugin extends Plugin {
     const todaySessionId = this.getTodaySessionId()
 
     if (todaySessionId !== this.currentSessionId) {
-      console.log(`[ChatPlugin] 检测到日期变化，切换会话: ${this.currentSessionId} → ${todaySessionId}`)
+      logger.info(`检测到日期变化，切换会话: ${this.currentSessionId} → ${todaySessionId}`)
 
       // 检查会话是否已存在
       const db = DatabaseManager.getInstance()
@@ -137,7 +141,6 @@ export class ChatPlugin extends Plugin {
   getCurrentSessionId(): string {
     return this.currentSessionId
   }
-
 
   /**
    * 获取 UIPlugin 实例
@@ -168,7 +171,7 @@ export class ChatPlugin extends Plugin {
         type: (message as { image_type?: string }).image_type || 'screenshot',
         data: (message as { image_data?: string }).image_data!,
       }
-      console.log('[ChatPlugin] 已缓存图片数据')
+      logger.info('已缓存图片数据')
     }
 
     // 跟踪情感
@@ -185,7 +188,7 @@ export class ChatPlugin extends Plugin {
     try {
       // 过滤掉音频触发工具的提示消息
       if (text === '获取用户输入文本。') {
-        console.log('[ChatPlugin] 过滤掉工具触发提示消息，跳过保存')
+        logger.info('过滤掉工具触发提示消息，跳过保存')
         return
       }
 
@@ -201,13 +204,13 @@ export class ChatPlugin extends Plugin {
         timestamp: Math.floor(Date.now() / 1000),
       })
 
-      console.log(`[ChatPlugin] 已保存用户消息 [${result.id}]: ${text.substring(0, 30)}...`)
+      logger.info(`已保存用户消息 [${result.id}]: ${text.substring(0, 30)}...`)
 
       // 广播消息保存事件
       this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'user')
     }
     catch (error) {
-      console.error('[ChatPlugin] 保存用户消息失败:', error)
+      logger.error('保存用户消息失败', error)
     }
   }
 
@@ -221,14 +224,14 @@ export class ChatPlugin extends Plugin {
     if (state === 'start') {
       // TTS 开始，确保使用今天的会话
       await this.checkAndSwitchSession()
-      console.log('[ChatPlugin] TTS 开始')
+      logger.info('TTS 开始')
     }
     else if (state === 'sentence_start' && text) {
       // 每个句子开始时直接保存到数据库
 
       // 过滤工具提示行（以 % 开头）
       if (text.startsWith('% ')) {
-        console.log('[ChatPlugin] 过滤工具提示句子:', text)
+        logger.info('过滤工具提示句子:', text)
         return
       }
 
@@ -246,18 +249,18 @@ export class ChatPlugin extends Plugin {
         timestamp: Math.floor(Date.now() / 1000),
       })
 
-      console.log(`[ChatPlugin] 已保存 TTS 句子 [${result.id}]: ${text.substring(0, 30)}...`)
+      logger.info(`已保存 TTS 句子 [${result.id}]: ${text.substring(0, 30)}...`)
 
       // 广播消息添加事件
       this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'assistant')
     }
     else if (state === 'sentence_end' && text) {
       // sentence_end 只是标记，不需要处理（内容已在 sentence_start 保存）
-      console.log('[ChatPlugin] 忽略 sentence_end')
+      logger.info('忽略 sentence_end')
     }
     else if (state === 'stop') {
       // TTS 结束，只保存图片（如果有）
-      console.log('[ChatPlugin] TTS 结束')
+      logger.info('TTS 结束')
 
       if (this.messageAccumulator.pendingImageData) {
         await this.checkAndSwitchSession()
@@ -272,7 +275,7 @@ export class ChatPlugin extends Plugin {
           timestamp: Math.floor(Date.now() / 1000),
         })
 
-        console.log(`[ChatPlugin] 已保存图片消息 [${imageResult.id}]`)
+        logger.info(`已保存图片消息 [${imageResult.id}]`)
         this.getUIPlugin()?.broadcastMessageAdded(imageResult.id, this.currentSessionId, 'assistant')
       }
 
@@ -296,7 +299,7 @@ export class ChatPlugin extends Plugin {
    */
   async saveImage(imageBase64: string, sourceType: 'screenshot' | 'camera'): Promise<void> {
     try {
-      console.log(`[ChatPlugin] 保存 ${sourceType} 图片到数据库`)
+      logger.info(`保存 ${sourceType} 图片到数据库`)
 
       // 确保使用今天的会话
       await this.checkAndSwitchSession()
@@ -311,13 +314,13 @@ export class ChatPlugin extends Plugin {
         timestamp: Math.floor(Date.now() / 1000),
       })
 
-      console.log(`[ChatPlugin] 已保存图片消息 [${result.id}] 到会话 ${this.currentSessionId}`)
+      logger.info(`已保存图片消息 [${result.id}] 到会话 ${this.currentSessionId}`)
 
       // 广播消息保存事件
       this.getUIPlugin()?.broadcastMessageAdded(result.id, this.currentSessionId, 'assistant')
     }
     catch (error) {
-      console.error('[ChatPlugin] 保存图片失败:', error)
+      logger.error('保存图片失败', error)
     }
   }
 
@@ -325,13 +328,13 @@ export class ChatPlugin extends Plugin {
    * 插件关闭
    */
   async shutdown(): Promise<void> {
-    console.log('[ChatPlugin] 正在关闭...')
+    logger.info('正在关闭...')
 
     // 重置状态
     this.resetMessageAccumulator()
 
     await super.shutdown()
 
-    console.log('[ChatPlugin] 已关闭')
+    logger.info('已关闭')
   }
 }

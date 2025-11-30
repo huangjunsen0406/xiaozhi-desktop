@@ -3,8 +3,12 @@
  * 根据配置返回对应的摄像头实现
  */
 import type { BaseCamera } from './BaseCamera'
+import { createLogger } from '../../../utils/logger'
 import { VLCamera } from './VLCamera'
+
 import { WebCamera } from './WebCamera'
+
+const logger = createLogger('Index')
 
 /** 摄像头配置 */
 interface CameraOptions {
@@ -31,7 +35,7 @@ interface CameraOptions {
 export function getCameraInstance(options: CameraOptions): BaseCamera {
   // 检查是否配置了智普 AI
   if (options.vlApiKey && options.vlUrl) {
-    console.log(`[Camera] 使用 VL Camera，URL: ${options.vlUrl}`)
+    logger.info(`使用 VL Camera，URL: ${options.vlUrl}`)
     const camera = VLCamera.getInstance(
       options.vlApiKey,
       options.vlUrl,
@@ -40,7 +44,7 @@ export function getCameraInstance(options: CameraOptions): BaseCamera {
     return camera
   }
 
-  console.log('[Camera] VL 配置未找到，使用 WebCamera 实现')
+  logger.info('VL 配置未找到，使用 WebCamera 实现')
   const camera = WebCamera.getInstance()
 
   if (options.explainUrl) {
@@ -71,27 +75,27 @@ export async function takePhoto(
 ): Promise<string> {
   try {
     const camera = getCameraInstance(options)
-    console.log(`[Camera] 使用摄像头实现: ${camera.constructor.name}`)
-    console.log(`[Camera] 拍照问题: ${question}`)
+    logger.info(`使用摄像头实现: ${camera.constructor.name}`)
+    logger.info(`拍照问题: ${question}`)
 
     // 拍照
     const captureResult = await camera.capture()
     if (!captureResult.success) {
-      console.error('[Camera] 拍照失败:', captureResult.message)
+      logger.error('拍照失败', captureResult.message)
       return JSON.stringify({
         success: false,
         message: captureResult.message || 'Failed to capture photo',
       })
     }
 
-    console.log('[Camera] 拍照成功，开始分析...')
+    logger.info('拍照成功，开始分析...')
 
     // 分析图片
     const analyzeResult = await camera.analyze(question)
     return JSON.stringify(analyzeResult)
   }
   catch (error) {
-    console.error('[Camera] 拍照并分析失败:', error)
+    logger.error('拍照并分析失败', error)
     return JSON.stringify({
       success: false,
       message: error instanceof Error ? error.message : 'Unknown error',

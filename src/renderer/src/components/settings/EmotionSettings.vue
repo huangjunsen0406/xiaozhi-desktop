@@ -61,7 +61,7 @@ async function loadEmotions() {
     }
   }
   catch (error) {
-    console.error('[EmotionSettings] 加载表情失败:', error)
+    console.error('加载表情失败', error)
     message.error('加载表情失败')
   }
 }
@@ -100,7 +100,7 @@ async function handleUpload(emotionType: EmotionType) {
     }
   }
   catch (error) {
-    console.error('[EmotionSettings] 上传失败:', error)
+    console.error('上传失败', error)
     message.error('上传失败')
   }
   finally {
@@ -136,7 +136,7 @@ async function handleReset(emotionType: EmotionType) {
         message.success('已恢复默认')
       }
       catch (error) {
-        console.error('[EmotionSettings] 重置失败:', error)
+        console.error('重置失败', error)
         message.error('重置失败')
       }
     },

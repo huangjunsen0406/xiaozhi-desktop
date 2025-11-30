@@ -5,6 +5,10 @@
 import type { Buffer } from 'node:buffer'
 import type { IotDescriptor, JsonMessage, McpPayload } from '../types/protocol'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('Protocol')
+
 export enum AbortReason {
   WAKE_WORD_DETECTED = 'wake_word_detected',
   USER_INTERRUPTED = 'user_interrupted',
@@ -218,7 +222,7 @@ export abstract class Protocol {
 
       // 检查是否为数组
       if (!Array.isArray(descriptorsData)) {
-        console.error('[Protocol] IoT descriptors 应该是数组')
+        logger.error('IoT descriptors 应该是数组')
         return false
       }
 
@@ -226,7 +230,7 @@ export abstract class Protocol {
       for (let i = 0; i < descriptorsData.length; i++) {
         const descriptor = descriptorsData[i]
         if (!descriptor) {
-          console.error(`[Protocol] 索引 ${i} 的 IoT descriptor 无效`)
+          logger.error(`索引 ${i} 的 IoT descriptor 无效`)
           continue
         }
 
@@ -240,18 +244,18 @@ export abstract class Protocol {
         try {
           const success = await this.sendText(JSON.stringify(message))
           if (!success) {
-            console.error(`[Protocol] 发送索引 ${i} 的 IoT descriptor 失败`)
+            logger.error(`发送索引 ${i} 的 IoT descriptor 失败`)
           }
         }
         catch (error) {
-          console.error(`[Protocol] 发送索引 ${i} 的 IoT descriptor 异常:`, error)
+          logger.error(`发送索引 ${i} 的 IoT descriptor 异常:`, error)
         }
       }
 
       return true
     }
     catch (error) {
-      console.error('[Protocol] 解析 IoT descriptors 失败:', error)
+      logger.error('解析 IoT descriptors 失败', error)
       return false
     }
   }
@@ -279,7 +283,7 @@ export abstract class Protocol {
       return await this.sendText(JSON.stringify(message))
     }
     catch (error) {
-      console.error('[Protocol] 发送 IoT states 失败:', error)
+      logger.error('发送 IoT states 失败', error)
       return false
     }
   }
@@ -306,7 +310,7 @@ export abstract class Protocol {
       return await this.sendText(JSON.stringify(message))
     }
     catch (error) {
-      console.error('[Protocol] 发送 MCP message 失败:', error)
+      logger.error('发送 MCP message 失败', error)
       return false
     }
   }

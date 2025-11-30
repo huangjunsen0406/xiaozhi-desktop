@@ -5,6 +5,10 @@ import { AbortReason } from '../protocols/Protocol'
 import { WakeWordDetector } from '../wake-word/WakeWordDetector'
 import { Plugin } from './Plugin'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('WakeWordPlugin')
+
 /**
  * 唤醒词插件
  * 负责检测唤醒词并触发自动对话
@@ -39,18 +43,18 @@ export class WakeWordPlugin extends Plugin {
   async setup(app: Application): Promise<void> {
     await super.setup(app)
 
-    console.log('[WakeWordPlugin] 开始设置...')
+    logger.info('开始设置...')
 
     try {
       const modelsPath = this.getModelsBasePath()
-      console.log('[WakeWordPlugin] 模型路径:', modelsPath)
+      logger.info('模型路径:', modelsPath)
 
       // 从数据库读取配置
       const { DatabaseManager } = await import('../services/database')
       const db = DatabaseManager.getInstance()
       const config = db.getFormattedWakeWordConfig()
 
-      console.log('[WakeWordPlugin] 唤醒词配置:', config)
+      logger.info('唤醒词配置:', config)
 
       // 创建检测器
       this.detector = new WakeWordDetector({
@@ -75,18 +79,18 @@ export class WakeWordPlugin extends Plugin {
       })
 
       this.detector.onError((error) => {
-        console.error('[WakeWordPlugin] 检测器错误:', error)
+        logger.error('检测器错误', error)
       })
 
       if (this.detector.isEnabled()) {
-        console.log('[WakeWordPlugin] ✓ 设置完成')
+        logger.info('✓ 设置完成')
       }
       else {
-        console.warn('[WakeWordPlugin] ✗ 检测器未启用（可能模型文件缺失）')
+        logger.warn('✗ 检测器未启用（可能模型文件缺失）')
       }
     }
     catch (error) {
-      console.error('[WakeWordPlugin] ✗ 设置失败:', error)
+      logger.error('✗ 设置失败', error)
       this.detector = null
     }
   }
@@ -96,11 +100,11 @@ export class WakeWordPlugin extends Plugin {
    */
   async reloadConfig(): Promise<void> {
     if (!this.detector) {
-      console.warn('[WakeWordPlugin] 检测器未初始化，无法重新加载')
+      logger.warn('检测器未初始化，无法重新加载')
       return
     }
 
-    console.log('[WakeWordPlugin] 重新加载配置...')
+    logger.info('重新加载配置...')
 
     try {
       // 从数据库读取最新配置
@@ -108,7 +112,7 @@ export class WakeWordPlugin extends Plugin {
       const db = DatabaseManager.getInstance()
       const config = db.getFormattedWakeWordConfig()
 
-      console.log('[WakeWordPlugin] 新配置:', config)
+      logger.info('新配置:', config)
 
       // 重新加载模型
       this.detector.reload({
@@ -127,10 +131,10 @@ export class WakeWordPlugin extends Plugin {
         this.detector.setCooldown(config.cooldownMs)
       }
 
-      console.log('[WakeWordPlugin] ✓ 配置重新加载完成')
+      logger.info('✓ 配置重新加载完成')
     }
     catch (error) {
-      console.error('[WakeWordPlugin] ✗ 配置重新加载失败:', error)
+      logger.error('✗ 配置重新加载失败', error)
     }
   }
 
@@ -141,19 +145,19 @@ export class WakeWordPlugin extends Plugin {
     await super.start()
 
     if (!this.detector || !this.detector.isEnabled()) {
-      console.warn('[WakeWordPlugin] 检测器未初始化，跳过启动')
+      logger.warn('检测器未初始化，跳过启动')
       return
     }
 
     // 订阅 AudioPlugin 的音频流
     const audioPlugin = this.app?.getAudioPlugin()
     if (!audioPlugin) {
-      console.error('[WakeWordPlugin] 未找到 AudioPlugin，无法启动')
+      logger.error('未找到 AudioPlugin，无法启动')
       return
     }
 
     audioPlugin.addAudioListener(this.detector)
-    console.log('[WakeWordPlugin] ✓ 已订阅音频流')
+    logger.info('✓ 已订阅音频流')
 
     // 启动后台音频采集（用于唤醒词检测）
     await this.startBackgroundAudioCapture(audioPlugin)
@@ -165,7 +169,7 @@ export class WakeWordPlugin extends Plugin {
   private async startBackgroundAudioCapture(audioPlugin: { getBackgroundAudioWindow: () => Electron.BrowserWindow | null }): Promise<void> {
     const backgroundWindow = audioPlugin.getBackgroundAudioWindow()
     if (!backgroundWindow || backgroundWindow.isDestroyed()) {
-      console.warn('[WakeWordPlugin] 后台音频窗口未找到')
+      logger.warn('后台音频窗口未找到')
       return
     }
 
@@ -176,9 +180,9 @@ export class WakeWordPlugin extends Plugin {
     }
     else {
       // 等待加载完成
-      console.log('[WakeWordPlugin] 等待后台音频窗口加载完成...')
+      logger.info('等待后台音频窗口加载完成...')
       backgroundWindow.webContents.once('did-finish-load', () => {
-        console.log('[WakeWordPlugin] 后台音频窗口已加载')
+        logger.info('后台音频窗口已加载')
         // 等待一小段时间确保页面完全初始化
         this.pendingTimer = setTimeout(() => {
           this.pendingTimer = null
@@ -193,14 +197,14 @@ export class WakeWordPlugin extends Plugin {
    */
   private sendAudioCommands(backgroundWindow: Electron.BrowserWindow): void {
     if (backgroundWindow.isDestroyed()) {
-      console.warn('[WakeWordPlugin] 窗口已销毁，无法启动音频')
+      logger.warn('窗口已销毁，无法启动音频')
       return
     }
 
-    console.log('[WakeWordPlugin] 启动后台音频采集...')
+    logger.info('启动后台音频采集...')
     // 直接启动采集，会自动使用配置的设备
     backgroundWindow.webContents.send('audio:command', 'start')
-    console.log('[WakeWordPlugin] ✓ 已启动后台音频采集，开始监听唤醒词')
+    logger.info('✓ 已启动后台音频采集，开始监听唤醒词')
   }
 
   /**
@@ -213,10 +217,10 @@ export class WakeWordPlugin extends Plugin {
    * 4. 监听中（LISTENING + auto/realtime）→ 忽略（避免重复启动）
    */
   private async onWakeWordDetected(keyword: string): Promise<void> {
-    console.log(`[WakeWordPlugin] 🎤 唤醒词触发: "${keyword}"`)
+    logger.info(`🎤 唤醒词触发: "${keyword}"`)
 
     if (!this.app) {
-      console.error('[WakeWordPlugin] Application 未初始化')
+      logger.error('Application 未初始化')
       return
     }
 
@@ -225,11 +229,11 @@ export class WakeWordPlugin extends Plugin {
       const snapshot = this.app.getStateSnapshot()
       const { device_state, listening_mode, keep_listening } = snapshot
 
-      console.log(`[WakeWordPlugin] 当前状态: deviceState=${device_state}, listeningMode=${listening_mode}, keepListening=${keep_listening}`)
+      logger.info(`当前状态: deviceState=${device_state}, listeningMode=${listening_mode}, keepListening=${keep_listening}`)
 
       // 情况3: 手动监听中，先停止手动模式
       if (device_state === 'listening' && listening_mode === 'manual') {
-        console.log('[WakeWordPlugin] 检测到手动模式激活，停止手动模式')
+        logger.info('检测到手动模式激活，停止手动模式')
         await this.app.stopListeningManual()
         // 等待状态稳定
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -237,7 +241,7 @@ export class WakeWordPlugin extends Plugin {
 
       // 情况1: 说话中，打断语音输出（包括半双工和全双工）
       if (device_state === 'speaking') {
-        console.log('[WakeWordPlugin] 当前正在说话，打断输出')
+        logger.info('当前正在说话，打断输出')
         await this.app.abortSpeaking(AbortReason.USER_INTERRUPTED)
 
         // 清空音频播放队列
@@ -253,16 +257,16 @@ export class WakeWordPlugin extends Plugin {
 
       // 情况4: 已经在监听中（自动对话模式），忽略唤醒词（避免重复启动）
       if (device_state === 'listening' && keep_listening && (listening_mode === 'realtime' || listening_mode === 'auto')) {
-        console.log('[WakeWordPlugin] 已在自动监听中，忽略唤醒词')
+        logger.info('已在自动监听中，忽略唤醒词')
         return
       }
 
       // 情况2 & 通用: 启动自动对话（会自动连接协议）
-      console.log('[WakeWordPlugin] 启动自动对话')
+      logger.info('启动自动对话')
       await this.app.startAutoConversation()
     }
     catch (error) {
-      console.error('[WakeWordPlugin] 处理唤醒词失败:', error)
+      logger.error('处理唤醒词失败', error)
     }
   }
 
@@ -280,12 +284,12 @@ export class WakeWordPlugin extends Plugin {
       const audioPlugin = this.app?.getAudioPlugin()
       if (audioPlugin) {
         audioPlugin.removeAudioListener(this.detector)
-        console.log('[WakeWordPlugin] 已取消订阅音频流')
+        logger.info('已取消订阅音频流')
       }
     }
 
     await super.stop()
-    console.log('[WakeWordPlugin] ✓ 已停止')
+    logger.info('✓ 已停止')
   }
 
   /**
@@ -309,6 +313,6 @@ export class WakeWordPlugin extends Plugin {
     }
 
     await super.shutdown()
-    console.log('[WakeWordPlugin] ✓ 已关闭')
+    logger.info('✓ 已关闭')
   }
 }

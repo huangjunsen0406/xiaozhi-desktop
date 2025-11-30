@@ -1,7 +1,10 @@
 import type { IpcContext } from '../types/ipc'
 import { ipcMain } from 'electron'
+import { createLogger } from '../utils/logger'
 import { registerShortcutIpcChannels } from './shortcutIpc'
 import { registerWakeWordIpc } from './wakeWordIpc'
+
+const logger = createLogger('AppIpc')
 
 /**
  * 注册 Application 控制相关的 IPC 通道
@@ -9,7 +12,7 @@ import { registerWakeWordIpc } from './wakeWordIpc'
  */
 export function registerAppIpc(context: IpcContext): void {
   const { application } = context
-  console.log('[App IPC] 注册 Application 控制 IPC 通道...')
+  logger.info('注册 Application 控制 IPC 通道...')
 
   // 注册唤醒词 IPC
   registerWakeWordIpc(context)
@@ -24,7 +27,7 @@ export function registerAppIpc(context: IpcContext): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[App IPC] 开始手动监听失败:', error)
+      logger.error('开始手动监听失败:', error)
       return { success: false, error: String(error) }
     }
   })
@@ -36,7 +39,7 @@ export function registerAppIpc(context: IpcContext): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[App IPC] 停止手动监听失败:', error)
+      logger.error('停止手动监听失败:', error)
       return { success: false, error: String(error) }
     }
   })
@@ -48,7 +51,7 @@ export function registerAppIpc(context: IpcContext): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[App IPC] 开始自动对话失败:', error)
+      logger.error('开始自动对话失败:', error)
       return { success: false, error: String(error) }
     }
   })
@@ -60,7 +63,7 @@ export function registerAppIpc(context: IpcContext): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[App IPC] 停止自动对话失败:', error)
+      logger.error('停止自动对话失败:', error)
       return { success: false, error: String(error) }
     }
   })
@@ -71,7 +74,7 @@ export function registerAppIpc(context: IpcContext): void {
       return application.getStateSnapshot()
     }
     catch (error) {
-      console.error('[App IPC] 获取状态快照失败:', error)
+      logger.error('获取状态快照失败:', error)
       return {
         device_state: 'idle',
         listening_mode: 'manual',
@@ -97,10 +100,10 @@ export function registerAppIpc(context: IpcContext): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[App IPC] 发送文本消息失败:', error)
+      logger.error('发送文本消息失败:', error)
       return { success: false, error: String(error) }
     }
   })
 
-  console.log('[App IPC] Application 控制 IPC 通道已注册')
+  logger.info('Application 控制 IPC 通道已注册')
 }

@@ -2,6 +2,9 @@ import type { AudioListener } from '../types/audio'
 import type { KeywordSpotter, KeywordSpotterStream } from '../types/database'
 import path from 'node:path'
 import sherpa_onnx from 'sherpa-onnx-node'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('WakeWord')
 
 export interface WakeWordDetectorConfig {
   language: string
@@ -46,8 +49,8 @@ export class WakeWordDetector implements AudioListener {
       const joinerPath = path.join(modelPath, 'joiner.onnx')
       const keywordsPath = path.join(modelPath, 'keywords.txt')
 
-      console.log('[WakeWordDetector] 开始初始化 KeywordSpotter')
-      console.log('[WakeWordDetector] 配置:', {
+      logger.info('开始初始化 KeywordSpotter')
+      logger.info('配置:', {
         language: config.language,
         modelPath,
         numThreads: config.numThreads || 4,
@@ -81,10 +84,10 @@ export class WakeWordDetector implements AudioListener {
       this.stream = this.keywordSpotter!.createStream()
       this.enabled = true
       this.shuttingDown = false
-      console.log('[WakeWordDetector] KeywordSpotter 初始化成功')
+      logger.info('KeywordSpotter 初始化成功')
     }
     catch (error) {
-      console.error('[WakeWordDetector] 初始化失败:', error)
+      logger.error('初始化失败:', error)
       this.enabled = false
 
       if (this.onErrorCallback) {
@@ -94,7 +97,7 @@ export class WakeWordDetector implements AudioListener {
   }
 
   reload(config: WakeWordDetectorConfig): void {
-    console.log('[WakeWordDetector] 重新加载模型...')
+    logger.info('重新加载模型...')
 
     this.shuttingDown = true
     this.enabled = false
@@ -177,7 +180,7 @@ export class WakeWordDetector implements AudioListener {
       }
     }
     catch (error) {
-      console.error('[WakeWordDetector] 处理音频队列失败:', error)
+      logger.error('处理音频队列失败:', error)
 
       if (this.onErrorCallback) {
         this.onErrorCallback(error as Error)
@@ -189,16 +192,16 @@ export class WakeWordDetector implements AudioListener {
   }
 
   private handleDetection(keyword: string): void {
-    console.log(keyword)
+    logger.debug('检测到关键词', { keyword })
 
     const now = Date.now()
     if (now - this.lastDetectionTime < this.cooldownMs) {
-      console.log(`[WakeWordDetector] 冷却中，忽略检测: ${keyword}`)
+      logger.debug('冷却中，忽略检测', { keyword })
       return
     }
 
     this.lastDetectionTime = now
-    console.log(`[WakeWordDetector] ✅ 检测到唤醒词: ${keyword}`)
+    logger.info(`✅ 检测到唤醒词: ${keyword}`)
 
     if (this.onDetectedCallback) {
       this.onDetectedCallback(keyword)
@@ -219,11 +222,11 @@ export class WakeWordDetector implements AudioListener {
 
   setCooldown(cooldownMs: number): void {
     this.cooldownMs = cooldownMs
-    console.log(`[WakeWordDetector] 冷却时间已更新: ${cooldownMs}ms`)
+    logger.info(`冷却时间已更新: ${cooldownMs}ms`)
   }
 
   shutdown(): void {
-    console.log('[WakeWordDetector] 正在关闭...')
+    logger.info('正在关闭...')
     this.shuttingDown = true
     this.enabled = false
 
@@ -237,7 +240,7 @@ export class WakeWordDetector implements AudioListener {
         this.audioQueue = []
         this.stream = null
         this.keywordSpotter = null
-        console.log('[WakeWordDetector] 已关闭')
+        logger.info('已关闭')
       }
       else {
         setTimeout(() => waitForProcessing(), 50)

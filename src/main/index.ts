@@ -8,8 +8,11 @@ import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
+import { createLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildDisplayModeMenu } from './utils/menuBuilder'
 import { ensureBackgroundAudioWindow, ensureMainWindow, onDisplayModeChange } from './windows/windowManager'
+
+const logger = createLogger('Index')
 
 app.commandLine.appendSwitch(
   'enable-features',
@@ -54,7 +57,7 @@ function ensureDockVisible(): void {
       app.dock!.show()
     }
     catch (error) {
-      console.log(error)
+      logger.error('设置 Dock 图标失败', error)
     }
   }
 }
@@ -64,6 +67,10 @@ app.on('ready', () => {
 })
 
 app.whenReady().then(() => {
+  // 初始化日志系统
+  initLogger()
+  logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
+
   electronApp.setAppUserModelId('com.electron')
 
   app.on('browser-window-created', (_, window) => {
@@ -90,7 +97,7 @@ app.whenReady().then(() => {
   const activationService = getActivationService()
   activationService.handleStartup().then(async (result) => {
     if (result.success) {
-      console.log('[Main] 创建后台音频窗口...')
+      logger.info('创建后台音频窗口...')
       const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
       const application = getApplication()
@@ -99,7 +106,7 @@ app.whenReady().then(() => {
       const audioPlugin = application.getAudioPlugin()
       if (audioPlugin && backgroundAudioWindow) {
         audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
-        console.log('[Main] AudioPlugin 窗口引用已设置')
+        logger.info('AudioPlugin 窗口引用已设置')
       }
 
       await application.start()
@@ -110,11 +117,11 @@ app.whenReady().then(() => {
       ensureMainWindow()
     }
     else {
-      console.error('激活检测失败:', result.error || result.message)
+      logger.error('激活检测失败', new Error(result.error || result.message))
       app.quit()
     }
   }).catch((error) => {
-    console.error('激活检测出错:', error)
+    logger.error('激活检测出错', error)
     app.quit()
   })
 
@@ -129,4 +136,12 @@ app.on('window-all-closed', () => {
   if (!isMacOS) {
     app.quit()
   }
+})
+
+// 应用退出前清理日志系统
+app.on('before-quit', async (event) => {
+  event.preventDefault()
+  logger.info('应用正在退出...')
+  await shutdownLogger()
+  app.exit(0)
 })

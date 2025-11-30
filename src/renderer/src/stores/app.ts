@@ -128,10 +128,10 @@ export const useAppStore = defineStore('app', () => {
     try {
       // 发送到服务器，等待 STT 返回后再显示
       await window.api.appSendText(trimmedText)
-      console.log('[AppStore] 文本消息已发送，等待 STT 返回:', trimmedText)
+      console.log('文本消息已发送，等待 STT 返回:', trimmedText)
     }
     catch (error) {
-      console.error('[AppStore] 发送文本失败:', error)
+      console.error('发送文本失败', error)
       throw error
     }
   }
@@ -142,10 +142,10 @@ export const useAppStore = defineStore('app', () => {
   async function startAutoConversation(): Promise<void> {
     try {
       await window.api.appStartAutoConversation()
-      console.log('[AppStore] 自动对话已启动')
+      console.log('自动对话已启动')
     }
     catch (error) {
-      console.error('[AppStore] 启动自动对话失败:', error)
+      console.error('启动自动对话失败', error)
       throw error
     }
   }
@@ -156,10 +156,10 @@ export const useAppStore = defineStore('app', () => {
   async function stopAutoConversation(): Promise<void> {
     try {
       await window.api.appStopAutoConversation()
-      console.log('[AppStore] 自动对话已停止')
+      console.log('自动对话已停止')
     }
     catch (error) {
-      console.error('[AppStore] 停止自动对话失败:', error)
+      console.error('停止自动对话失败', error)
       throw error
     }
   }
@@ -170,10 +170,10 @@ export const useAppStore = defineStore('app', () => {
   async function startListeningManual(): Promise<void> {
     try {
       await window.api.appStartListeningManual()
-      console.log('[AppStore] 手动监听已启动')
+      console.log('手动监听已启动')
     }
     catch (error) {
-      console.error('[AppStore] 启动手动监听失败:', error)
+      console.error('启动手动监听失败', error)
       throw error
     }
   }
@@ -184,10 +184,10 @@ export const useAppStore = defineStore('app', () => {
   async function stopListeningManual(): Promise<void> {
     try {
       await window.api.appStopListeningManual()
-      console.log('[AppStore] 手动监听已停止')
+      console.log('手动监听已停止')
     }
     catch (error) {
-      console.error('[AppStore] 停止手动监听失败:', error)
+      console.error('停止手动监听失败', error)
       throw error
     }
   }
@@ -202,10 +202,10 @@ export const useAppStore = defineStore('app', () => {
         mapIpcSessionToChatSession(s, s.session_id === currentSessionId.value),
       )
 
-      console.log('[AppStore] 会话列表已加载:', sessions.value.length)
+      console.log('会话列表已加载:', sessions.value.length)
     }
     catch (error) {
-      console.error('[AppStore] 加载会话列表失败:', error)
+      console.error('加载会话列表失败', error)
     }
   }
 
@@ -214,16 +214,16 @@ export const useAppStore = defineStore('app', () => {
    */
   async function loadMessages(sessionId: string) {
     try {
-      console.log('[AppStore] 加载会话消息:', sessionId)
+      console.log('加载会话消息:', sessionId)
 
       // 不传递 limit 参数，加载所有消息
       const msgs = await window.api.chatGetMessages(sessionId)
       messages.value = msgs.map(mapIpcMessageToChatMessage)
 
-      console.log('[AppStore] 消息已加载，数量:', messages.value.length)
+      console.log('消息已加载，数量:', messages.value.length)
     }
     catch (error) {
-      console.error('[AppStore] 加载消息失败:', error)
+      console.error('加载消息失败', error)
     }
   }
 
@@ -245,15 +245,15 @@ export const useAppStore = defineStore('app', () => {
           started_at: Math.floor(Date.now() / 1000),
         })
 
-        console.log('[AppStore] 创建今天的会话:', sessionId)
+        console.log('创建今天的会话:', sessionId)
         return sessionId
       }
 
-      console.log('[AppStore] 使用今天已有的会话:', todaySession.session_id)
+      console.log('使用今天已有的会话:', todaySession.session_id)
       return todaySession.session_id
     }
     catch (error) {
-      console.error('[AppStore] 获取今天会话失败:', error)
+      console.error('获取今天会话失败', error)
       return `chat_temp_${Date.now()}`
     }
   }
@@ -263,7 +263,7 @@ export const useAppStore = defineStore('app', () => {
    */
   async function switchSession(sessionId: string) {
     try {
-      console.log('[AppStore] 切换会话:', sessionId)
+      console.log('切换会话:', sessionId)
 
       // 不传递 limit 参数，加载所有消息
       const msgs = await window.api.chatGetMessages(sessionId)
@@ -277,10 +277,10 @@ export const useAppStore = defineStore('app', () => {
         s.active = s.sessionId === sessionId
       })
 
-      console.log('[AppStore] 会话已切换，消息数:', messages.value.length)
+      console.log('会话已切换，消息数:', messages.value.length)
     }
     catch (error) {
-      console.error('[AppStore] 切换会话失败:', error)
+      console.error('切换会话失败', error)
     }
   }
 
@@ -289,11 +289,11 @@ export const useAppStore = defineStore('app', () => {
    */
   async function deleteSession(sessionId: string) {
     try {
-      console.log('[AppStore] 删除会话:', sessionId)
+      console.log('删除会话:', sessionId)
 
       // 当天会话禁止删除，避免后续消息写入历史会话
       if (isTodaySession(sessionId)) {
-        console.warn('[AppStore] 当天会话禁止删除，已忽略操作')
+        console.warn('当天会话禁止删除，已忽略操作')
         return
       }
 
@@ -315,21 +315,21 @@ export const useAppStore = defineStore('app', () => {
         await loadSessions()
       }
 
-      console.log('[AppStore] 会话已删除')
+      console.log('会话已删除')
     }
     catch (error) {
-      console.error('[AppStore] 删除会话失败:', error)
+      console.error('删除会话失败', error)
     }
   }
   /**
    * 处理服务器消息（所有窗口统一调用）
    */
   async function handleServerMessage(message: ServerMessage) {
-    console.log('[AppStore] 处理服务器消息:', message.type, message.text || '')
+    console.log('处理服务器消息:', message.type, message.text || '')
 
     if (!currentSessionId.value) {
       currentSessionId.value = await getTodaySession()
-      console.log('[AppStore] 自动创建会话:', currentSessionId.value)
+      console.log('自动创建会话:', currentSessionId.value)
     }
     else if (message.type === 'llm' && message.emotion) {
       emotion.value = message.emotion

@@ -6,6 +6,10 @@
 import type { PropertyList, PropertyType } from '../../types'
 import { MusicPlayer } from './MusicPlayer'
 
+import { createLogger } from '../../../utils/logger'
+
+const logger = createLogger('MusicToolsManager')
+
 /**
  * 音乐工具管理器
  */
@@ -15,7 +19,7 @@ export class MusicToolsManager {
 
   private constructor() {
     this.musicPlayer = MusicPlayer.getInstance()
-    console.log('[MusicToolsManager] 音乐工具管理器初始化')
+    logger.info('音乐工具管理器初始化')
   }
 
   static getInstance(): MusicToolsManager {
@@ -33,7 +37,7 @@ export class MusicToolsManager {
     PropertyListClass: typeof PropertyList,
     PropertyTypeEnum: typeof PropertyType,
   ): void {
-    console.log('[MusicToolsManager] 开始注册音乐工具')
+    logger.info('开始注册音乐工具')
 
     this.registerSearchMusic(addTool, PropertyListClass, PropertyTypeEnum)
     this.registerPlayMusic(addTool, PropertyListClass, PropertyTypeEnum)
@@ -47,7 +51,7 @@ export class MusicToolsManager {
     this.registerGetStatus(addTool, PropertyListClass, PropertyTypeEnum)
     this.registerGetLyrics(addTool, PropertyListClass, PropertyTypeEnum)
 
-    console.log('[MusicToolsManager] 音乐工具注册完成')
+    logger.info('音乐工具注册完成')
   }
 
   /**
@@ -119,7 +123,7 @@ Examples:
       },
     )
 
-    console.log('[MusicToolsManager] 注册搜索音乐工具成功')
+    logger.info('注册搜索音乐工具成功')
   }
 
   /**
@@ -215,7 +219,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册播放音乐工具成功')
+    logger.info('注册播放音乐工具成功')
   }
 
   /**
@@ -255,7 +259,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册暂停音乐工具成功')
+    logger.info('注册暂停音乐工具成功')
   }
 
   /**
@@ -293,7 +297,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册恢复播放工具成功')
+    logger.info('注册恢复播放工具成功')
   }
 
   /**
@@ -332,7 +336,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册停止播放工具成功')
+    logger.info('注册停止播放工具成功')
   }
 
   /**
@@ -385,7 +389,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册设置音量工具成功')
+    logger.info('注册设置音量工具成功')
   }
 
   /**
@@ -436,7 +440,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册跳转工具成功')
+    logger.info('注册跳转工具成功')
   }
 
   /**
@@ -487,7 +491,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册设置循环播放工具成功')
+    logger.info('注册设置循环播放工具成功')
   }
 
   /**
@@ -544,7 +548,7 @@ Returns:
       },
     )
 
-    console.log('[MusicToolsManager] 注册设置播放速度工具成功')
+    logger.info('注册设置播放速度工具成功')
   }
 
   /**
@@ -589,7 +593,7 @@ Examples:
       },
     )
 
-    console.log('[MusicToolsManager] 注册获取状态工具成功')
+    logger.info('注册获取状态工具成功')
   }
 
   /**
@@ -656,6 +660,6 @@ Workflow:
       },
     )
 
-    console.log('[MusicToolsManager] 注册获取歌词工具成功')
+    logger.info('注册获取歌词工具成功')
   }
 }

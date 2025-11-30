@@ -20,7 +20,7 @@ async function handleSendText() {
     await appStore.sendText(message)
   }
   catch (error) {
-    console.error('[PanelView] 发送文本失败:', error)
+    console.error('发送文本失败', error)
   }
 }
 

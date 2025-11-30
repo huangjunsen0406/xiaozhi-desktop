@@ -3,7 +3,11 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { hostname, networkInterfaces } from 'node:os'
 import process from 'node:process'
 import { machineId } from 'node-machine-id'
+import { createLogger } from '../utils/logger'
+
 import { DatabaseManager } from './database'
+
+const logger = createLogger('DeviceFingerprintDB')
 
 interface DeviceFingerprint {
   system: string
@@ -22,9 +26,9 @@ export class DeviceFingerprintManager {
   }
 
   private async initialize(): Promise<void> {
-    console.log('[DeviceFingerprint] 开始初始化...')
+    logger.info('开始初始化...')
     await this.ensureDeviceInfo()
-    console.log('[DeviceFingerprint] 初始化完成')
+    logger.info('初始化完成')
   }
 
   static async getInstanceAsync(): Promise<DeviceFingerprintManager> {
@@ -84,7 +88,7 @@ export class DeviceFingerprintManager {
             const mac = net.mac
             if (mac && mac !== '00:00:00:00:00:00') {
               const normalized = this.normalizeMacAddress(mac)
-              console.log(`  • 找到 MAC 地址: ${normalized} (${name})`)
+              logger.info(`  • 找到 MAC 地址: ${normalized} (${name})`)
               return normalized
             }
           }
@@ -102,17 +106,17 @@ export class DeviceFingerprintManager {
         for (const net of netInfo) {
           if (net.mac && net.mac !== '00:00:00:00:00:00') {
             const normalized = this.normalizeMacAddress(net.mac)
-            console.log(`  • 找到备用 MAC: ${normalized} (${name})`)
+            logger.info(`  • 找到备用 MAC: ${normalized} (${name})`)
             return normalized
           }
         }
       }
 
-      console.warn('[DeviceFingerprint] 未找到有效的 MAC 地址')
+      logger.warn('未找到有效的 MAC 地址')
       return null
     }
     catch (error) {
-      console.error('[DeviceFingerprint] 获取 MAC 地址失败:', error)
+      logger.error('获取 MAC 地址失败', error)
       return null
     }
   }
@@ -122,7 +126,7 @@ export class DeviceFingerprintManager {
       return await machineId()
     }
     catch (error) {
-      console.error('获取机器 ID 失败:', error)
+      logger.error('获取机器 ID 失败:', error)
       return randomBytes(16).toString('hex')
     }
   }
@@ -174,7 +178,7 @@ export class DeviceFingerprintManager {
     let deviceInfo = this.db.getDeviceInfo()
 
     if (!deviceInfo) {
-      console.log('[DeviceFingerprint] 创建新设备身份...')
+      logger.info('创建新设备身份...')
       const fingerprint = await this.generateFingerprint()
 
       const serialNumber = await this.generateSerialNumber(fingerprint)
@@ -189,7 +193,7 @@ export class DeviceFingerprintManager {
         system: fingerprint.system,
       })
 
-      console.log('[DeviceFingerprint] 设备身份已创建')
+      logger.info('设备身份已创建')
     }
 
     this.deviceCache = deviceInfo
@@ -232,7 +236,7 @@ export class DeviceFingerprintManager {
     try {
       const deviceInfo = this.deviceCache || this.db.getDeviceInfo()
       if (!deviceInfo) {
-        console.error('[DeviceFingerprint] 设备信息不存在，无法设置激活状态')
+        logger.error('设备信息不存在，无法设置激活状态')
         return false
       }
 
@@ -242,11 +246,11 @@ export class DeviceFingerprintManager {
         this.deviceCache.activation_status = status ? 1 : 0
       }
 
-      console.log(`[DeviceFingerprint] 激活状态已更新: ${status ? '已激活' : '未激活'}`)
+      logger.info(`激活状态已更新: ${status ? '已激活' : '未激活'}`)
       return true
     }
     catch (error) {
-      console.error('[DeviceFingerprint] 设置激活状态失败:', error)
+      logger.error('设置激活状态失败', error)
       return false
     }
   }

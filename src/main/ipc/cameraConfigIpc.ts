@@ -3,6 +3,9 @@
  */
 import { ipcMain } from 'electron'
 import { DatabaseManager } from '../services/database'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('CameraConfigIpc')
 
 export function registerCameraConfigIpc(): void {
   const db = DatabaseManager.getInstance()
@@ -13,11 +16,11 @@ export function registerCameraConfigIpc(): void {
   ipcMain.handle('camera-config:get', async () => {
     try {
       const config = db.getFormattedCameraConfig()
-      console.log('[Camera Config IPC] 获取配置:', config)
+      logger.info('获取配置:', config)
       return config
     }
     catch (error) {
-      console.error('[Camera Config IPC] 获取配置失败:', error)
+      logger.error('获取配置失败:', error)
       throw error
     }
   })
@@ -39,15 +42,15 @@ export function registerCameraConfigIpc(): void {
     max_dimension?: number
   }) => {
     try {
-      console.log('[Camera Config IPC] 更新配置:', updates)
+      logger.info('更新配置:', updates)
       db.updateCameraConfig(updates)
-      console.log('[Camera Config IPC] 配置更新成功')
+      logger.info('配置更新成功')
     }
     catch (error) {
-      console.error('[Camera Config IPC] 更新配置失败:', error)
+      logger.error('更新配置失败:', error)
       throw error
     }
   })
 
-  console.log('[Camera Config IPC] 摄像头配置 IPC 注册完成')
+  logger.info('摄像头配置 IPC 注册完成')
 }

@@ -1,6 +1,9 @@
 import type { MqttInfo } from '../services/configManagerDB'
 import { ipcMain } from 'electron'
 import { getConfigManager } from '../services/configManagerDB'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('ConfigIpc')
 
 /**
  * 注册配置相关的 IPC 通道
@@ -14,11 +17,11 @@ export function registerConfigIpc(): void {
   ipcMain.handle('config:get-all', () => {
     try {
       const config = configManager.getAll()
-      console.log('IPC: 获取所有配置', config)
+      logger.info('获取所有配置', config)
       return { success: true, data: config }
     }
     catch (error) {
-      console.error('IPC: 获取配置失败', error)
+      logger.error('获取配置失败', error)
       return { success: false, error: String(error) }
     }
   })
@@ -58,11 +61,11 @@ export function registerConfigIpc(): void {
         default:
           value = null
       }
-      console.log(`IPC: 获取配置 ${key}`, value)
+      logger.info(`获取配置 ${key}`, value)
       return { success: true, data: value }
     }
     catch (error) {
-      console.error(`IPC: 获取配置 ${key} 失败`, error)
+      logger.error(`获取配置 ${key} 失败`, error)
       return { success: false, error: String(error) }
     }
   })
@@ -102,11 +105,11 @@ export function registerConfigIpc(): void {
         default:
           success = false
       }
-      console.log(`IPC: 设置配置 ${key}`, value, '结果:', success)
+      logger.info(`设置配置 ${key}`, { value, success })
       return { success }
     }
     catch (error) {
-      console.error(`IPC: 设置配置 ${key} 失败`, error)
+      logger.error(`设置配置 ${key} 失败`, error)
       return { success: false, error: String(error) }
     }
   })
@@ -116,7 +119,7 @@ export function registerConfigIpc(): void {
    */
   ipcMain.handle('config:update-all', (_, config: Record<string, string | undefined>) => {
     try {
-      console.log('IPC: 批量更新配置', config)
+      logger.info('批量更新配置', config)
 
       // 直接使用扁平格式更新
       const updates: Record<string, string | null> = {}
@@ -156,14 +159,14 @@ export function registerConfigIpc(): void {
       // 批量更新
       configManager.updateBatch(updates)
 
-      console.log('IPC: 配置更新成功')
+      logger.info('配置更新成功')
       return { success: true }
     }
     catch (error) {
-      console.error('IPC: 批量更新配置失败', error)
+      logger.error('批量更新配置失败', error)
       return { success: false, error: String(error) }
     }
   })
 
-  console.log('配置相关 IPC 通道已注册')
+  logger.info('配置相关 IPC 通道已注册')
 }

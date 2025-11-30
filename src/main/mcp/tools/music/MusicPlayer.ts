@@ -20,7 +20,11 @@ import type {
   SetVolumeResult,
   StopMusicResult,
 } from './types'
+import { createLogger } from '../../../utils/logger'
+
 import { ensureBackgroundAudioWindow } from '../../../windows/windowManager'
+
+const logger = createLogger('MusicPlayer')
 
 /**
  * 音乐播放器服务（单例）
@@ -42,7 +46,7 @@ export class MusicPlayer {
   private readonly MUSIC_API_BASE = 'https://music-dl.sayqz.com/api/'
 
   private constructor() {
-    console.log('[MusicPlayer] 音乐播放器初始化')
+    logger.info('音乐播放器初始化')
   }
 
   /**
@@ -77,9 +81,9 @@ export class MusicPlayer {
     metadata?: { name?: string, artist?: string, album?: string },
   ): Promise<PlayMusicResult> {
     try {
-      console.log(`[MusicPlayer] 播放音乐: ${filePath}, 起始位置: ${startPosition}秒`)
+      logger.info(`播放音乐: ${filePath}, 起始位置: ${startPosition}秒`)
       if (metadata?.name) {
-        console.log(`[MusicPlayer] 歌曲信息: ${metadata.name} - ${metadata.artist || '未知歌手'}`)
+        logger.info(`歌曲信息: ${metadata.name} - ${metadata.artist || '未知歌手'}`)
       }
 
       // 更新状态
@@ -107,7 +111,7 @@ export class MusicPlayer {
 
       if (success) {
         this.currentState = 'playing'
-        console.log(`[MusicPlayer] 音乐播放成功`)
+        logger.info(`音乐播放成功`)
         return {
           success: true,
           message: '音乐播放成功',
@@ -126,7 +130,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 播放音乐失败:', error)
+      logger.error('播放音乐失败', error)
       this.currentState = 'error'
       this.error = error instanceof Error ? error.message : '未知错误'
       return {
@@ -148,7 +152,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log('[MusicPlayer] 暂停播放')
+      logger.info('暂停播放')
 
       const success = await this.sendCommand('pause')
 
@@ -168,7 +172,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 暂停播放失败:', error)
+      logger.error('暂停播放失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '暂停播放失败',
@@ -188,7 +192,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log('[MusicPlayer] 恢复播放')
+      logger.info('恢复播放')
 
       const success = await this.sendCommand('resume')
 
@@ -207,7 +211,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 恢复播放失败:', error)
+      logger.error('恢复播放失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '恢复播放失败',
@@ -227,7 +231,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log('[MusicPlayer] 停止播放')
+      logger.info('停止播放')
 
       const success = await this.sendCommand('stop')
 
@@ -247,7 +251,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 停止播放失败:', error)
+      logger.error('停止播放失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '停止播放失败',
@@ -268,7 +272,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log(`[MusicPlayer] 设置音量: ${volume}`)
+      logger.info(`设置音量: ${volume}`)
 
       const success = await this.sendCommand('setVolume', { volume })
 
@@ -288,7 +292,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 设置音量失败:', error)
+      logger.error('设置音量失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '设置音量失败',
@@ -315,7 +319,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log(`[MusicPlayer] 跳转到: ${position}秒`)
+      logger.info(`跳转到: ${position}秒`)
 
       const success = await this.sendCommand('seek', { position })
 
@@ -335,7 +339,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 跳转失败:', error)
+      logger.error('跳转失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '跳转失败',
@@ -348,7 +352,7 @@ export class MusicPlayer {
    */
   async setLoop(loop: boolean): Promise<SetLoopResult> {
     try {
-      console.log(`[MusicPlayer] 设置循环播放: ${loop}`)
+      logger.info(`设置循环播放: ${loop}`)
 
       const success = await this.sendCommand('setLoop', { loop })
 
@@ -368,7 +372,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 设置循环播放失败:', error)
+      logger.error('设置循环播放失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '设置循环播放失败',
@@ -389,7 +393,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log(`[MusicPlayer] 设置播放速度: ${rate}`)
+      logger.info(`设置播放速度: ${rate}`)
 
       const success = await this.sendCommand('setPlaybackRate', { rate })
 
@@ -409,7 +413,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 设置播放速度失败:', error)
+      logger.error('设置播放速度失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '设置播放速度失败',
@@ -439,7 +443,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 获取状态失败:', error)
+      logger.error('获取状态失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '获取状态失败',
@@ -470,7 +474,7 @@ export class MusicPlayer {
    */
   async search(keyword: string, platform: MusicPlatform = 'kuwo', limit = 20): Promise<SearchMusicResult> {
     try {
-      console.log(`[MusicPlayer] 搜索音乐: ${keyword}, 平台: ${platform}`)
+      logger.info(`搜索音乐: ${keyword}, 平台: ${platform}`)
 
       const params = new URLSearchParams({
         type: 'search',
@@ -480,7 +484,7 @@ export class MusicPlayer {
       })
 
       const url = `${this.MUSIC_API_BASE}?${params.toString()}`
-      console.log(`[MusicPlayer] 请求 URL: ${url}`)
+      logger.info(`请求 URL: ${url}`)
 
       const response = await fetch(url)
 
@@ -505,7 +509,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log(`[MusicPlayer] 搜索到 ${data.data.total} 首歌曲`)
+      logger.info(`搜索到 ${data.data.total} 首歌曲`)
 
       return {
         success: true,
@@ -516,7 +520,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 搜索音乐失败:', error)
+      logger.error('搜索音乐失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '搜索音乐失败',
@@ -529,7 +533,7 @@ export class MusicPlayer {
    */
   async getLyrics(songId: string, platform: MusicPlatform = 'kuwo'): Promise<GetLyricsResult> {
     try {
-      console.log(`[MusicPlayer] 获取歌词: ID=${songId}, 平台=${platform}`)
+      logger.info(`获取歌词: ID=${songId}, 平台=${platform}`)
 
       const params = new URLSearchParams({
         type: 'lrc',
@@ -538,7 +542,7 @@ export class MusicPlayer {
       })
 
       const url = `${this.MUSIC_API_BASE}?${params.toString()}`
-      console.log(`[MusicPlayer] 请求 URL: ${url}`)
+      logger.info(`请求 URL: ${url}`)
 
       const response = await fetch(url)
 
@@ -555,7 +559,7 @@ export class MusicPlayer {
         }
       }
 
-      console.log(`[MusicPlayer] 歌词获取成功`)
+      logger.info(`歌词获取成功`)
 
       return {
         success: true,
@@ -564,7 +568,7 @@ export class MusicPlayer {
       }
     }
     catch (error) {
-      console.error('[MusicPlayer] 获取歌词失败:', error)
+      logger.error('获取歌词失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '获取歌词失败',
@@ -582,29 +586,29 @@ export class MusicPlayer {
 
       // 等待 webContents 准备就绪
       if (!audioWindow.webContents) {
-        console.error('[MusicPlayer] webContents 不可用')
+        logger.error('webContents 不可用')
         return false
       }
 
       // 等待页面加载完成
       if (audioWindow.webContents.isLoading()) {
-        console.log('[MusicPlayer] 等待后台音频窗口加载完成...')
+        logger.info('等待后台音频窗口加载完成...')
         await new Promise<void>((resolve) => {
           audioWindow.webContents.once('did-finish-load', () => {
-            console.log('[MusicPlayer] 后台音频窗口加载完成')
+            logger.info('后台音频窗口加载完成')
             resolve()
           })
         })
       }
 
       const message = { command, args }
-      console.log('[MusicPlayer] 发送 IPC 消息到后台音频窗口:', message)
+      logger.info('发送 IPC 消息到后台音频窗口:', message)
       audioWindow.webContents.send('music:command', message)
 
       return true
     }
     catch (error) {
-      console.error('[MusicPlayer] 发送指令失败:', error)
+      logger.error('发送指令失败', error)
       return false
     }
   }

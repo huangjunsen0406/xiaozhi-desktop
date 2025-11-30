@@ -15,6 +15,9 @@ import { join } from 'node:path'
 import process from 'node:process'
 import Database from 'better-sqlite3'
 import { app } from 'electron'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('Database')
 
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null
@@ -34,7 +37,7 @@ export class DatabaseManager {
     }
 
     const dbPath = join(dbDir, 'xiaozhi.db')
-    console.log(`[Database] 数据库路径: ${dbPath}`)
+    logger.info(`数据库路径: ${dbPath}`)
 
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
@@ -174,7 +177,7 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_message_at ON chat_sessions(last_message_at)
     `)
 
-    console.log('[Database] 数据库表初始化完成')
+    logger.info('数据库表初始化完成')
   }
 
   getOrCreateDeviceInfo(data: {

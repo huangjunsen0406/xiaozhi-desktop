@@ -1,5 +1,8 @@
 import type { BrowserWindow } from 'electron'
+import { createLogger } from '../utils/logger'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
+
+const logger = createLogger('WindowManager')
 
 // 窗口引用统一管理
 const windowRefs = {
@@ -31,7 +34,7 @@ export function getCurrentDisplayMode(): DisplayMode {
 function setDisplayMode(mode: DisplayMode): void {
   if (currentDisplayMode !== mode) {
     currentDisplayMode = mode
-    console.log(`[WindowManager] 显示模式已切换: ${mode}`)
+    logger.info(`显示模式已切换: ${mode}`)
 
     // 触发回调更新菜单
     if (onDisplayModeChanged) {
@@ -196,4 +199,3 @@ export function toggleToLive2d(): void {
 export function getLive2dWindow(): BrowserWindow | null {
   return windowRefs.live2d.current
 }
-

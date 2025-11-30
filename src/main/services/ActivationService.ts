@@ -1,9 +1,13 @@
 import type { ActivationData } from '@shared/types'
 import type { AxiosError } from 'axios'
 import axios from 'axios'
+import { createLogger } from '../utils/logger'
 import { showActivation } from '../windows/windowManager'
 import { getConfigManager } from './configManagerDB'
+
 import { DeviceFingerprintManager } from './deviceFingerprintDB'
+
+const logger = createLogger('ActivationService')
 
 /**
  * 激活结果接口（本地扩展）
@@ -45,19 +49,19 @@ export class ActivationService {
   }
 
   async handleStartup(): Promise<ActivationResult> {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('[激活服务] 开始初始化')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    logger.info('开始处理启动流程')
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
     try {
       await this.initializeDeviceFingerprint()
       await this.initializeConfig()
       const otaConfig = await this.fetchOtaConfig()
       const activationVersion = this.configManager.getActivationVersion() || 'v1'
-      console.log(`[激活服务] 激活版本: ${activationVersion}`)
+      logger.info(`激活版本: ${activationVersion}`)
 
       if (activationVersion === 'v1') {
-        console.log('[激活服务] v1 协议，无需激活')
+        logger.info('v1 协议初始化完成')
         return {
           success: true,
           needActivationUI: false,
@@ -74,7 +78,7 @@ export class ActivationService {
       return result
     }
     catch (error) {
-      console.error('[激活服务] 初始化失败:', error)
+      logger.error('初始化失败', error)
       return {
         success: false,
         needActivationUI: false,
@@ -92,20 +96,20 @@ export class ActivationService {
       const [serialNumber, hmacKey, isActivated] = this.deviceFingerprint.ensureDeviceIdentity()
       const macAddress = this.deviceFingerprint.getMacAddressFromEfuse()
 
-      console.log('[激活服务] 设备信息:')
-      console.log(`  序列号: ${serialNumber}`)
-      console.log(`  MAC: ${macAddress}`)
-      console.log(`  HMAC密钥: ${hmacKey ? `${hmacKey.substring(0, 8)}...` : 'null'}`)
-      console.log(`  本地状态: ${isActivated ? '已激活' : '未激活'}`)
+      logger.info('设备指纹信息:')
+      logger.info(`  序列号: ${serialNumber}`)
+      logger.info(`  MAC: ${macAddress}`)
+      logger.info(`  HMAC密钥: ${hmacKey ? `${hmacKey.substring(0, 8)}...` : 'null'}`)
+      logger.info(`  本地状态: ${isActivated ? '已激活' : '未激活'}`)
     }
   }
 
   private async initializeConfig(): Promise<void> {
     await this.configManager.initializeDeviceIdAsync()
 
-    console.log('[激活服务] 配置信息:')
-    console.log(`  Client ID: ${this.configManager.getClientId()}`)
-    console.log(`  Device ID: ${this.configManager.getDeviceId()}`)
+    logger.info('配置信息:')
+    logger.info(`  Client ID: ${this.configManager.getClientId()}`)
+    logger.info(`  Device ID: ${this.configManager.getDeviceId()}`)
   }
 
   private async fetchOtaConfig(): Promise<{
@@ -147,7 +151,7 @@ export class ActivationService {
       },
     }
 
-    console.log(`[激活服务] 获取 OTA 配置: ${otaUrl}`)
+    logger.info(`获取 OTA 配置: ${otaUrl}`)
 
     try {
       const response = await axios.post(otaUrl, payload, {
@@ -163,12 +167,12 @@ export class ActivationService {
       const data = response.data
       if (data.mqtt) {
         this.configManager.setMqttInfo(data.mqtt)
-        console.log(`  • MQTT Endpoint: ${data.mqtt.endpoint}`)
+        logger.info(`  • MQTT Endpoint: ${data.mqtt.endpoint}`)
       }
       if (data.websocket) {
         if (data.websocket.url) {
           this.configManager.setWebsocketUrl(data.websocket.url)
-          console.log(`  • WebSocket URL: ${data.websocket.url}`)
+          logger.info(`  • WebSocket URL: ${data.websocket.url}`)
         }
         if (data.websocket.token) {
           this.configManager.setWebsocketAccessToken(data.websocket.token)
@@ -201,12 +205,12 @@ export class ActivationService {
       this.cachedActivationData = otaConfig.activation
     }
 
-    console.log('[激活服务] 状态分析:')
-    console.log(`  本地: ${localActivated ? '已激活' : '未激活'}`)
-    console.log(`  服务器: ${serverActivated ? '已授权' : '需要激活'}`)
+    logger.info('分析激活状态:')
+    logger.info(`  本地: ${localActivated ? '已激活' : '未激活'}`)
+    logger.info(`  服务器: ${serverActivated ? '已授权' : '需要激活'}`)
 
     if (!localActivated && !serverActivated) {
-      console.log('  → 设备需要激活')
+      logger.info('  → 设备需要激活')
       return {
         success: true,
         needActivationUI: true,
@@ -215,7 +219,7 @@ export class ActivationService {
     }
 
     if (localActivated && serverActivated) {
-      console.log('  → 设备已激活')
+      logger.info('  → 设备已激活')
       return {
         success: true,
         needActivationUI: false,
@@ -224,7 +228,7 @@ export class ActivationService {
     }
 
     if (!localActivated && serverActivated) {
-      console.log('  → 自动修复本地激活状态')
+      logger.info('  → 自动修复本地激活状态')
       this.deviceFingerprint.setActivationStatus(true)
       return {
         success: true,
@@ -234,7 +238,7 @@ export class ActivationService {
     }
 
     if (localActivated && !serverActivated) {
-      console.log('  → 服务器取消授权，需要重新激活')
+      logger.info('  → 服务器取消授权，需要重新激活')
       return {
         success: true,
         needActivationUI: true,
@@ -253,7 +257,7 @@ export class ActivationService {
     const { challenge, code } = activationData
 
     if (!challenge || !code) {
-      console.error('[激活服务] 激活数据缺少必要字段')
+      logger.error('激活数据缺少必要字段')
       return false
     }
 
@@ -263,7 +267,7 @@ export class ActivationService {
 
       const serialNumber = this.deviceFingerprint.getSerialNumber()
       if (!serialNumber) {
-        console.error('[激活服务] 设备没有序列号')
+        logger.error('设备没有序列号')
         return false
       }
 
@@ -280,7 +284,7 @@ export class ActivationService {
 
       const otaUrl = this.configManager.getOtaVersionUrl()
       if (!otaUrl) {
-        console.error('[激活服务] OTA URL 未配置')
+        logger.error('OTA URL 未配置')
         return false
       }
 
@@ -292,14 +296,14 @@ export class ActivationService {
         'Content-Type': 'application/json',
       }
 
-      console.log(`[激活服务] 开始激活: ${activateUrl}`)
+      logger.info(`开始激活: ${activateUrl}`)
 
       const maxRetries = 60
       const retryInterval = 5000
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-          console.log(`[激活服务] 尝试 ${attempt + 1}/${maxRetries}`)
+          logger.info(`尝试 ${attempt + 1}/${maxRetries}`)
 
           const response = await axios.post(activateUrl, payload, {
             headers,
@@ -308,51 +312,51 @@ export class ActivationService {
           })
 
           if (response.status === 200) {
-            console.log('[激活服务] ✅ 激活成功')
+            logger.info('激活成功')
             this.deviceFingerprint.setActivationStatus(true)
             return true
           }
 
           if (response.status === 202) {
-            console.log('[激活服务] 等待用户输入验证码...')
+            logger.info('服务器处理中，等待重试')
             await this.delay(retryInterval)
             continue
           }
 
-          console.warn(`[激活服务] 服务器返回 ${response.status}，继续重试`)
+          logger.warn(`服务器返回 ${response.status}，继续重试`)
           await this.delay(retryInterval)
         }
         catch (error) {
           if (axios.isCancel(error)) {
-            console.log('[激活服务] 激活被取消')
+            logger.info('激活已取消')
             return false
           }
 
           if (axios.isAxiosError(error)) {
             const axiosError = error as AxiosError
             if (axiosError.response) {
-              console.warn(`[激活服务] 服务器错误 (HTTP ${axiosError.response.status})`)
+              logger.warn(`服务器错误 (HTTP ${axiosError.response.status})`)
             }
             else if (axiosError.request) {
-              console.warn('[激活服务] 网络请求失败，重试中...')
+              logger.warn('无法连接到激活服务器')
             }
             else {
-              console.warn('[激活服务] 请求配置错误:', axiosError.message)
+              logger.warn('请求配置错误:', axiosError.message)
             }
           }
           else {
-            console.error('[激活服务] 未知错误:', error)
+            logger.error('激活失败', error)
           }
 
           await this.delay(retryInterval)
         }
       }
 
-      console.error('[激活服务] 达到最大重试次数')
+      logger.error('达到最大重试次数')
       return false
     }
     catch (error) {
-      console.error('[激活服务] 激活失败:', error)
+      logger.error('初始化失败', error)
       return false
     }
     finally {
@@ -364,7 +368,7 @@ export class ActivationService {
   async startActivation(activationData?: ActivationData): Promise<boolean> {
     const data = activationData || this.cachedActivationData
     if (!data) {
-      console.error('[激活服务] 没有激活数据')
+      logger.error('没有激活数据')
       return false
     }
     return this.activate(data)
@@ -372,7 +376,7 @@ export class ActivationService {
 
   cancelActivation(): void {
     if (this.abortController) {
-      console.log('[激活服务] 取消激活流程')
+      logger.info('取消激活')
       this.abortController.abort()
       this.abortController = null
     }

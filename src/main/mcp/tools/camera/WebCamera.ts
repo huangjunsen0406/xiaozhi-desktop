@@ -9,6 +9,10 @@ import { BrowserWindow, ipcMain } from 'electron'
 import sharp from 'sharp'
 import { BaseCamera } from './BaseCamera'
 
+import { createLogger } from '../../../utils/logger'
+
+const logger = createLogger('WebCamera')
+
 export class WebCamera extends BaseCamera {
   private static instance: WebCamera | null = null
   private explainUrl = ''
@@ -18,7 +22,7 @@ export class WebCamera extends BaseCamera {
 
   private constructor(config?: Partial<CameraToolConfig>) {
     super(config)
-    console.log('[WebCamera] 初始化 Web 摄像头')
+    logger.info('初始化 Web 摄像头')
   }
 
   static getInstance(config?: Partial<CameraToolConfig>): WebCamera {
@@ -33,7 +37,7 @@ export class WebCamera extends BaseCamera {
    */
   setExplainUrl(url: string): void {
     this.explainUrl = url
-    console.log(`[WebCamera] Vision service URL 设置为: ${url}`)
+    logger.info(`Vision service URL 设置为: ${url}`)
   }
 
   /**
@@ -42,7 +46,7 @@ export class WebCamera extends BaseCamera {
   setExplainToken(token: string): void {
     this.explainToken = token
     if (token)
-      console.log('[WebCamera] Vision service token 已设置')
+      logger.info('Vision service token 已设置')
   }
 
   /**
@@ -64,12 +68,12 @@ export class WebCamera extends BaseCamera {
    */
   async capture(): Promise<CaptureResult> {
     try {
-      console.log('[WebCamera] 开始捕获图像...')
+      logger.info('开始捕获图像...')
 
       // 获取当前焦点窗口
       const win = BrowserWindow.getFocusedWindow()
       if (!win) {
-        console.error('[WebCamera] 未找到焦点窗口')
+        logger.error('未找到焦点窗口')
         return { success: false, message: '未找到焦点窗口' }
       }
 
@@ -104,12 +108,12 @@ export class WebCamera extends BaseCamera {
         .toBuffer()
 
       this.setJpegBuffer(resizedBuffer)
-      console.log(`[WebCamera] 图像捕获成功 (大小: ${resizedBuffer.length} 字节)`)
+      logger.info(`图像捕获成功 (大小: ${resizedBuffer.length} 字节)`)
 
       return { success: true, data: resizedBuffer }
     }
     catch (error) {
-      console.error('[WebCamera] 捕获图像失败:', error)
+      logger.error('捕获图像失败', error)
       return {
         success: false,
         message: error instanceof Error ? error.message : '捕获图像失败',
@@ -136,7 +140,7 @@ export class WebCamera extends BaseCamera {
         }
       }
 
-      console.log(`[WebCamera] 开始分析图像, 问题: ${question}`)
+      logger.info(`开始分析图像, 问题: ${question}`)
 
       // 准备 FormData
       const formData = new FormData()
@@ -164,12 +168,12 @@ export class WebCamera extends BaseCamera {
 
       if (!response.ok) {
         const errorMsg = `Failed to upload photo, status code: ${response.status}`
-        console.error(`[WebCamera] ${errorMsg}`)
+        logger.error(errorMsg)
         return { success: false, message: errorMsg }
       }
 
       const result = await response.text()
-      console.log(`[WebCamera] 分析完成: ${result}`)
+      logger.info(`分析完成: ${result}`)
 
       // 尝试解析 JSON
       try {
@@ -187,7 +191,7 @@ export class WebCamera extends BaseCamera {
     }
     catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to analyze image'
-      console.error('[WebCamera] 分析图像失败:', error)
+      logger.error('分析图像失败', error)
       return { success: false, message: errorMsg }
     }
   }

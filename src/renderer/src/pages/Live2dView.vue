@@ -50,9 +50,9 @@ onUnmounted(() => {
 })
 
 onMounted(async () => {
-  console.log('[Live2D] Component mounted')
-  console.log('[Live2D] Canvas ref:', canvasRef.value)
-  console.log('[Live2D] Container ref:', containerRef.value)
+  console.log('Component mounted')
+  console.log('Canvas ref:', canvasRef.value)
+  console.log('Container ref:', containerRef.value)
 
   if (!canvasRef.value) {
     console.error('[Live2D] Canvas element not found')
@@ -73,25 +73,25 @@ onMounted(async () => {
       resolution: window.devicePixelRatio,
       backgroundAlpha: 0,
     })
-    console.log('[Live2D] PIXI Application created')
+    console.log('PIXI Application created')
     status.value.app = true
 
     // 加载 Live2D 模型
     const modelPath = `/Resources/${MODEL_FOLDER}/model.json`
-    console.log('[Live2D] Loading model from:', modelPath)
+    console.log('Loading model from:', modelPath)
 
     model = await Live2DModel.from(modelPath)
-    console.log('[Live2D] Model loaded successfully:', model)
+    console.log('Model loaded successfully:', model)
     status.value.model = true
 
     // 添加模型到舞台
     app.stage.addChild(model)
     setupModel(model)
-    console.log('[Live2D] Model added to stage')
+    console.log('Model added to stage')
 
     // 监听模型点击事件
     model.on('hit', (hitAreas: string[]) => {
-      console.log('[Live2D] Hit areas:', hitAreas)
+      console.log('Hit areas:', hitAreas)
     })
 
     // 监听鼠标移动事件(用于穿透控制)
@@ -102,12 +102,12 @@ onMounted(async () => {
 
     // 启动口型同步
     setupLipSync()
-    console.log('[Live2D] 口型同步已启动')
+    console.log('口型同步已启动')
   }
   catch (error) {
-    console.error('[Live2D] Failed to initialize:', error)
+    console.error('Failed to initialize', error)
     if (error instanceof Error) {
-      console.error('[Live2D] Error details:', error.message, error.stack)
+      console.error('Error details', error.message, error.stack)
       status.value.error = error.message
     }
   }
@@ -116,7 +116,7 @@ onMounted(async () => {
 function setupModel(model: Live2DModel): void {
   // 计算缩放比例
   const bounds = model.getBounds()
-  console.log('[Live2D] Model original bounds:', bounds)
+  console.log('Model original bounds:', bounds)
 
   const scale = Math.min(
     canvasSize.width / bounds.width,
@@ -124,14 +124,14 @@ function setupModel(model: Live2DModel): void {
     1,
   )
   model.scale.set(scale)
-  console.log('[Live2D] Model scale:', scale)
+  console.log('Model scale:', scale)
 
   // 更新边界并居中
   const newBounds = model.getBounds()
   model.x = (canvasSize.width - newBounds.width) / 2 - newBounds.x
   model.y = canvasSize.height - newBounds.height - newBounds.y // 底部对齐并居中
 
-  console.log('[Live2D] Model positioned at:', { x: model.x, y: model.y })
+  console.log('Model positioned at:', { x: model.x, y: model.y })
 }
 
 function isMouseOnModel(e: MouseEvent): boolean {

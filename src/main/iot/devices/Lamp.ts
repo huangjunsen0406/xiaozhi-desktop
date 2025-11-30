@@ -1,4 +1,8 @@
+import { createLogger } from '../../utils/logger'
+
 import { Thing } from '../Thing'
+
+const logger = createLogger('Lamp')
 
 /**
  * 灯设备
@@ -32,7 +36,7 @@ export class Lamp extends Thing {
    */
   private async turnOn(): Promise<{ status: string, message: string }> {
     this.power = true
-    console.log('[Lamp] 灯已打开')
+    logger.info('灯已打开')
     return {
       status: 'success',
       message: '灯已打开',
@@ -44,7 +48,7 @@ export class Lamp extends Thing {
    */
   private async turnOff(): Promise<{ status: string, message: string }> {
     this.power = false
-    console.log('[Lamp] 灯已关闭')
+    logger.info('灯已关闭')
     return {
       status: 'success',
       message: '灯已关闭',

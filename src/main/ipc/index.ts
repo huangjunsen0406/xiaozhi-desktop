@@ -1,6 +1,7 @@
 import type { IpcContext } from '../types/ipc'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
+import { createLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
 import { getLive2dWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
@@ -12,14 +13,17 @@ import { registerChatIpc } from './chatIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
 import { registerMusicIpc } from './musicIpc'
+
 import { registerThemeIpc } from './themeIpc'
+
+const logger = createLogger('Index')
 
 /**
  * 注册基础 IPC 通道（不依赖 Application）
  * 包括: 悬停、激活、配置、音频、后台音频、窗口控制等
  */
 export function registerBasicIpcChannels(): void {
-  console.log('[IPC] 注册基础 IPC 通道...')
+  logger.info('注册基础 IPC 通道...')
 
   registerHoverIpc()
   registerActivationIpc()
@@ -120,7 +124,7 @@ export function registerBasicIpcChannels(): void {
     }
   })
 
-  console.log('[IPC] ✓ 基础 IPC 通道已注册')
+  logger.info('✓ 基础 IPC 通道已注册')
 }
 
 /**
@@ -129,7 +133,7 @@ export function registerBasicIpcChannels(): void {
  * @param context - IPC 上下文，包含 Application 实例
  */
 export function registerAppIpcChannels(context: IpcContext): void {
-  console.log('[IPC] 注册 Application IPC 通道...')
+  logger.info('注册 Application IPC 通道...')
   registerAppIpc(context)
 
   // 注入表情广播回调（通过 UIPlugin）
@@ -140,11 +144,11 @@ export function registerAppIpcChannels(context: IpcContext): void {
     setEmotionBroadcastCallback((emotionType: string) => {
       uiPluginWithEmotion.broadcastEmotion!(emotionType)
     })
-    console.log('[IPC] ✓ 表情广播回调已注入到 emotionIpc')
+    logger.info('✓ 表情广播回调已注入到 emotionIpc')
   }
   else {
-    console.warn('[IPC] UIPlugin 未找到或不支持 broadcastEmotion，表情广播将使用降级方案')
+    logger.warn('UIPlugin 未找到或不支持 broadcastEmotion，表情广播将使用降级方案')
   }
 
-  console.log('[IPC] ✓ Application IPC 通道已注册')
+  logger.info('✓ Application IPC 通道已注册')
 }

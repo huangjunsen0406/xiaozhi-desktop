@@ -1,6 +1,10 @@
 import type { BackgroundAudioStatus } from '@shared/types'
 import { ipcMain } from 'electron'
+import { createLogger } from '../utils/logger'
+
 import { getBackgroundAudioWindow } from '../windows/windowManager'
+
+const logger = createLogger('BackgroundAudioIpc')
 
 let audioStatus: BackgroundAudioStatus = {
   initialized: false,
@@ -20,7 +24,7 @@ export function registerBackgroundAudioIpc(): void {
       }
     }
     else {
-      console.warn('[BackgroundAudioIpc] 后台音频窗口不存在或已销毁')
+      logger.warn('后台音频窗口不存在或已销毁')
     }
   }
 
@@ -49,7 +53,7 @@ export function registerBackgroundAudioIpc(): void {
   })
 
   ipcMain.on('audio:state', (_, state: { capturing?: boolean, playing?: boolean, error?: string }) => {
-    console.log('[BackgroundAudioIpc] 收到音频状态更新:', state)
+    logger.info('收到音频状态更新:', state)
 
     audioStatus = {
       ...audioStatus,
@@ -59,5 +63,5 @@ export function registerBackgroundAudioIpc(): void {
     }
   })
 
-  console.log('[BackgroundAudioIpc] 后台音频 IPC 通道已注册')
+  logger.info('后台音频 IPC 通道已注册')
 }

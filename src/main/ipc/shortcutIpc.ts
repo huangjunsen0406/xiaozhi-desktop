@@ -2,11 +2,15 @@ import type { IpcMainInvokeEvent } from 'electron'
 import type { Application } from '../services/Application'
 import { ipcMain } from 'electron'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('ShortcutIpc')
+
 export function registerShortcutIpcChannels(application: Application) {
   const shortcutManager = application.getShortcutManager()
 
   if (!shortcutManager) {
-    console.warn('[ShortcutIPC] ShortcutManager 未初始化')
+    logger.warn('ShortcutManager 未初始化')
     return
   }
 
@@ -33,5 +37,5 @@ export function registerShortcutIpcChannels(application: Application) {
     return { success: true }
   })
 
-  console.log('[ShortcutIPC] 快捷键 IPC 通道已注册')
+  logger.info('快捷键 IPC 通道已注册')
 }

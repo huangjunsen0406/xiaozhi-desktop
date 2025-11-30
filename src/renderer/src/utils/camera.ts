@@ -16,7 +16,7 @@ export async function captureFromWebcam(
   let stream: MediaStream | null = null
 
   try {
-    console.log('[Camera] 请求摄像头权限...')
+    console.log('请求摄像头权限...')
 
     // 请求摄像头权限
     stream = await navigator.mediaDevices.getUserMedia({
@@ -27,7 +27,7 @@ export async function captureFromWebcam(
       audio: false,
     })
 
-    console.log('[Camera] 摄像头权限已获取')
+    console.log('摄像头权限已获取')
 
     // 创建 video 元素
     const video = document.createElement('video')
@@ -48,7 +48,7 @@ export async function captureFromWebcam(
     // 等待一小段时间让摄像头稳定
     await new Promise(resolve => setTimeout(resolve, 100))
 
-    console.log('[Camera] 视频流已准备好，捕获帧...')
+    console.log('视频流已准备好，捕获帧...')
 
     // 创建 canvas 并捕获当前帧
     const canvas = document.createElement('canvas')
@@ -82,14 +82,14 @@ export async function captureFromWebcam(
     return blob
   }
   catch (error) {
-    console.error('[Camera] 捕获图像失败:', error)
+    console.error('捕获图像失败', error)
     throw error
   }
   finally {
     // 停止摄像头
     if (stream) {
       stream.getTracks().forEach(track => track.stop())
-      console.log('[Camera] 摄像头已关闭')
+      console.log('摄像头已关闭')
     }
   }
 }
@@ -125,7 +125,7 @@ export async function getCameraDevices(): Promise<CameraDevice[]> {
     }))
   }
   catch (error) {
-    console.error('[Camera] 获取摄像头设备列表失败:', error)
+    console.error('获取摄像头设备列表失败', error)
     return []
   }
 }

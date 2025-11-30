@@ -2,6 +2,9 @@ import type { DeviceState } from '../constants/DeviceState'
 import type { JsonMessage } from '../types/protocol'
 import { webContents } from 'electron'
 import { Plugin } from './Plugin'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('UIPlugin')
 
 /**
  * UI 插件
@@ -60,7 +63,7 @@ export class UIPlugin extends Plugin {
     }
 
     this.broadcastToRenderer('app:state-changed', stateData)
-    console.log(`[UIPlugin] 已广播状态变化: ${state}`)
+    logger.info(`已广播状态变化: ${state}`)
   }
 
   /**
@@ -76,7 +79,7 @@ export class UIPlugin extends Plugin {
     }
 
     this.broadcastToRenderer('chat:image-captured', payload)
-    console.log(`[UIPlugin] 已广播 ${sourceType} 图片`)
+    logger.info(`已广播 ${sourceType} 图片`)
   }
 
   /**
@@ -85,7 +88,7 @@ export class UIPlugin extends Plugin {
    */
   broadcastTheme(theme: 'light' | 'dark' | 'auto'): void {
     this.broadcastToRenderer('theme:set', theme)
-    console.log(`[UIPlugin] 已广播主题变更: ${theme}`)
+    logger.info(`已广播主题变更: ${theme}`)
   }
 
   /**
@@ -94,7 +97,7 @@ export class UIPlugin extends Plugin {
    */
   broadcastEmotion(emotionType: string): void {
     this.broadcastToRenderer('emotion:changed', emotionType)
-    console.log(`[UIPlugin] 已广播表情变更: ${emotionType}`)
+    logger.info(`已广播表情变更: ${emotionType}`)
   }
 
   /**
@@ -137,7 +140,7 @@ export class UIPlugin extends Plugin {
       timestamp: Date.now(),
     }
     this.broadcastToRenderer('chat:session-created', payload)
-    console.log(`[UIPlugin] 已广播会话创建: ${sessionId}`)
+    logger.info(`已广播会话创建: ${sessionId}`)
   }
 
   /**
@@ -167,7 +170,7 @@ export class UIPlugin extends Plugin {
         wc.send(channel, data)
       }
       catch (error) {
-        console.error(`[UIPlugin] 向窗口 ${wc.id} 广播消息失败:`, error)
+        logger.error(`向窗口 ${wc.id} 广播消息失败:`, error)
       }
     })
   }

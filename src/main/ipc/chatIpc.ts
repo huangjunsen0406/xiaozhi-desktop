@@ -7,6 +7,10 @@ import { Buffer } from 'node:buffer'
 import { ipcMain } from 'electron'
 import { DatabaseManager } from '../services/database'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('ChatIpc')
+
 export function registerChatIpc(): void {
   const db = DatabaseManager.getInstance()
 
@@ -19,7 +23,7 @@ export function registerChatIpc(): void {
       return { success: true, data: sessions }
     }
     catch (error) {
-      console.error('[ChatIpc] 获取会话列表失败:', error)
+      logger.error('获取会话列表失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '获取会话列表失败',
@@ -36,7 +40,7 @@ export function registerChatIpc(): void {
       return { success: true, data: session }
     }
     catch (error) {
-      console.error('[ChatIpc] 获取会话失败:', error)
+      logger.error('获取会话失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '获取会话失败',
@@ -57,7 +61,7 @@ export function registerChatIpc(): void {
       return { success: true, data: session }
     }
     catch (error) {
-      console.error('[ChatIpc] 创建会话失败:', error)
+      logger.error('创建会话失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '创建会话失败',
@@ -87,7 +91,7 @@ export function registerChatIpc(): void {
       return { success: true, data: processedMessages }
     }
     catch (error) {
-      console.error('[ChatIpc] 获取消息失败:', error)
+      logger.error('获取消息失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '获取消息失败',
@@ -123,7 +127,7 @@ export function registerChatIpc(): void {
       return { success: true, data: message }
     }
     catch (error) {
-      console.error('[ChatIpc] 添加消息失败:', error)
+      logger.error('添加消息失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '添加消息失败',
@@ -140,7 +144,7 @@ export function registerChatIpc(): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[ChatIpc] 更新标题失败:', error)
+      logger.error('更新标题失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '更新标题失败',
@@ -157,7 +161,7 @@ export function registerChatIpc(): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[ChatIpc] 删除会话失败:', error)
+      logger.error('删除会话失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '删除会话失败',
@@ -174,7 +178,7 @@ export function registerChatIpc(): void {
       return { success: true }
     }
     catch (error) {
-      console.error('[ChatIpc] 清空消息失败:', error)
+      logger.error('清空消息失败', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '清空消息失败',
@@ -182,5 +186,5 @@ export function registerChatIpc(): void {
     }
   })
 
-  console.log('[ChatIpc] 聊天 IPC 通道已注册')
+  logger.info('聊天 IPC 通道已注册')
 }

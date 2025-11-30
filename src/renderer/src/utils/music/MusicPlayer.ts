@@ -17,7 +17,7 @@ export class MusicPlayer {
   private audio: HTMLAudioElement
 
   constructor() {
-    console.log('[MusicPlayer] 初始化渲染进程音乐播放器')
+    console.log('初始化渲染进程音乐播放器')
 
     // 创建 Audio 元素
     this.audio = new Audio()
@@ -35,19 +35,19 @@ export class MusicPlayer {
   private setupEventListeners(): void {
     // 播放开始
     this.audio.addEventListener('play', () => {
-      console.log('[MusicPlayer] 开始播放')
+      console.log('开始播放')
       this.notifyMainProcess({ state: 'playing' })
     })
 
     // 播放暂停
     this.audio.addEventListener('pause', () => {
-      console.log('[MusicPlayer] 已暂停')
+      console.log('已暂停')
       this.notifyMainProcess({ state: 'paused' })
     })
 
     // 播放结束
     this.audio.addEventListener('ended', () => {
-      console.log('[MusicPlayer] 播放结束')
+      console.log('播放结束')
       this.notifyMainProcess({
         state: 'stopped',
         currentTime: 0,
@@ -76,7 +76,7 @@ export class MusicPlayer {
         ? `加载失败: ${error.message} (code: ${error.code})`
         : '未知错误'
 
-      console.error('[MusicPlayer] 播放错误:', errorMessage, event)
+      console.error('播放错误', errorMessage, event)
       this.notifyMainProcess({
         state: 'error',
         error: errorMessage,
@@ -85,13 +85,13 @@ export class MusicPlayer {
 
     // 加载开始
     this.audio.addEventListener('loadstart', () => {
-      console.log('[MusicPlayer] 开始加载音乐')
+      console.log('开始加载音乐')
       this.notifyMainProcess({ state: 'loading' })
     })
 
     // 可以播放
     this.audio.addEventListener('canplay', () => {
-      console.log('[MusicPlayer] 音乐已就绪')
+      console.log('音乐已就绪')
     })
   }
 
@@ -99,7 +99,7 @@ export class MusicPlayer {
    * 监听主进程的指令
    */
   private listenToMainProcess(): void {
-    console.log('[MusicPlayer] 开始注册 IPC 监听器')
+    console.log('开始注册 IPC 监听器')
 
     window.api.musicOnCommand((message: MusicCommand) => {
       const { command, args } = message
@@ -152,7 +152,7 @@ export class MusicPlayer {
       }
     })
 
-    console.log('[MusicPlayer] 已注册主进程指令监听器')
+    console.log('已注册主进程指令监听器')
   }
 
   /**
@@ -196,7 +196,7 @@ export class MusicPlayer {
 
       // 播放
       this.audio.play().catch((error) => {
-        console.error('[MusicPlayer] 播放失败:', error)
+        console.error('播放失败', error)
         this.notifyMainProcess({
           state: 'error',
           error: error instanceof Error ? error.message : '播放失败',
@@ -204,7 +204,7 @@ export class MusicPlayer {
       })
     }
     catch (error) {
-      console.error('[MusicPlayer] 播放异常:', error)
+      console.error('播放异常', error)
       this.notifyMainProcess({
         state: 'error',
         error: error instanceof Error ? error.message : '播放异常',
@@ -220,7 +220,7 @@ export class MusicPlayer {
       this.audio.pause()
     }
     catch (error) {
-      console.error('[MusicPlayer] 暂停失败:', error)
+      console.error('暂停失败', error)
     }
   }
 
@@ -230,11 +230,11 @@ export class MusicPlayer {
   private resume(): void {
     try {
       this.audio.play().catch((error) => {
-        console.error('[MusicPlayer] 恢复播放失败:', error)
+        console.error('恢复播放失败', error)
       })
     }
     catch (error) {
-      console.error('[MusicPlayer] 恢复播放异常:', error)
+      console.error('恢复播放异常', error)
     }
   }
 
@@ -251,7 +251,7 @@ export class MusicPlayer {
       })
     }
     catch (error) {
-      console.error('[MusicPlayer] 停止失败:', error)
+      console.error('停止失败', error)
     }
   }
 
@@ -265,7 +265,7 @@ export class MusicPlayer {
       console.log(`[MusicPlayer] 音量设置为: ${volume}`)
     }
     catch (error) {
-      console.error('[MusicPlayer] 设置音量失败:', error)
+      console.error('设置音量失败', error)
     }
   }
 
@@ -278,7 +278,7 @@ export class MusicPlayer {
       console.log(`[MusicPlayer] 跳转到: ${position}秒`)
     }
     catch (error) {
-      console.error('[MusicPlayer] 跳转失败:', error)
+      console.error('跳转失败', error)
     }
   }
 
@@ -291,7 +291,7 @@ export class MusicPlayer {
       console.log(`[MusicPlayer] 循环播放: ${loop}`)
     }
     catch (error) {
-      console.error('[MusicPlayer] 设置循环失败:', error)
+      console.error('设置循环失败', error)
     }
   }
 
@@ -304,7 +304,7 @@ export class MusicPlayer {
       console.log(`[MusicPlayer] 播放速度: ${rate}x`)
     }
     catch (error) {
-      console.error('[MusicPlayer] 设置播放速度失败:', error)
+      console.error('设置播放速度失败', error)
     }
   }
 
@@ -316,7 +316,7 @@ export class MusicPlayer {
       window.api.musicStatusUpdate(status)
     }
     catch (error) {
-      console.error('[MusicPlayer] 通知主进程失败:', error)
+      console.error('通知主进程失败', error)
     }
   }
 
@@ -324,7 +324,7 @@ export class MusicPlayer {
    * 清理资源
    */
   dispose(): void {
-    console.log('[MusicPlayer] 清理资源')
+    console.log('清理资源')
     this.audio.pause()
     this.audio.src = ''
     // 移除所有事件监听器
@@ -349,6 +349,6 @@ export function getMusicPlayer(): MusicPlayer {
  * 初始化音乐播放器（在应用启动时调用）
  */
 export function initMusicPlayer(): void {
-  console.log('[MusicPlayer] 初始化全局音乐播放器')
+  console.log('初始化全局音乐播放器')
   getMusicPlayer()
 }

@@ -37,7 +37,7 @@ export async function getDeviceIdByName(
     }
   }
   catch (error) {
-    console.error('[DeviceUtils] 获取设备ID失败:', error)
+    console.error('获取设备ID失败', error)
     return undefined
   }
 }
@@ -74,7 +74,7 @@ export async function getDeviceIdsFromConfig(): Promise<{
     return { inputDeviceId, outputDeviceId }
   }
   catch (error) {
-    console.error('[DeviceUtils] 获取设备ID失败:', error)
+    console.error('获取设备ID失败', error)
     return {}
   }
 }

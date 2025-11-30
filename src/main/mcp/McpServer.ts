@@ -6,8 +6,11 @@ import type {
   McpToolResult,
   ToolCallback,
 } from './types'
+import { createLogger } from '../utils/logger'
 import { SystemToolsManager } from './tools/SystemToolsManager'
 import { PropertyList, PropertyType } from './types'
+
+const logger = createLogger('MCP')
 
 /**
  * MCP Server 实现
@@ -69,11 +72,11 @@ export class McpServer {
 
     // 检查是否已存在
     if (this.tools.some(t => t.name === tool.name)) {
-      console.warn(`[MCP] Tool ${tool.name} already added`)
+      logger.warn('工具已存在', { name: tool.name })
       return
     }
 
-    console.log(`[MCP] Add tool: ${tool.name}`)
+    logger.info('添加工具', { name: tool.name })
     this.tools.push(tool)
   }
 
@@ -88,7 +91,7 @@ export class McpServer {
    * 4. 将原有工具追加到后面
    */
   async addCommonTools(): Promise<void> {
-    console.log('[MCP] Adding common tools...')
+    logger.info('添加通用工具...')
 
     try {
       // 备份原有工具列表
@@ -111,10 +114,10 @@ export class McpServer {
       // 将原有工具恢复到列表末尾
       this.tools.push(...originalTools)
 
-      console.log(`[MCP] Total tools registered: ${this.tools.length}`)
+      logger.info('工具注册完成', { totalTools: this.tools.length })
     }
     catch (error) {
-      console.error('[MCP] Failed to add common tools:', error)
+      logger.error('添加通用工具失败', error)
     }
   }
 
@@ -128,33 +131,33 @@ export class McpServer {
           ? JSON.parse(message) as JsonRpcRequest
           : message as unknown as JsonRpcRequest
 
-      console.log('[MCP] 解析消息:', JSON.stringify(data, null, 2))
+      logger.debug('解析消息', data)
 
       // 检查 JSONRPC 版本
       if (data.jsonrpc !== '2.0') {
-        console.error(`[MCP] Invalid JSONRPC version: ${data.jsonrpc}`)
+        logger.error('JSONRPC 版本无效', { version: data.jsonrpc })
         return
       }
 
       const { method, id, params } = data
 
       if (!method) {
-        console.error('[MCP] Missing method')
+        logger.error('缺少 method 字段')
         return
       }
 
       // 忽略通知消息
       if (method.startsWith('notifications')) {
-        console.log(`[MCP] 忽略通知消息: ${method}`)
+        logger.debug('忽略通知消息', { method })
         return
       }
 
       if (id === undefined) {
-        console.error(`[MCP] Invalid id for method: ${method}`)
+        logger.error('method 缺少 id', { method })
         return
       }
 
-      console.log(`[MCP] 处理方法: ${method}, ID: ${id}`)
+      logger.debug('处理方法', { method, id })
 
       // 路由到不同的处理器
       if (method === 'initialize') {
@@ -167,12 +170,12 @@ export class McpServer {
         await this.handleToolCall(id, params)
       }
       else {
-        console.error(`[MCP] Method not implemented: ${method}`)
+        logger.error('方法未实现', { method })
         await this.replyError(id, `Method not implemented: ${method}`)
       }
     }
     catch (error) {
-      console.error('[MCP] Error parsing message:', error)
+      logger.error('解析消息失败', error)
       // 尝试回复错误（如果有 id）
       if (typeof error === 'object' && error && 'id' in error) {
         await this.replyError(error.id as string | number, String(error))
@@ -269,7 +272,7 @@ export class McpServer {
     id: string | number,
     params?: Record<string, unknown>,
   ): Promise<void> {
-    console.log(`[MCP] 收到工具调用请求! ID=${id}, 参数=`, params)
+    logger.info('收到工具调用请求', { id, params })
 
     const toolName = params?.name as string | undefined
     if (!toolName) {
@@ -277,7 +280,7 @@ export class McpServer {
       return
     }
 
-    console.log(`[MCP] 尝试调用工具: ${toolName}`)
+    logger.debug('尝试调用工具', { toolName })
 
     // 查找工具
     const tool = this.tools.find(t => t.name === toolName)
@@ -289,16 +292,16 @@ export class McpServer {
     // 获取参数
     const args = (params?.arguments as Record<string, unknown>) || {}
 
-    console.log(`[MCP] 开始执行工具 ${toolName}, 参数:`, args)
+    logger.debug('开始执行工具', { toolName, args })
 
     // 调用工具
     try {
       const result = await this.callTool(tool, args)
-      console.log(`[MCP] 工具 ${toolName} 执行成功，结果:`, result)
+      logger.info('工具执行成功', { toolName })
       await this.replyResult(id, JSON.parse(result))
     }
     catch (error) {
-      console.error(`[MCP] 工具 ${toolName} 执行失败:`, error)
+      logger.error('工具执行失败', error, { toolName })
       await this.replyError(id, String(error))
     }
   }
@@ -334,7 +337,7 @@ export class McpServer {
       return JSON.stringify(mcpResult)
     }
     catch (error) {
-      console.error(`[MCP] Error calling tool ${tool.name}:`, error)
+      logger.error('调用工具异常', error, { toolName: tool.name })
       const mcpResult: McpToolResult = {
         content: [{ type: 'text', text: String(error) }],
         isError: true,
@@ -381,7 +384,7 @@ export class McpServer {
           if (token && 'setExplainToken' in camera && typeof camera.setExplainToken === 'function') {
             camera.setExplainToken(token)
           }
-          console.log(`[MCP] Vision service configured with URL: ${url}`)
+          logger.info('Vision 服务已配置', { url })
         }
       }
     }
@@ -405,13 +408,13 @@ export class McpServer {
       result,
     }
 
-    console.log(`[MCP] 发送成功响应: ID=${id}`)
+    logger.debug('发送成功响应', { id })
 
     if (this.sendCallback) {
       await this.sendCallback(JSON.stringify(payload))
     }
     else {
-      console.error('[MCP] Send callback not set!')
+      logger.error('发送回调未设置')
     }
   }
 
@@ -427,7 +430,7 @@ export class McpServer {
       },
     }
 
-    console.error(`[MCP] 发送错误响应: ID=${id}, 错误=${message}`)
+    logger.error('发送错误响应', { id, message })
 
     if (this.sendCallback) {
       await this.sendCallback(JSON.stringify(payload))
@@ -440,7 +443,7 @@ export class McpServer {
    */
   setImageBroadcastCallback(callback: (imageBase64: string, sourceType: 'screenshot' | 'camera') => void): void {
     this.imageBroadcastCallback = callback
-    console.log('[MCP] 图片广播回调已设置')
+    logger.info('图片广播回调已设置')
   }
 
   /**
@@ -452,7 +455,7 @@ export class McpServer {
       this.imageBroadcastCallback(imageBase64, sourceType)
     }
     else {
-      console.warn('[MCP] 图片广播回调未设置，无法广播图片')
+      logger.warn('图片广播回调未设置，无法广播图片')
     }
   }
 
@@ -462,7 +465,7 @@ export class McpServer {
    */
   setThemeBroadcastCallback(callback: (theme: 'light' | 'dark' | 'auto') => void): void {
     this.themeBroadcastCallback = callback
-    console.log('[MCP] 主题广播回调已设置')
+    logger.info('主题广播回调已设置')
   }
 
   /**
@@ -474,7 +477,7 @@ export class McpServer {
       this.themeBroadcastCallback(theme)
     }
     else {
-      console.warn('[MCP] 主题广播回调未设置，无法广播主题')
+      logger.warn('主题广播回调未设置，无法广播主题')
     }
   }
 

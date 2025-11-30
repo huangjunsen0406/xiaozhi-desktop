@@ -5,6 +5,10 @@ import type { MusicStatus } from '../mcp/tools/music/types'
 import { ipcMain } from 'electron'
 import { MusicPlayer } from '../mcp/tools/music'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('MusicIpc')
+
 /**
  * 注册音乐相关的 IPC 处理器
  */
@@ -19,5 +23,5 @@ export function registerMusicIpc(): void {
     musicPlayer.updateStatus(status)
   })
 
-  console.log('[MusicIpc] 音乐 IPC 处理器已注册')
+  logger.info('音乐 IPC 处理器已注册')
 }

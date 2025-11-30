@@ -4,6 +4,9 @@
  * 使用 easy-volume 库实现
  */
 import { getMute, getVolume, setMute, setVolume } from 'easy-volume'
+import { createLogger } from './logger'
+
+const logger = createLogger('SystemVolumeController')
 
 export class SystemVolumeController {
   /**
@@ -12,11 +15,11 @@ export class SystemVolumeController {
   async getVolume(): Promise<number> {
     try {
       const volume = await getVolume()
-      console.log(`[SystemVolumeController] 系统音量: ${volume}%`)
+      logger.info(`系统音量: ${volume}%`)
       return volume
     }
     catch (error) {
-      console.error('[SystemVolumeController] 获取系统音量失败:', error)
+      logger.error('获取系统音量失败', error)
       return 70 // 默认值
     }
   }
@@ -31,10 +34,10 @@ export class SystemVolumeController {
 
     try {
       await setVolume(clampedVolume)
-      console.log(`[SystemVolumeController] 系统音量已设置: ${clampedVolume}%`)
+      logger.info(`系统音量已设置: ${clampedVolume}%`)
     }
     catch (error) {
-      console.error(`[SystemVolumeController] 设置系统音量失败 (${clampedVolume}%):`, error)
+      logger.error(`设置系统音量失败 (${clampedVolume}%):`, error)
       throw error
     }
   }
@@ -45,11 +48,11 @@ export class SystemVolumeController {
   async getMute(): Promise<boolean> {
     try {
       const isMuted = await getMute()
-      console.log(`[SystemVolumeController] 静音状态: ${isMuted}`)
+      logger.info(`静音状态: ${isMuted}`)
       return isMuted
     }
     catch (error) {
-      console.error('[SystemVolumeController] 获取静音状态失败:', error)
+      logger.error('获取静音状态失败', error)
       return false
     }
   }
@@ -61,10 +64,10 @@ export class SystemVolumeController {
   async setMute(muted: boolean): Promise<void> {
     try {
       await setMute(muted)
-      console.log(`[SystemVolumeController] 静音状态已设置: ${muted}`)
+      logger.info(`静音状态已设置: ${muted}`)
     }
     catch (error) {
-      console.error(`[SystemVolumeController] 设置静音状态失败 (${muted}):`, error)
+      logger.error(`设置静音状态失败 (${muted}):`, error)
       throw error
     }
   }

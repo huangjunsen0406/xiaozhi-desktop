@@ -6,8 +6,10 @@ import type { LaunchResult, Platform } from './types'
 import { exec, spawn } from 'node:child_process'
 import * as os from 'node:os'
 import { promisify } from 'node:util'
+import { createLogger } from '../../../utils/logger'
 
 const execAsync = promisify(exec)
+const logger = createLogger('AppLauncher')
 
 export class AppLauncher {
   /**
@@ -18,7 +20,7 @@ export class AppLauncher {
   static async launch(appName: string): Promise<LaunchResult> {
     const platform = os.platform() as Platform
 
-    console.log(`[AppLauncher] 尝试启动应用: ${appName}, 平台: ${platform}`)
+    logger.info(`尝试启动应用: ${appName}, 平台: ${platform}`)
 
     try {
       if (platform === 'darwin') {
@@ -32,13 +34,13 @@ export class AppLauncher {
       }
       else {
         const message = `不支持的平台: ${platform}`
-        console.error(`[AppLauncher] ${message}`)
+        logger.error(`${message}`)
         return { success: false, message }
       }
     }
     catch (error) {
       const message = `启动应用失败: ${error}`
-      console.error(`[AppLauncher] ${message}`, error)
+      logger.error(`${message}`, error)
       return { success: false, message }
     }
   }
@@ -51,32 +53,32 @@ export class AppLauncher {
       // 方法 1: 使用 open -a 命令（最常用）
       try {
         await execAsync(`open -a "${appName}"`)
-        console.log(`[AppLauncher] macOS: 使用 open -a 成功启动: ${appName}`)
+        logger.info(`macOS: 使用 open -a 成功启动: ${appName}`)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch {
-        console.warn(`[AppLauncher] macOS: open -a 启动失败，尝试其他方法`)
+        logger.warn(`macOS: open -a 启动失败，尝试其他方法`)
       }
 
       // 方法 2: 尝试 /Applications 目录
       try {
         await execAsync(`open "/Applications/${appName}.app"`)
-        console.log(`[AppLauncher] macOS: 通过 /Applications 启动成功: ${appName}`)
+        logger.info(`macOS: 通过 /Applications 启动成功: ${appName}`)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch {
-        console.warn(`[AppLauncher] macOS: /Applications 启动失败`)
+        logger.warn(`macOS: /Applications 启动失败`)
       }
 
       // 方法 3: 使用 osascript（AppleScript）
       try {
         const script = `tell application "${appName}" to activate`
         await execAsync(`osascript -e '${script}'`)
-        console.log(`[AppLauncher] macOS: 使用 osascript 启动成功: ${appName}`)
+        logger.info(`macOS: 使用 osascript 启动成功: ${appName}`)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch {
-        console.warn(`[AppLauncher] macOS: osascript 启动失败`)
+        logger.warn(`macOS: osascript 启动失败`)
       }
 
       return { success: false, message: `未找到应用: ${appName}` }
@@ -101,12 +103,12 @@ export class AppLauncher {
       // 分离子进程，避免父进程等待
       child.unref()
 
-      console.log(`[AppLauncher] Windows: 成功启动应用: ${appName}`)
+      logger.info(`Windows: 成功启动应用: ${appName}`)
       return { success: true, message: `成功启动应用: ${appName}` }
     }
     catch (error) {
       const message = `Windows 启动失败: ${error}`
-      console.error(`[AppLauncher] ${message}`, error)
+      logger.error(`${message}`, error)
       return { success: false, message }
     }
   }
@@ -123,11 +125,11 @@ export class AppLauncher {
           stdio: 'ignore',
         })
         child.unref()
-        console.log(`[AppLauncher] Linux: 使用 xdg-open 成功启动: ${appName}`)
+        logger.info(`Linux: 使用 xdg-open 成功启动: ${appName}`)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch (error) {
-        console.warn(`[AppLauncher] Linux: xdg-open 启动失败，尝试其他方法： ${error}`)
+        logger.warn(`Linux: xdg-open 启动失败，尝试其他方法： ${error}`)
       }
 
       // 方法 2: 尝试直接执行应用名称
@@ -137,11 +139,11 @@ export class AppLauncher {
           stdio: 'ignore',
         })
         child.unref()
-        console.log(`[AppLauncher] Linux: 直接执行成功: ${appName}`)
+        logger.info(`Linux: 直接执行成功: ${appName}`)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch {
-        console.warn(`[AppLauncher] Linux: 直接执行失败`)
+        logger.warn(`Linux: 直接执行失败`)
       }
 
       // 方法 3: 使用 gtk-launch（GNOME/GTK 环境）
@@ -151,11 +153,11 @@ export class AppLauncher {
           stdio: 'ignore',
         })
         child.unref()
-        console.log(`[AppLauncher] Linux: 使用 gtk-launch 成功启动: ${appName}`)
+        logger.info(`Linux: 使用 gtk-launch 成功启动: ${appName}`)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch {
-        console.warn(`[AppLauncher] Linux: gtk-launch 启动失败`)
+        logger.warn(`Linux: gtk-launch 启动失败`)
       }
 
       return { success: false, message: `未找到应用: ${appName}` }

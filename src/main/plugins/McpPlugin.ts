@@ -4,6 +4,10 @@ import type { UIPlugin } from './UIPlugin'
 import { McpServer } from '../mcp/McpServer'
 import { Plugin } from './Plugin'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('McpPlugin')
+
 /**
  * MCP 插件
  * 负责接收服务端的 MCP 消息并转发到 McpServer 处理
@@ -28,7 +32,7 @@ export class McpPlugin extends Plugin {
     // 调用父类 setup
     await super.setup(app)
 
-    console.log('[McpPlugin] 初始化...')
+    logger.info('初始化...')
 
     try {
       // 获取 McpServer 单例
@@ -40,14 +44,14 @@ export class McpPlugin extends Plugin {
           // 通过 app 的公共 API 获取 protocol
           const protocol = this.app?.getProtocol()
           if (!protocol) {
-            console.error('[McpPlugin] Protocol not available')
+            logger.error('Protocol not available')
             return
           }
           // 调用协议层的 sendMcpMessage 方法
           await protocol.sendMcpMessage(message)
         }
         catch (error) {
-          console.error('[McpPlugin] Failed to send MCP message:', error)
+          logger.error('Failed to send MCP message', error)
         }
       }
 
@@ -61,7 +65,7 @@ export class McpPlugin extends Plugin {
           uiPlugin.broadcastImage(imageBase64, sourceType)
         }
         else {
-          console.warn('[McpPlugin] UIPlugin not found, cannot broadcast image')
+          logger.warn('UIPlugin not found, cannot broadcast image')
         }
       }
 
@@ -75,7 +79,7 @@ export class McpPlugin extends Plugin {
           uiPlugin.broadcastTheme(theme)
         }
         else {
-          console.warn('[McpPlugin] UIPlugin not found, cannot broadcast theme')
+          logger.warn('UIPlugin not found, cannot broadcast theme')
         }
       }
 
@@ -84,10 +88,10 @@ export class McpPlugin extends Plugin {
       // 注册通用工具（包含 system, calendar, timer, music, iot 等）
       await this.mcpServer.addCommonTools()
 
-      console.log('[McpPlugin] ✓ 初始化完成')
+      logger.info('✓ 初始化完成')
     }
     catch (error) {
-      console.error('[McpPlugin] ✗ 初始化失败:', error)
+      logger.error('✗ 初始化失败', error)
       throw error
     }
   }
@@ -104,7 +108,7 @@ export class McpPlugin extends Plugin {
 
       const payload = message.payload
       if (!payload) {
-        console.warn('[McpPlugin] MCP message missing payload')
+        logger.warn('MCP message missing payload')
         return
       }
 
@@ -113,11 +117,11 @@ export class McpPlugin extends Plugin {
         await this.mcpServer.parseMessage(payload as Record<string, unknown>)
       }
       else {
-        console.error('[McpPlugin] McpServer not initialized')
+        logger.error('McpServer not initialized')
       }
     }
     catch (error) {
-      console.error('[McpPlugin] Error handling incoming JSON:', error)
+      logger.error('Error handling incoming JSON', error)
     }
   }
 
@@ -125,7 +129,7 @@ export class McpPlugin extends Plugin {
    * 插件关闭
    */
   async shutdown(): Promise<void> {
-    console.log('[McpPlugin] 正在关闭...')
+    logger.info('正在关闭...')
 
     // 清除回调引用
     if (this.mcpServer) {
@@ -136,6 +140,6 @@ export class McpPlugin extends Plugin {
     // 调用父类 shutdown
     await super.shutdown()
 
-    console.log('[McpPlugin] ✓ 已关闭')
+    logger.info('✓ 已关闭')
   }
 }

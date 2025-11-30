@@ -40,17 +40,17 @@ async function toggleCall() {
   try {
     if (appStore.isAutoMode) {
       // 挂断电话 - 停止自动对话
-      console.log('[MainView] 挂断电话')
+      console.log('挂断电话')
       await appStore.stopAutoConversation()
     }
     else {
       // 拨打电话 - 开始自动对话
-      console.log('[MainView] 拨打电话')
+      console.log('拨打电话')
       await appStore.startAutoConversation()
     }
   }
   catch (error) {
-    console.error('[MainView] 切换通话状态失败:', error)
+    console.error('切换通话状态失败', error)
   }
 }
 </script>

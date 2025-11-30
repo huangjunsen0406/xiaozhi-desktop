@@ -3,6 +3,10 @@ import type { Application } from '../services/Application'
 import { BrowserWindow } from 'electron'
 import { Plugin } from './Plugin'
 
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('Live2DPlugin')
+
 /**
  * Live2D 插件
  * 负责 Live2D 口型同步
@@ -31,7 +35,7 @@ export class Live2DPlugin extends Plugin {
    */
   async setup(app: Application): Promise<void> {
     await super.setup(app)
-    console.log('[Live2DPlugin] 初始化...')
+    logger.info('初始化...')
   }
 
   /**
@@ -39,7 +43,7 @@ export class Live2DPlugin extends Plugin {
    */
   async start(): Promise<void> {
     await super.start()
-    console.log('[Live2DPlugin] 启动完成')
+    logger.info('启动完成')
   }
 
   /**
@@ -67,7 +71,7 @@ export class Live2DPlugin extends Plugin {
     }
     catch (error) {
       // 静默处理错误，不影响主流程
-      console.error('[Live2DPlugin] 处理音频数据失败:', error)
+      logger.error('处理音频数据失败', error)
     }
   }
 
@@ -116,7 +120,7 @@ export class Live2DPlugin extends Plugin {
       return volume
     }
     catch (error) {
-      console.error('[Live2DPlugin] 计算音量失败:', error)
+      logger.error('计算音量失败', error)
       return 0
     }
   }
@@ -127,6 +131,6 @@ export class Live2DPlugin extends Plugin {
   async stop(): Promise<void> {
     await super.stop()
     this.live2dWindow = null
-    console.log('[Live2DPlugin] 已停止')
+    logger.info('已停止')
   }
 }

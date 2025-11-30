@@ -7,6 +7,10 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import { createLogger } from '../../../../utils/logger'
+
+const logger = createLogger('MacScanner')
+
 export class MacScanner {
   /**
    * 扫描已安装的应用程序
@@ -31,11 +35,11 @@ export class MacScanner {
       const systemTools = this.getSystemTools()
       apps.push(...systemTools)
 
-      console.log(`[MacScanner] 扫描完成，找到 ${apps.length} 个应用`)
+      logger.info(`扫描完成，找到 ${apps.length} 个应用`)
       return apps
     }
     catch (error) {
-      console.error('[MacScanner] 扫描应用失败:', error)
+      logger.error('扫描应用失败', error)
       return []
     }
   }
@@ -51,7 +55,7 @@ export class MacScanner {
 
     try {
       if (!fs.existsSync(directory)) {
-        console.warn(`[MacScanner] 目录不存在: ${directory}`)
+        logger.warn(`目录不存在: ${directory}`)
         return []
       }
 
@@ -72,10 +76,10 @@ export class MacScanner {
         }
       }
 
-      console.log(`[MacScanner] ${directory}: 找到 ${apps.length} 个应用`)
+      logger.info(`${directory}: 找到 ${apps.length} 个应用`)
     }
     catch (error) {
-      console.error(`[MacScanner] 扫描目录失败 (${directory}):`, error)
+      logger.error(`扫描目录失败 (${directory}):`, error)
     }
 
     return apps

@@ -5,6 +5,9 @@ import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
 import type { Plugin } from './Plugin'
 import { PluginState } from './Plugin'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('PluginManager')
 
 /**
  * 插件执行结果
@@ -56,18 +59,18 @@ export class PluginManager {
   register(...plugins: Plugin[]): void {
     for (const plugin of plugins) {
       if (this.pluginsByName.has(plugin.name)) {
-        console.warn(`[PluginManager] 插件 ${plugin.name} 已注册，跳过重复注册`)
+        logger.warn(`插件 ${plugin.name} 已注册，跳过重复注册`)
         continue
       }
 
       this.plugins.push(plugin)
       this.pluginsByName.set(plugin.name, plugin)
-      console.log(`[PluginManager] 注册插件: ${plugin.name} (优先级: ${plugin.priority})`)
+      logger.info(`注册插件: ${plugin.name} (优先级: ${plugin.priority})`)
     }
 
     // 按优先级排序
     this.plugins.sort((a, b) => a.priority - b.priority)
-    console.log(`[PluginManager] 插件执行顺序: ${this.plugins.map(p => p.name).join(' -> ')}`)
+    logger.info(`插件执行顺序: ${this.plugins.map(p => p.name).join(' -> ')}`)
   }
 
   /**
@@ -77,7 +80,7 @@ export class PluginManager {
   unregister(pluginName: string): boolean {
     const plugin = this.pluginsByName.get(pluginName)
     if (!plugin) {
-      console.warn(`[PluginManager] 插件 ${pluginName} 未注册`)
+      logger.warn(`插件 ${pluginName} 未注册`)
       return false
     }
 
@@ -86,7 +89,7 @@ export class PluginManager {
       this.plugins.splice(index, 1)
     }
     this.pluginsByName.delete(pluginName)
-    console.log(`[PluginManager] 取消注册插件: ${pluginName}`)
+    logger.info(`取消注册插件: ${pluginName}`)
     return true
   }
 
@@ -120,7 +123,7 @@ export class PluginManager {
   enablePlugin(pluginName: string): boolean {
     const plugin = this.pluginsByName.get(pluginName)
     if (!plugin) {
-      console.warn(`[PluginManager] 插件 ${pluginName} 不存在`)
+      logger.warn(`插件 ${pluginName} 不存在`)
       return false
     }
     plugin.enable()
@@ -134,7 +137,7 @@ export class PluginManager {
   disablePlugin(pluginName: string): boolean {
     const plugin = this.pluginsByName.get(pluginName)
     if (!plugin) {
-      console.warn(`[PluginManager] 插件 ${pluginName} 不存在`)
+      logger.warn(`插件 ${pluginName} 不存在`)
       return false
     }
     plugin.disable()
@@ -146,7 +149,7 @@ export class PluginManager {
    * @param app - 应用实例
    */
   async setupAll(app: Application): Promise<PluginExecutionResult[]> {
-    console.log('[PluginManager] 开始初始化所有插件...')
+    logger.info('开始初始化所有插件...')
     const results: PluginExecutionResult[] = []
 
     for (const plugin of this.plugins) {
@@ -158,7 +161,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        console.log(`[PluginManager] ✓ ${plugin.name} 初始化完成 (${Date.now() - startTime}ms)`)
+        logger.info(`✓ ${plugin.name} 初始化完成 (${Date.now() - startTime}ms)`)
       }
       catch (error) {
         results.push({
@@ -167,13 +170,13 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        console.error(`[PluginManager] ✗ ${plugin.name} 初始化失败:`, error)
+        logger.error(`✗ ${plugin.name} 初始化失败:`, error)
         // 标记插件为错误状态但继续初始化其他插件
       }
     }
 
     const successCount = results.filter(r => r.success).length
-    console.log(`[PluginManager] 插件初始化完成: ${successCount}/${results.length} 成功`)
+    logger.info(`插件初始化完成: ${successCount}/${results.length} 成功`)
     return results
   }
 
@@ -181,17 +184,17 @@ export class PluginManager {
    * 启动所有插件
    */
   async startAll(): Promise<PluginExecutionResult[]> {
-    console.log('[PluginManager] 开始启动所有插件...')
+    logger.info('开始启动所有插件...')
     const results: PluginExecutionResult[] = []
 
     for (const plugin of this.plugins) {
       if (!plugin.enabled) {
-        console.log(`[PluginManager] 跳过禁用的插件: ${plugin.name}`)
+        logger.info(`跳过禁用的插件: ${plugin.name}`)
         continue
       }
 
       if (plugin.state !== PluginState.INITIALIZED && plugin.state !== PluginState.STOPPED) {
-        console.warn(`[PluginManager] 插件 ${plugin.name} 状态异常: ${plugin.state}，跳过启动`)
+        logger.warn(`插件 ${plugin.name} 状态异常: ${plugin.state}，跳过启动`)
         continue
       }
 
@@ -203,7 +206,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        console.log(`[PluginManager] ✓ ${plugin.name} 启动完成 (${Date.now() - startTime}ms)`)
+        logger.info(`✓ ${plugin.name} 启动完成 (${Date.now() - startTime}ms)`)
       }
       catch (error) {
         results.push({
@@ -212,7 +215,7 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        console.error(`[PluginManager] ✗ ${plugin.name} 启动失败:`, error)
+        logger.error(`✗ ${plugin.name} 启动失败:`, error)
       }
     }
 
@@ -265,7 +268,7 @@ export class PluginManager {
         }
       }
       catch (error) {
-        console.error(`[PluginManager] 插件 ${plugin.name} 执行 ${methodName} 失败:`, error)
+        logger.error(`插件 ${plugin.name} 执行 ${methodName} 失败:`, error)
         return {
           pluginName: plugin.name,
           success: false,
@@ -294,7 +297,7 @@ export class PluginManager {
     // 统计失败数量
     const failedCount = results.filter(r => !r.success).length
     if (failedCount > 0) {
-      console.warn(`[PluginManager] ${methodName}: ${failedCount}/${results.length} 插件执行失败`)
+      logger.warn(`${methodName}: ${failedCount}/${results.length} 插件执行失败`)
     }
 
     return results
@@ -366,7 +369,7 @@ export class PluginManager {
    * 停止所有插件（逆序）
    */
   async stopAll(): Promise<PluginExecutionResult[]> {
-    console.log('[PluginManager] 开始停止所有插件...')
+    logger.info('开始停止所有插件...')
     const results: PluginExecutionResult[] = []
 
     // 逆序停止（后注册的先停止）
@@ -385,7 +388,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        console.log(`[PluginManager] ✓ ${plugin.name} 已停止`)
+        logger.info(`✓ ${plugin.name} 已停止`)
       }
       catch (error) {
         results.push({
@@ -394,7 +397,7 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        console.error(`[PluginManager] ✗ ${plugin.name} 停止失败:`, error)
+        logger.error(`✗ ${plugin.name} 停止失败:`, error)
       }
     }
 
@@ -405,7 +408,7 @@ export class PluginManager {
    * 关闭所有插件（逆序）
    */
   async shutdownAll(): Promise<PluginExecutionResult[]> {
-    console.log('[PluginManager] 开始关闭所有插件...')
+    logger.info('开始关闭所有插件...')
     const results: PluginExecutionResult[] = []
 
     // 逆序关闭
@@ -420,7 +423,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        console.log(`[PluginManager] ✓ ${plugin.name} 已关闭`)
+        logger.info(`✓ ${plugin.name} 已关闭`)
       }
       catch (error) {
         results.push({
@@ -429,11 +432,11 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        console.error(`[PluginManager] ✗ ${plugin.name} 关闭失败:`, error)
+        logger.error(`✗ ${plugin.name} 关闭失败:`, error)
       }
     }
 
-    console.log('[PluginManager] 所有插件已关闭')
+    logger.info('所有插件已关闭')
     return results
   }
 

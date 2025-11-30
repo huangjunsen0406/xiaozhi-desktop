@@ -2,6 +2,7 @@ import type { ShortcutConfig } from '@shared/types'
 import type { Application } from './Application'
 import Database from 'better-sqlite3'
 import { globalShortcut } from 'electron'
+import { createLogger } from '../utils/logger'
 import {
   ensureMainWindow,
   toggleSettings,
@@ -9,6 +10,8 @@ import {
   toggleToMain,
   toggleToMini,
 } from '../windows/windowManager'
+
+const logger = createLogger('ShortcutManager')
 
 export class ShortcutManager {
   private db: Database.Database
@@ -64,7 +67,7 @@ export class ShortcutManager {
       stmt.run(shortcut.action, shortcut.name, shortcut.category, shortcut.accelerator, now, now)
     }
 
-    console.log('[ShortcutManager] 已插入默认快捷键')
+    logger.info('已插入默认快捷键')
   }
 
   async loadShortcuts(): Promise<ShortcutConfig[]> {
@@ -83,7 +86,7 @@ export class ShortcutManager {
       }
     }
 
-    console.log('[ShortcutManager] 已注册快捷键数量:', this.shortcuts.size)
+    logger.info('已注册快捷键数量:', this.shortcuts.size)
   }
 
   registerShortcut(action: string, accelerator: string): void {
@@ -93,20 +96,20 @@ export class ShortcutManager {
       })
 
       if (success) {
-        console.log(`[ShortcutManager] 注册成功: ${action} -> ${accelerator}`)
+        logger.info(`注册成功: ${action} -> ${accelerator}`)
       }
       else {
-        console.warn(`[ShortcutManager] 注册失败（可能被占用）: ${accelerator}`)
+        logger.warn(`注册失败（可能被占用）: ${accelerator}`)
       }
     }
     catch (error) {
-      console.error(`[ShortcutManager] 注册异常: ${accelerator}`, error)
+      logger.error(`注册异常: ${accelerator}`, error)
     }
   }
 
   unregisterShortcut(accelerator: string): void {
     globalShortcut.unregister(accelerator)
-    console.log(`[ShortcutManager] 注销快捷键: ${accelerator}`)
+    logger.info(`注销快捷键: ${accelerator}`)
   }
 
   async updateShortcut(action: string, newAccelerator: string | null): Promise<void> {
@@ -144,7 +147,7 @@ export class ShortcutManager {
   }
 
   private executeAction(action: string): void {
-    console.log(`[ShortcutManager] 执行操作: ${action}`)
+    logger.info(`执行操作: ${action}`)
 
     switch (action) {
       case 'settings.toggle':
@@ -197,7 +200,7 @@ export class ShortcutManager {
       }
 
       default:
-        console.warn(`[ShortcutManager] 未知操作: ${action}`)
+        logger.warn(`未知操作: ${action}`)
     }
   }
 
