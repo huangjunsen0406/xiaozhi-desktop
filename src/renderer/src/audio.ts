@@ -7,11 +7,30 @@ import { AudioPlayback } from './utils/audio/AudioPlayback'
 import { getDeviceIdsFromConfig } from './utils/audio/deviceUtils'
 import { initMusicPlayer } from './utils/music/MusicPlayer'
 
-console.log('初始化后台音频系统...')
+// 日志辅助函数：同时输出到控制台和主进程
+function log(level: 'info' | 'error' | 'warn', ...args: any[]) {
+  const message = args.map(arg =>
+    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+  ).join(' ')
+
+  console[level === 'info' ? 'log' : level](...args)
+
+  // 发送到主进程日志系统
+  window.api?.logToMain?.({
+    level,
+    source: 'BackgroundAudio',
+    message,
+    timestamp: new Date().toISOString()
+  }).catch(() => {
+    // 忽略日志发送失败
+  })
+}
+
+log('info', '初始化后台音频系统...')
 
 // 初始化音乐播放器
 initMusicPlayer()
-console.log('音乐播放器已初始化')
+log('info', '音乐播放器已初始化')
 
 // 音频系统实例
 const capture = new AudioCapture()
@@ -29,31 +48,34 @@ let currentOutputDeviceId: string | undefined
  */
 async function initialize(): Promise<void> {
   if (isInitialized) {
-    console.log('音频系统已初始化,跳过')
+    log('info', '音频系统已初始化,跳过')
     return
   }
 
   try {
-    console.log('初始化音频系统...')
+    log('info', '初始化音频系统...')
 
     // 获取配置的设备ID
     const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
+    log('info', `设备配置: input=${inputDeviceId || 'default'}, output=${outputDeviceId || 'default'}`)
 
     // 初始化采集器
+    log('info', '开始初始化采集器...')
     await capture.initialize(inputDeviceId)
     currentInputDeviceId = inputDeviceId
-    console.log('✓ 采集器初始化成功')
+    log('info', '✓ 采集器初始化成功')
 
     // 初始化播放器
+    log('info', '开始初始化播放器...')
     await playback.initialize(outputDeviceId)
     currentOutputDeviceId = outputDeviceId
-    console.log('✓ 播放器初始化成功')
+    log('info', '✓ 播放器初始化成功')
 
     isInitialized = true
-    console.log('✓ 音频系统初始化完成')
+    log('info', '✓ 音频系统初始化完成')
   }
   catch (error) {
-    console.error('初始化失败', error)
+    log('error', '初始化失败:', error)
     throw error
   }
 }
@@ -63,22 +85,23 @@ async function initialize(): Promise<void> {
  */
 async function startCapture(): Promise<void> {
   if (!isInitialized) {
+    log('warn', '未初始化，先进行初始化...')
     await initialize()
   }
 
   if (isCapturing) {
-    console.log('已在采集中,跳过')
+    log('warn', '已在采集中,跳过')
     return
   }
 
   try {
-    console.log('开始音频采集...')
+    log('info', '开始音频采集...')
     await capture.start()
     isCapturing = true
-    console.log('✓ 音频采集已开始')
+    log('info', '✓ 音频采集已开始')
   }
   catch (error) {
-    console.error('开始采集失败', error)
+    log('error', '开始采集失败:', error)
     throw error
   }
 }
@@ -88,18 +111,18 @@ async function startCapture(): Promise<void> {
  */
 function stopCapture(): void {
   if (!isCapturing) {
-    console.log('未在采集中,跳过')
+    log('warn', '未在采集中,跳过')
     return
   }
 
   try {
-    console.log('停止音频采集...')
+    log('info', '停止音频采集...')
     capture.stop()
     isCapturing = false
-    console.log('✓ 音频采集已停止')
+    log('info', '✓ 音频采集已停止')
   }
   catch (error) {
-    console.error('停止采集失败', error)
+    log('error', '停止采集失败:', error)
   }
 }
 
@@ -108,7 +131,7 @@ function stopCapture(): void {
  */
 async function switchDevices(): Promise<void> {
   try {
-    console.log('检查设备配置...')
+    log('info', '检查设备配置...')
 
     // 获取最新的设备配置
     const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
@@ -117,7 +140,7 @@ async function switchDevices(): Promise<void> {
 
     // 切换输入设备
     if (inputDeviceId !== currentInputDeviceId && inputDeviceId) {
-      console.log('切换输入设备:', currentInputDeviceId, '→', inputDeviceId)
+      log('info', `切换输入设备: ${currentInputDeviceId} → ${inputDeviceId}`)
       await capture.switchDevice(inputDeviceId)
       currentInputDeviceId = inputDeviceId
       changed = true
@@ -125,21 +148,21 @@ async function switchDevices(): Promise<void> {
 
     // 切换输出设备
     if (outputDeviceId !== currentOutputDeviceId && outputDeviceId) {
-      console.log('切换输出设备:', currentOutputDeviceId, '→', outputDeviceId)
+      log('info', `切换输出设备: ${currentOutputDeviceId} → ${outputDeviceId}`)
       await playback.switchDevice(outputDeviceId)
       currentOutputDeviceId = outputDeviceId
       changed = true
     }
 
     if (changed) {
-      console.log('✓ 设备切换完成')
+      log('info', '✓ 设备切换完成')
     }
     else {
-      console.log('设备未变化')
+      log('info', '设备未变化')
     }
   }
   catch (error) {
-    console.error('切换设备失败', error)
+    log('error', '切换设备失败:', error)
     throw error
   }
 }
@@ -148,43 +171,43 @@ async function switchDevices(): Promise<void> {
  * 清理资源
  */
 async function cleanup(): Promise<void> {
-  console.log('清理资源...')
+  log('info', '清理资源...')
 
   try {
     stopCapture()
     await capture.dispose()
     await playback.dispose()
     isInitialized = false
-    console.log('✓ 资源已清理')
+    log('info', '✓ 资源已清理')
   }
   catch (error) {
-    console.error('清理失败', error)
+    log('error', '清理失败:', error)
   }
 }
 
 // 监听来自主进程的指令
 window.api.onAudioCommand((command: string, _data?: Record<string, unknown>) => {
-  console.log('收到指令:', command)
+  log('info', `收到指令: ${command}`)
 
   switch (command) {
     case 'initialize':
-      initialize().catch(console.error)
+      initialize().catch(err => log('error', 'initialize failed:', err))
       break
     case 'start':
-      startCapture().catch(console.error)
+      startCapture().catch(err => log('error', 'startCapture failed:', err))
       break
     case 'stop':
       stopCapture()
       break
     case 'switchDevices':
-      switchDevices().catch(console.error)
+      switchDevices().catch(err => log('error', 'switchDevices failed:', err))
       break
     case 'cleanup':
-      cleanup().catch(console.error)
+      cleanup().catch(err => log('error', 'cleanup failed:', err))
       break
     default:
-      console.warn('[BackgroundAudio] 未知指令:', command)
+      log('warn', `未知指令: ${command}`)
   }
 })
 
-console.log('后台音频系统已启动')
+log('info', '后台音频系统已启动')

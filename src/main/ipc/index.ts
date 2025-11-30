@@ -15,6 +15,7 @@ import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
 import { registerMusicIpc } from './musicIpc'
 
 import { registerThemeIpc } from './themeIpc'
+import { registerAnalyticsIpcChannels } from './analyticsIpc'
 
 const logger = getLogger('Index')
 
@@ -35,6 +36,7 @@ export function registerBasicIpcChannels(): void {
   registerThemeIpc()
   registerChatIpc()
   registerMusicIpc()
+  registerAnalyticsIpcChannels()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()

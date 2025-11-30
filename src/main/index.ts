@@ -6,6 +6,7 @@ import { app, BrowserWindow, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
+import { getAnalyticsService } from './services/AnalyticsService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
@@ -66,10 +67,21 @@ app.on('ready', () => {
   setDevDockIconOnce()
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 初始化日志系统
   initLogger()
   logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
+
+  // 初始化埋点服务
+  const analytics = getAnalyticsService()
+  await analytics.initialize()
+
+  // 上报应用启动事件
+  analytics.track('app_start', {
+    version: app.getVersion(),
+    platform: process.platform,
+    isDev: !app.isPackaged,
+  })
 
   electronApp.setAppUserModelId('com.electron')
 
@@ -138,10 +150,16 @@ app.on('window-all-closed', () => {
   }
 })
 
-// 应用退出前清理日志系统
+// 应用退出前清理日志系统和埋点服务
 app.on('before-quit', async (event) => {
   event.preventDefault()
   logger.info('应用正在退出...')
+
+  // 上报应用退出事件并等待发送完成
+  const analytics = getAnalyticsService()
+  analytics.track('app_quit')
+  await analytics.shutdown()
+
   await shutdownLogger()
   app.exit(0)
 })

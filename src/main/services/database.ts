@@ -72,9 +72,9 @@ export class DatabaseManager {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT UNIQUE NOT NULL,
         device_id TEXT,
-        ota_version_url TEXT DEFAULT 'https://api.tenclass.net/xiaozhi/ota/',
+        ota_version_url TEXT DEFAULT NULL,
         activation_version TEXT DEFAULT 'v2',
-        authorization_url TEXT DEFAULT 'https://xiaozhi.me/',
+        authorization_url TEXT DEFAULT NULL,
         websocket_url TEXT,
         websocket_access_token TEXT,
         mqtt_endpoint TEXT,
@@ -113,7 +113,7 @@ export class DatabaseManager {
         enabled INTEGER DEFAULT 1,
         language TEXT DEFAULT 'zh',
         keyword_zh TEXT DEFAULT '你好小智',
-        keyword_en TEXT DEFAULT '',
+        keyword_en TEXT DEFAULT NULL,
         threshold REAL DEFAULT 0.2,
         score REAL DEFAULT 1.8,
         cooldown_ms INTEGER DEFAULT 1500,
@@ -126,11 +126,11 @@ export class DatabaseManager {
       CREATE TABLE IF NOT EXISTS camera_config (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         enabled INTEGER DEFAULT 1,
-        device_id TEXT DEFAULT '',
-        device_label TEXT DEFAULT '',
+        device_id TEXT DEFAULT NULL,
+        device_label TEXT DEFAULT NULL,
         use_local_vision INTEGER DEFAULT 0,
-        vl_api_key TEXT DEFAULT '',
-        vl_url TEXT DEFAULT '',
+        vl_api_key TEXT DEFAULT NULL,
+        vl_url TEXT DEFAULT NULL,
         vl_model TEXT DEFAULT 'glm-4v-plus',
         capture_width INTEGER DEFAULT 1280,
         capture_height INTEGER DEFAULT 720,
@@ -244,7 +244,7 @@ export class DatabaseManager {
             enabled INTEGER DEFAULT 1,
             language TEXT DEFAULT 'zh',
             keyword_zh TEXT DEFAULT '你好小智',
-            keyword_en TEXT DEFAULT '',
+            keyword_en TEXT DEFAULT NULL,
             threshold REAL DEFAULT 0.2,
             score REAL DEFAULT 1.8,
             cooldown_ms INTEGER DEFAULT 1500,
@@ -256,7 +256,7 @@ export class DatabaseManager {
         // 如果有旧数据，迁移到新表
         if (config) {
           const keywordZh = config.language === 'zh' ? config.keywords_list : '你好小智'
-          const keywordEn = config.language === 'en' ? config.keywords_list : ''
+          const keywordEn = config.language === 'en' ? config.keywords_list : null
 
           this.db.prepare(`
             INSERT INTO wake_word_config_new (enabled, language, keyword_zh, keyword_en, threshold, score, cooldown_ms)
@@ -288,7 +288,7 @@ export class DatabaseManager {
           this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_zh TEXT DEFAULT \'你好小智\'')
         }
         if (!hasKeywordEn) {
-          this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_en TEXT DEFAULT \'\'')
+          this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_en TEXT DEFAULT NULL')
         }
 
         this.logger.info('唤醒词字段添加完成')

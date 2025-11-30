@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, live2dApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, analyticsApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, live2dApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -44,6 +44,12 @@ const api = {
   activationStart: activationApi.start,
   activationCancel: activationApi.cancel,
   activationCheckStatus: activationApi.checkStatus,
+
+  // 埋点 API
+  analyticsTrack: analyticsApi.track,
+  analyticsGetConfig: analyticsApi.getConfig,
+  analyticsUpdateConfig: analyticsApi.updateConfig,
+  analyticsFlush: analyticsApi.flush,
 
   // 音频 API
   audioSendPCM: audioApi.sendPCM,

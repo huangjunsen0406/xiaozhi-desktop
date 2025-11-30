@@ -191,6 +191,12 @@ export interface RendererApi {
   // Live2D APIs
   live2dOnAudioVolume: (callback: (volume: number) => void) => void
   live2dRemoveAudioVolumeListener: () => void
+
+  // Analytics APIs
+  analyticsTrack: (event: string, extra?: Record<string, unknown>) => Promise<{ success: boolean }>
+  analyticsGetConfig: () => Promise<any>
+  analyticsUpdateConfig: (config: any) => Promise<{ success: boolean }>
+  analyticsFlush: () => Promise<{ success: boolean }>
 }
 
 // ShortcutConfig 从共享类型导入
