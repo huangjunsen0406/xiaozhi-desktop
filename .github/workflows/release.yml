@@ -13,6 +13,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
+    env:
+      # 让 node-gyp 使用 PATH 里的 python
+      PYTHON: python
+
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -21,6 +25,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      # macOS 上给 node-gyp 准备一个带 distutils 的 Python
+      - name: Setup Python for node-gyp (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
