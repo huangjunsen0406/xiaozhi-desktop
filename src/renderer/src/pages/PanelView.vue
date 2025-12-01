@@ -24,9 +24,9 @@ async function handleSendText() {
   }
 }
 
-// 支持 Ctrl+Enter 或 Cmd+Enter 发送
+// 支持回车发送（Shift+Enter 换行）
 function handleKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+  if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     handleSendText()
   }

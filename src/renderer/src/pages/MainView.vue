@@ -6,10 +6,6 @@ import Dots from '../components/Dots.vue'
 import { useEmotion } from '../composables/useEmotion'
 import { useAppStore } from '../stores/app'
 
-function togglePanel(): void {
-  window.api.togglePanel()
-}
-
 // Frameless 窗口控制（Linux 无原生按钮时使用）
 const platform = window.electron.process.platform
 function winMinimize(): void {
@@ -58,11 +54,8 @@ async function toggleCall() {
 <template>
   <div
     class="relative flex flex-col items-center justify-center w-full h-screen gap-4 p-5 overflow-hidden bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950"
+    style="-webkit-app-region: drag"
   >
-    <!-- 标题栏拖拽区域 -->
-    <div class="fixed top-0 left-0 right-0 h-10" style="-webkit-app-region: drag">
-      <div class="h-full" />
-    </div>
 
     <!-- Linux 自定义窗口控制按钮（Win 有原生 overlay，不重复渲染） -->
     <div
@@ -96,14 +89,11 @@ async function toggleCall() {
     <!-- Dots 组件 + 按钮组：固定相距 100px -->
     <div class="flex flex-col items-center gap-y-[100px] mt-12">
       <Dots :is-show="appStore.isCalling" />
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2" style="-webkit-app-region: no-drag">
         <!-- 电话按钮：点击拨打/挂断 -->
         <NButton quaternary circle @click="toggleCall">
           <icon-carbon-phone v-if="appStore.deviceState === 'idle'" class="w-5 h-5 text-green-500" />
           <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
-        </NButton>
-        <NButton quaternary circle @click="togglePanel">
-          <icon-carbon-send-alt class="w-5 h-5" />
         </NButton>
       </div>
     </div>

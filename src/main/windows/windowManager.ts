@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron'
+import process from 'node:process'
 import { getLogger } from '../utils/logger'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
@@ -20,6 +21,9 @@ const windowRefs = {
 type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d'
 let currentDisplayMode: DisplayMode = 'main'
 let onDisplayModeChanged: ((mode: DisplayMode) => void) | null = null
+
+// 应用退出标志（用于区分关闭窗口和退出应用）
+let isQuitting = false
 
 /**
  * 获取当前显示模式
@@ -198,4 +202,47 @@ export function toggleToLive2d(): void {
 
 export function getLive2dWindow(): BrowserWindow | null {
   return windowRefs.live2d.current
+}
+
+/**
+ * 获取当前显示模式对应的窗口
+ */
+export function getCurrentModeWindow(): BrowserWindow | null {
+  switch (currentDisplayMode) {
+    case 'main':
+      return windowRefs.main.current
+    case 'mini':
+      return windowRefs.mini.current
+    case 'chat':
+      return windowRefs.chat.current
+    case 'live2d':
+      return windowRefs.live2d.current
+    default:
+      return windowRefs.main.current
+  }
+}
+
+/**
+ * 设置应用退出标志
+ */
+export function setIsQuitting(value: boolean): void {
+  isQuitting = value
+}
+
+/**
+ * 获取应用退出标志
+ */
+export function getIsQuitting(): boolean {
+  return isQuitting
+}
+
+/**
+ * 窗口关闭事件处理器
+ * macOS: 点击关闭按钮时隐藏窗口而不是销毁（除非正在退出应用）
+ */
+export function handleWindowClose(event: Electron.Event, win: BrowserWindow): void {
+  if (process.platform === 'darwin' && !isQuitting) {
+    event.preventDefault()
+    win.hide()
+  }
 }

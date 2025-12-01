@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 
 import { getLogger } from '../../utils/logger'
+import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('Live2dWindow')
 // import { initLive2dDragBehavior } from '../behaviors/Live2dDragBehavior'
@@ -53,6 +54,11 @@ export function buildLive2dWindow(): BrowserWindow {
   win.on('ready-to-show', () => {
     logger.info('Window ready to show')
     // 不自动显示，等待用户切换到 Live2D 模式
+  })
+
+  // 处理窗口关闭事件
+  win.on('close', (event) => {
+    handleWindowClose(event, win)
   })
 
   // 设置窗口在所有工作区可见

@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
+import { handleWindowClose } from '../windowManager'
 
 export function buildMiniWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -24,7 +25,12 @@ export function buildMiniWindow(): BrowserWindow {
     },
   })
 
-  // 允许跨工作区显示（如果你想让悬浮球“全局悬浮”，保留；否则可以关）
+  // 处理窗口关闭事件
+  win.on('close', (event) => {
+    handleWindowClose(event, win)
+  })
+
+  // 允许跨工作区显示（如果你想让悬浮球"全局悬浮"，保留；否则可以关）
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   // 悬浮球用较低层级即可（不要 screen-saver）
   win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'status' : 'normal')

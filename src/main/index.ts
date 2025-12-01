@@ -12,7 +12,7 @@ import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildDisplayModeMenu } from './utils/menuBuilder'
 import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
-import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, onDisplayModeChange } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentModeWindow, onDisplayModeChange, setIsQuitting } from './windows/windowManager'
 
 const logger = getLogger('Index')
 
@@ -145,8 +145,26 @@ app.whenReady().then(async () => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0)
+    // macOS 点击 Dock 图标时，显示当前模式对应的窗口
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length === 0) {
       ensureMainWindow()
+    }
+    else {
+      // 获取当前显示模式对应的窗口
+      const targetWindow = getCurrentModeWindow()
+
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        if (!targetWindow.isVisible()) {
+          targetWindow.show()
+        }
+        targetWindow.focus()
+      }
+      else {
+        // 如果当前模式的窗口不存在，创建主窗口
+        ensureMainWindow()
+      }
+    }
     ensureDockVisible()
   })
 })
@@ -160,6 +178,7 @@ app.on('window-all-closed', () => {
 // 应用退出前清理所有资源
 app.on('before-quit', async (event) => {
   event.preventDefault()
+  setIsQuitting(true) // 设置退出标志，允许窗口关闭
   logger.info('应用正在退出...')
 
   // 清理后台音频系统

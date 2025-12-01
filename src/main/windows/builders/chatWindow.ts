@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, shell } from 'electron'
 import linuxIcon from '../../../../resources/tray/icon-32.png?asset'
 import winIcon from '../../../../resources/tray/icon.ico?asset'
+import { handleWindowClose } from '../windowManager'
 
 export function buildChatWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -32,6 +33,11 @@ export function buildChatWindow(): BrowserWindow {
 
   win.on('ready-to-show', () => {
     win.show()
+  })
+
+  // 处理窗口关闭事件
+  win.on('close', (event) => {
+    handleWindowClose(event, win)
   })
 
   win.setAlwaysOnTop(false)
