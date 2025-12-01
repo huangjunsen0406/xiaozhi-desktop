@@ -37,7 +37,7 @@ export class Method {
    * 获取方法描述符
    */
   getDescriptor(): MethodDescriptor {
-    const params: Record<string, { description: string; type: import('./types').ValueType }> = {}
+    const params: Record<string, { description: string, type: import('./types').ValueType }> = {}
 
     for (const [name, param] of this.parameters) {
       params[name] = param.getDescriptor()

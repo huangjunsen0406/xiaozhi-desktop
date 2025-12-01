@@ -32,10 +32,12 @@ export interface PositionResult {
  * 5. 对于左右模式，悬浮窗垂直居中对齐主窗口
  * 6. 对于上下模式，悬浮窗水平居中对齐主窗口
  *
- * @param miniBounds 主窗口的位置和尺寸信息
- * @param hoverSize 悬浮窗的尺寸 { width, height }
- * @param workArea 屏幕工作区域（排除任务栏等）
- * @param offset 悬浮窗与主窗口之间的间距，默认 8 像素
+ * @param   miniBounds - 主窗口的位置和尺寸信息
+ * @param   hoverSize - 悬浮窗的尺寸 { width, height }
+ * @param   hoverSize.width - 悬浮窗宽度
+ * @param   hoverSize.height - 悬浮窗高度
+ * @param   workArea - 屏幕工作区域（排除任务栏等）
+ * @param   offset - 悬浮窗与主窗口之间的间距，默认 8 像素
  * @returns PositionResult 包含坐标和显示模式的结果对象
  */
 export function computeHoverPosition(

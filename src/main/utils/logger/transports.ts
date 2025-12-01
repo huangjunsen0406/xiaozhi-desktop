@@ -59,7 +59,7 @@ export class FileTransport implements LogTransport {
   constructor(
     minLevel: LogLevel = LogLevel.INFO,
     options: {
-      logDir: string  // 必须从外部注入，不再可选
+      logDir: string // 必须从外部注入，不再可选
       maxFileSize?: number
       maxFiles?: number
     },

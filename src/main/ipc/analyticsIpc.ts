@@ -15,7 +15,8 @@ export function registerAnalyticsIpcChannels(): void {
       const analytics = getAnalyticsService()
       analytics.track(eventName, extra)
       return { success: true }
-    } catch (error) {
+    }
+    catch (error) {
       console.error('analytics:track error:', error)
       return { success: false, error: String(error) }
     }
@@ -28,7 +29,8 @@ export function registerAnalyticsIpcChannels(): void {
     try {
       const analytics = getAnalyticsService()
       return { success: true, config: analytics.getConfig() }
-    } catch (error) {
+    }
+    catch (error) {
       console.error('analytics:get-config error:', error)
       return { success: false, error: String(error) }
     }
@@ -42,7 +44,8 @@ export function registerAnalyticsIpcChannels(): void {
       const analytics = getAnalyticsService()
       analytics.updateConfig(config)
       return { success: true }
-    } catch (error) {
+    }
+    catch (error) {
       console.error('analytics:update-config error:', error)
       return { success: false, error: String(error) }
     }
@@ -56,7 +59,8 @@ export function registerAnalyticsIpcChannels(): void {
       const analytics = getAnalyticsService()
       await analytics.flush()
       return { success: true }
-    } catch (error) {
+    }
+    catch (error) {
       console.error('analytics:flush error:', error)
       return { success: false, error: String(error) }
     }

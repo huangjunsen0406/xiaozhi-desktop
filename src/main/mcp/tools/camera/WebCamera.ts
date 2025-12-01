@@ -7,9 +7,9 @@ import type { AnalyzeResult, CameraToolConfig, CaptureResult } from './types'
 import { Buffer } from 'node:buffer'
 import { BrowserWindow, ipcMain } from 'electron'
 import sharp from 'sharp'
-import { BaseCamera } from './BaseCamera'
-
 import { getLogger } from '../../../utils/logger'
+
+import { BaseCamera } from './BaseCamera'
 
 const logger = getLogger('WebCamera')
 

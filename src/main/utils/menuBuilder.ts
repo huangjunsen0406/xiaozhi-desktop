@@ -3,6 +3,33 @@ import { app, Menu } from 'electron'
 import { getCurrentDisplayMode, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
 
 /**
+ * 构建应用菜单（仅包含设置和退出）
+ */
+export function buildAppMenu(): Menu {
+  const appName = app.getName()
+
+  const submenu: MenuItemConstructorOptions[] = []
+
+  submenu.push({
+    label: '设置…',
+    accelerator: 'CmdOrCtrl+,',
+    click: () => {
+      toggleSettings()
+    },
+  })
+
+  submenu.push({ type: 'separator' })
+  submenu.push({ role: 'quit', label: `退出 ${appName}` })
+
+  return Menu.buildFromTemplate([
+    {
+      label: appName,
+      submenu,
+    },
+  ])
+}
+
+/**
  * 构建显示模式菜单项
  * 用于 Dock 菜单和托盘菜单
  * @param includeQuit - 是否包含退出选项（托盘菜单需要，Dock 菜单不需要）

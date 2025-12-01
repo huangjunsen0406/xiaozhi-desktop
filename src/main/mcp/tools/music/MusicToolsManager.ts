@@ -4,9 +4,9 @@
  */
 
 import type { PropertyList, PropertyType } from '../../types'
-import { MusicPlayer } from './MusicPlayer'
-
 import { getLogger } from '../../../utils/logger'
+
+import { MusicPlayer } from './MusicPlayer'
 
 const logger = getLogger('MusicToolsManager')
 

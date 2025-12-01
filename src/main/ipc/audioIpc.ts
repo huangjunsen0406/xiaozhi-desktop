@@ -1,8 +1,8 @@
 import type { AudioConfig } from '../types/audio'
 import { OpusCodec } from '../audio/OpusCodec'
 import { DatabaseManager } from '../services/database'
-import { SystemVolumeController } from '../utils/SystemVolumeController'
 import { getLogger } from '../utils/logger'
+import { SystemVolumeController } from '../utils/SystemVolumeController'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('AudioIpc')
@@ -89,11 +89,11 @@ export function registerAudioIpc(): void {
 
       db.updateAudioConfig(dbUpdates)
       logger.info('音频配置已保存到数据库:', dbUpdates)
-      
+
       // 重新加载 AudioConfig
       const { AudioConfig: AudioConfigInstance } = await import('../constants/DeviceState')
       AudioConfigInstance.reload()
-      
+
       return success()
     },
   })

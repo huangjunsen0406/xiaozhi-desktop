@@ -11,7 +11,7 @@
 export function trackEvent(event: string, extra?: Record<string, unknown>): void {
   window.api
     .analyticsTrack(event, extra)
-    .catch((error) => console.error('埋点上报失败:', error))
+    .catch(error => console.error('埋点上报失败:', error))
 }
 
 /**

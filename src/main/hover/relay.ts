@@ -4,6 +4,8 @@ import { screen } from 'electron'
 /**
  * 判断点是否在矩形区域内
  * @param pt 点坐标 { x, y }
+ * @param pt.x 点的 x 坐标
+ * @param pt.y 点的 y 坐标
  * @param r 矩形区域
  * @returns boolean 点是否在矩形内
  */

@@ -2,7 +2,7 @@ import type { IpcContext } from './types/ipc'
 import { join } from 'node:path'
 import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
@@ -10,11 +10,14 @@ import { getAnalyticsService } from './services/AnalyticsService'
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
-import { buildDisplayModeMenu } from './utils/menuBuilder'
+import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
 import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
 import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentModeWindow, onDisplayModeChange, setIsQuitting } from './windows/windowManager'
 
 const logger = getLogger('Index')
+const APP_DISPLAY_NAME = '小智'
+
+app.setName(APP_DISPLAY_NAME)
 
 app.commandLine.appendSwitch(
   'enable-features',
@@ -46,10 +49,10 @@ function setDevDockIconOnce(): void {
 }
 
 function ensureDockVisible(): void {
-  if (!isMacOS)
+  if (!isMacOS) {
     return
+  }
 
-  app.setName('小智')
   ;(app as unknown as { setActivationPolicy?: (policy: string) => void }).setActivationPolicy?.('regular')
 
   if (hasDock()) {
@@ -102,6 +105,7 @@ app.whenReady().then(async () => {
 
   registerBasicIpcChannels()
   registerTray()
+  Menu.setApplicationMenu(buildAppMenu())
 
   if (isMacOS && hasDock()) {
     app.dock!.setMenu(buildDisplayModeMenu(false))

@@ -267,7 +267,9 @@ defineExpose({
         <template #extra>
           <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
             <p>请将 Live2D 模型文件夹复制到模型目录</p>
-            <p class="mt-1">或点击上方"导入模型"按钮</p>
+            <p class="mt-1">
+              或点击上方"导入模型"按钮
+            </p>
           </div>
         </template>
       </NEmpty>
@@ -284,4 +286,3 @@ defineExpose({
     </div>
   </div>
 </template>
-

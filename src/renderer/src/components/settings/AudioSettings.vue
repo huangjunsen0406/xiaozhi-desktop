@@ -282,7 +282,7 @@ defineExpose({ handleSave, handleCustomButton })
       <div style="display: flex; align-items: center; gap: 8px">
         <NSwitch v-model:value="enableRealtimeConversation" />
         <span style="color: #999; font-size: 12px">
-          {{ enableRealtimeConversation ? '实时对话模式（全双工）' : '自动对话模式（回合制）' }}
+          {{ enableRealtimeConversation ? '实时对话模式（全双工）' : '自动对话模式（回合制）' }} 开启实时对话后会获取屏幕录制权限（默认开启）
         </span>
       </div>
     </NFormItem>

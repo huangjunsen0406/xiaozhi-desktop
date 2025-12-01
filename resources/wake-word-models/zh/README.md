@@ -12,7 +12,6 @@ sherpa 中自定义唤醒词模型，训练数据为 wenetspeech L （10000 小�
 模型结构为 zipformer 模型， 本质是一个非常小的语音识别模型，为了实现唤醒词的功能，我们在解码端做了一些修改和约束。
 支持自定义唤醒词，数量不限，效果需要单个调整参数。
 
-
 #### Clone with HTTP
 ```bash
  git lfs install

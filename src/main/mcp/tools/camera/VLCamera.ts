@@ -3,9 +3,9 @@ import { Buffer } from 'node:buffer'
 import { BrowserWindow, ipcMain } from 'electron'
 import OpenAI from 'openai'
 import sharp from 'sharp'
-import { BaseCamera } from './BaseCamera'
-
 import { getLogger } from '../../../utils/logger'
+
+import { BaseCamera } from './BaseCamera'
 
 const logger = getLogger('VLCamera')
 

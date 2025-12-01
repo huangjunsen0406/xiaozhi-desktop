@@ -2,9 +2,9 @@ import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { McpServer } from '../mcp/McpServer'
-import { Plugin } from './Plugin'
-
 import { getLogger } from '../utils/logger'
+
+import { Plugin } from './Plugin'
 
 const logger = getLogger('McpPlugin')
 

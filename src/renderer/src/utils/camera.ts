@@ -129,4 +129,3 @@ export async function getCameraDevices(): Promise<CameraDevice[]> {
     return []
   }
 }
-
