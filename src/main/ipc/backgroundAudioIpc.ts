@@ -28,30 +28,22 @@ export function registerBackgroundAudioIpc(): void {
     }
   }
 
-  ipcMain.handle('background-audio:initialize', async () => {
-    sendAudioCommand('initialize')
-  })
-
-  ipcMain.handle('background-audio:start', async () => {
-    sendAudioCommand('start')
-  })
-
-  ipcMain.handle('background-audio:stop', async () => {
-    sendAudioCommand('stop')
-  })
-
+  // 切换音频设备（用户在设置中更改设备时调用）
   ipcMain.handle('background-audio:switch-devices', async () => {
     sendAudioCommand('switchDevices')
   })
 
+  // 清理资源（仅在应用退出时调用）
   ipcMain.handle('background-audio:cleanup', async () => {
     sendAudioCommand('cleanup')
   })
 
+  // 获取音频状态
   ipcMain.handle('background-audio:get-status', async () => {
     return audioStatus
   })
 
+  // 监听音频状态更新
   ipcMain.on('audio:state', (_, state: { capturing?: boolean, playing?: boolean, error?: string }) => {
     logger.info('收到音频状态更新:', state)
 

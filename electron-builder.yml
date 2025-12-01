@@ -20,7 +20,8 @@ nsis:
   createDesktopShortcut: always
 mac:
   icon: build/icon.icns
-  entitlementsInherit: build/entitlements.mac.plist
+  # 不签名配置：不需要 hardenedRuntime 和 entitlements
+  # 设置 CSC_IDENTITY_AUTO_DISCOVERY=false 确保不自动签名
   extendInfo:
     LSUIElement: false
     NSCameraUsageDescription: Application requests access to the device's camera.

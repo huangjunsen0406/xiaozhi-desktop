@@ -86,9 +86,18 @@ export default defineConfig({
     ],
   },
   renderer: {
+    publicDir: resolve(__dirname, 'src/renderer/public'),
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
+      },
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          audio: resolve(__dirname, 'src/renderer/audio.html'),
+        },
       },
     },
     plugins: [

@@ -48,6 +48,20 @@ export interface SystemConfig {
   [key: string]: unknown
 }
 
+/**
+ * 模型信息类型
+ */
+export interface ModelInfo {
+  id: string
+  name: string
+  path: string
+  preview?: string
+  hasExpressions: boolean
+  hasMotions: boolean
+  expressionCount: number
+  motionCount: number
+}
+
 export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
@@ -112,6 +126,7 @@ export interface RendererApi {
   // Background Audio Window APIs
   onAudioCommand: (callback: (command: string, data?: Record<string, unknown>) => void) => void
   sendAudioState: (state: { initialized?: boolean, capturing?: boolean, error?: string }) => void
+  audioUpdateState: (state: { state?: string, initialized?: boolean, capturing?: boolean, error?: string }) => void
   backgroundAudioGetStatus: () => Promise<BackgroundAudioStatus>
   // Emotion APIs
   emotionSelectImage: () => Promise<Electron.OpenDialogReturnValue>
@@ -191,6 +206,18 @@ export interface RendererApi {
   // Live2D APIs
   live2dOnAudioVolume: (callback: (volume: number) => void) => void
   live2dRemoveAudioVolumeListener: () => void
+
+  // Model APIs
+  modelGetList: () => Promise<ModelInfo[]>
+  modelGetCurrent: () => Promise<string>
+  modelSetCurrent: (modelId: string) => Promise<{ success: boolean, error?: string }>
+  modelSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
+  modelImport: (sourcePath: string) => Promise<{ success: boolean, error?: string, modelId?: string }>
+  modelDelete: (modelId: string) => Promise<{ success: boolean, error?: string }>
+  modelOpenFolder: () => Promise<{ success: boolean }>
+  modelGetFolderPath: () => Promise<string>
+  modelOnChanged: (callback: (modelId: string) => void) => void
+  modelRemoveChangedListener: () => void
 
   // Analytics APIs
   analyticsTrack: (event: string, extra?: Record<string, unknown>) => Promise<{ success: boolean }>

@@ -8,8 +8,10 @@ import { ipcRenderer } from 'electron'
  * 音频状态类型
  */
 export interface AudioState {
+  state?: string
   capturing: boolean
-  playing: boolean
+  playing?: boolean
+  initialized?: boolean
   error?: string
 }
 
@@ -21,8 +23,11 @@ export const backgroundAudioApi = {
     ipcRenderer.on('audio:command', (_, command, data) => callback(command, data))
   },
 
-  // 发送音频状态
+  // 发送音频状态（旧版兼容）
   sendAudioState: (state: AudioState): void => ipcRenderer.send('audio:state', state),
+
+  // 更新音频状态（新版）
+  audioUpdateState: (state: AudioState): void => ipcRenderer.send('audio:state', state),
 
   // 获取后台音频状态（仅主窗口可用）
   getStatus: (): Promise<BackgroundAudioStatus> => ipcRenderer.invoke('background-audio:get-status'),

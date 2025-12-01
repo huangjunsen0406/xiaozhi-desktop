@@ -5,6 +5,7 @@ import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
 import { getLive2dWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
+import { registerAnalyticsIpcChannels } from './analyticsIpc'
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
 import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
@@ -12,10 +13,10 @@ import { registerCameraConfigIpc } from './cameraConfigIpc'
 import { registerChatIpc } from './chatIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
-import { registerMusicIpc } from './musicIpc'
+import { registerModelIpc } from './modelIpc'
 
+import { registerMusicIpc } from './musicIpc'
 import { registerThemeIpc } from './themeIpc'
-import { registerAnalyticsIpcChannels } from './analyticsIpc'
 
 const logger = getLogger('Index')
 
@@ -37,6 +38,7 @@ export function registerBasicIpcChannels(): void {
   registerChatIpc()
   registerMusicIpc()
   registerAnalyticsIpcChannels()
+  registerModelIpc()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()

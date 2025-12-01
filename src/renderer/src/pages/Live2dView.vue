@@ -12,12 +12,13 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 const canvasSize = { width: 200, height: 400 }
 
-// 模型配置 - 只需修改这里的文件夹名称即可切换模型
-const MODEL_FOLDER = 'Hiyori' // 可选: Haru, Hiyori, Mao, Mark, Natori, Rice, Wanko, hiyori_pro_zh, samoyedog
+// 默认模型（首次加载或配置为空时使用）
+const DEFAULT_MODEL = 'Hiyori'
 
 let app: PIXI.Application | null = null
 let model: Live2DModel | null = null
 let isDragging = false
+let currentModelId = '' // 当前加载的模型ID
 
 const status = ref({
   canvas: false,
@@ -30,6 +31,98 @@ const status = ref({
 let currentMouthValue = 0 // 当前嘴巴开合度
 let targetMouthValue = 0 // 目标嘴巴开合度
 let lipSyncAnimationId: number | null = null
+
+/**
+ * 获取当前配置的模型ID
+ */
+async function getCurrentModelId(): Promise<string> {
+  try {
+    const modelId = await window.api?.modelGetCurrent()
+    return modelId || DEFAULT_MODEL
+  }
+  catch (error) {
+    console.warn('[Live2D] 获取当前模型配置失败，使用默认模型', error)
+    return DEFAULT_MODEL
+  }
+}
+
+/**
+ * 构建模型URL（使用自定义协议）
+ */
+function buildModelUrl(modelId: string): string {
+  // 使用 live2d-model:// 协议访问 userData/models/ 中的模型
+  return `live2d-model://${modelId}/model.json`
+}
+
+/**
+ * 加载模型
+ */
+async function loadModel(modelId: string): Promise<void> {
+  if (!app) {
+    console.error('[Live2D] PIXI Application 未初始化')
+    return
+  }
+
+  // 如果是同一个模型，不重新加载
+  if (modelId === currentModelId && model) {
+    console.log('[Live2D] 模型已加载，跳过:', modelId)
+    return
+  }
+
+  console.log('[Live2D] 开始加载模型:', modelId)
+
+  // 清理旧模型
+  if (model) {
+    console.log('[Live2D] 清理旧模型:', currentModelId)
+    app.stage.removeChild(model)
+    model.destroy()
+    model = null
+  }
+
+  try {
+    const modelPath = buildModelUrl(modelId)
+    console.log('[Live2D] 模型路径:', modelPath)
+
+    model = await Live2DModel.from(modelPath)
+    console.log('[Live2D] 模型加载成功:', model)
+
+    currentModelId = modelId
+    status.value.model = true
+    status.value.error = ''
+
+    // 添加模型到舞台
+    app.stage.addChild(model)
+    setupModel(model)
+    console.log('[Live2D] 模型已添加到舞台')
+
+    // 监听模型点击事件
+    model.on('hit', (hitAreas: string[]) => {
+      console.log('[Live2D] Hit areas:', hitAreas)
+    })
+  }
+  catch (error) {
+    console.error('[Live2D] 加载模型失败:', error)
+    status.value.model = false
+    if (error instanceof Error) {
+      status.value.error = error.message
+    }
+    // 如果加载失败且不是默认模型，尝试加载默认模型
+    if (modelId !== DEFAULT_MODEL) {
+      console.log('[Live2D] 尝试加载默认模型...')
+      await loadModel(DEFAULT_MODEL)
+    }
+  }
+}
+
+/**
+ * 模型切换处理
+ */
+async function handleModelChange(newModelId: string): Promise<void> {
+  console.log('[Live2D] 收到模型切换通知:', newModelId)
+  if (newModelId && newModelId !== currentModelId) {
+    await loadModel(newModelId)
+  }
+}
 
 // 注册清理函数(必须在 async 之前)
 onUnmounted(() => {
@@ -47,6 +140,8 @@ onUnmounted(() => {
     lipSyncAnimationId = null
   }
   window.api?.live2dRemoveAudioVolumeListener()
+  // 移除模型切换监听
+  window.api?.modelRemoveChangedListener?.()
 })
 
 onMounted(async () => {
@@ -76,23 +171,9 @@ onMounted(async () => {
     console.log('PIXI Application created')
     status.value.app = true
 
-    // 加载 Live2D 模型
-    const modelPath = `/Resources/${MODEL_FOLDER}/model.json`
-    console.log('Loading model from:', modelPath)
-
-    model = await Live2DModel.from(modelPath)
-    console.log('Model loaded successfully:', model)
-    status.value.model = true
-
-    // 添加模型到舞台
-    app.stage.addChild(model)
-    setupModel(model)
-    console.log('Model added to stage')
-
-    // 监听模型点击事件
-    model.on('hit', (hitAreas: string[]) => {
-      console.log('Hit areas:', hitAreas)
-    })
+    // 获取当前配置的模型并加载
+    const modelId = await getCurrentModelId()
+    await loadModel(modelId)
 
     // 监听鼠标移动事件(用于穿透控制)
     if (containerRef.value) {
@@ -103,6 +184,10 @@ onMounted(async () => {
     // 启动口型同步
     setupLipSync()
     console.log('口型同步已启动')
+
+    // 监听模型切换事件
+    window.api?.modelOnChanged?.(handleModelChange)
+    console.log('[Live2D] 模型切换监听已注册')
   }
   catch (error) {
     console.error('Failed to initialize', error)

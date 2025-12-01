@@ -11,7 +11,8 @@ import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildDisplayModeMenu } from './utils/menuBuilder'
-import { ensureBackgroundAudioWindow, ensureMainWindow, onDisplayModeChange } from './windows/windowManager'
+import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, onDisplayModeChange } from './windows/windowManager'
 
 const logger = getLogger('Index')
 
@@ -67,10 +68,16 @@ app.on('ready', () => {
   setDevDockIconOnce()
 })
 
+// 在 app ready 之前注册自定义协议 scheme
+registerModelProtocolScheme()
+
 app.whenReady().then(async () => {
   // 初始化日志系统
   initLogger()
   logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
+
+  // 注册自定义协议处理器
+  registerModelProtocolHandler()
 
   // 初始化埋点服务
   const analytics = getAnalyticsService()
@@ -150,10 +157,25 @@ app.on('window-all-closed', () => {
   }
 })
 
-// 应用退出前清理日志系统和埋点服务
+// 应用退出前清理所有资源
 app.on('before-quit', async (event) => {
   event.preventDefault()
   logger.info('应用正在退出...')
+
+  // 清理后台音频系统
+  try {
+    const backgroundAudioWindow = getBackgroundAudioWindow()
+    if (backgroundAudioWindow && !backgroundAudioWindow.isDestroyed()) {
+      logger.info('正在清理后台音频系统...')
+      backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
+      // 等待一小段时间让cleanup完成
+      await new Promise(resolve => setTimeout(resolve, 100))
+      logger.info('后台音频系统已清理')
+    }
+  }
+  catch (error) {
+    logger.error('清理后台音频系统失败', error)
+  }
 
   // 上报应用退出事件并等待发送完成
   const analytics = getAnalyticsService()

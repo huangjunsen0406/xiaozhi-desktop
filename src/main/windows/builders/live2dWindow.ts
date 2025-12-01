@@ -45,7 +45,7 @@ export function buildLive2dWindow(): BrowserWindow {
       sandbox: false,
       nodeIntegration: false,
       contextIsolation: true,
-      devTools: false, // Live2D 窗口不需要开发者工具
+      devTools: is.dev, // 仅在开发模式下启用开发者工具
     },
   })
 

@@ -139,7 +139,7 @@ export class AudioPlugin extends Plugin {
 
   /**
    * 设备状态变化回调
-   * 控制后台音频窗口的采集行为
+   * 在进入监听状态时检查并切换音频设备
    */
   async onDeviceStateChanged(state: DeviceState): Promise<void> {
     logger.info(`设备状态变化: ${state}`)
@@ -147,16 +147,9 @@ export class AudioPlugin extends Plugin {
     // 根据状态控制后台音频窗口
     if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
       if (state === 'listening') {
-        // 开始监听前，先切换设备（如果配置有变化）
+        // 开始监听前，检查并切换设备（如果配置有变化）
         logger.info('通知后台音频窗口检查设备配置')
         this.backgroundAudioWindow.webContents.send('audio:command', 'switchDevices')
-
-        // 等待设备切换完成后再启动采集
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-        // 启动音频采集
-        logger.info('通知后台音频窗口启动采集')
-        this.backgroundAudioWindow.webContents.send('audio:command', 'start')
       }
     }
   }

@@ -49,7 +49,7 @@ export class AudioCapture {
       console.log(`AudioContext 创建成功: ${this.audioContext.sampleRate}Hz`)
 
       // 加载 AudioWorklet 模块
-      await this.audioContext.audioWorklet.addModule('/worklets/pcm-capture-processor.js')
+      await this.audioContext.audioWorklet.addModule('./worklets/pcm-capture-processor.js')
 
       console.log('AudioWorklet 模块加载成功')
 

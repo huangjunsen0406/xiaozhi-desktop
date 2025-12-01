@@ -159,52 +159,7 @@ export class WakeWordPlugin extends Plugin {
     audioPlugin.addAudioListener(this.detector)
     logger.info('✓ 已订阅音频流')
 
-    // 启动后台音频采集（用于唤醒词检测）
-    await this.startBackgroundAudioCapture(audioPlugin)
-  }
-
-  /**
-   * 启动后台音频采集
-   */
-  private async startBackgroundAudioCapture(audioPlugin: { getBackgroundAudioWindow: () => Electron.BrowserWindow | null }): Promise<void> {
-    const backgroundWindow = audioPlugin.getBackgroundAudioWindow()
-    if (!backgroundWindow || backgroundWindow.isDestroyed()) {
-      logger.warn('后台音频窗口未找到')
-      return
-    }
-
-    // 等待窗口完全加载完成
-    if (!backgroundWindow.webContents.isLoading()) {
-      // 已经加载完成，直接启动
-      this.sendAudioCommands(backgroundWindow)
-    }
-    else {
-      // 等待加载完成
-      logger.info('等待后台音频窗口加载完成...')
-      backgroundWindow.webContents.once('did-finish-load', () => {
-        logger.info('后台音频窗口已加载')
-        // 等待一小段时间确保页面完全初始化
-        this.pendingTimer = setTimeout(() => {
-          this.pendingTimer = null
-          this.sendAudioCommands(backgroundWindow)
-        }, 500)
-      })
-    }
-  }
-
-  /**
-   * 发送音频启动指令
-   */
-  private sendAudioCommands(backgroundWindow: Electron.BrowserWindow): void {
-    if (backgroundWindow.isDestroyed()) {
-      logger.warn('窗口已销毁，无法启动音频')
-      return
-    }
-
-    logger.info('启动后台音频采集...')
-    // 直接启动采集，会自动使用配置的设备
-    backgroundWindow.webContents.send('audio:command', 'start')
-    logger.info('✓ 已启动后台音频采集，开始监听唤醒词')
+    logger.info('音频系统将自动启动，开始监听唤醒词')
   }
 
   /**

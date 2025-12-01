@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, analyticsApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, live2dApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, analyticsApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -86,6 +86,7 @@ const api = {
   // 后台音频窗口 API
   onAudioCommand: backgroundAudioApi.onAudioCommand,
   sendAudioState: backgroundAudioApi.sendAudioState,
+  audioUpdateState: backgroundAudioApi.audioUpdateState,
   backgroundAudioGetStatus: backgroundAudioApi.getStatus,
 
   // 表情 API
@@ -140,6 +141,18 @@ const api = {
   // Live2D API
   live2dOnAudioVolume: live2dApi.onAudioVolume,
   live2dRemoveAudioVolumeListener: live2dApi.removeAudioVolumeListener,
+
+  // 模型管理 API
+  modelGetList: modelApi.getList,
+  modelGetCurrent: modelApi.getCurrent,
+  modelSetCurrent: modelApi.setCurrent,
+  modelSelectFolder: modelApi.selectFolder,
+  modelImport: modelApi.import,
+  modelDelete: modelApi.delete,
+  modelOpenFolder: modelApi.openFolder,
+  modelGetFolderPath: modelApi.getFolderPath,
+  modelOnChanged: modelApi.onChanged,
+  modelRemoveChangedListener: modelApi.removeChangedListener,
 }
 
 // 使用 contextBridge 暴露 API
