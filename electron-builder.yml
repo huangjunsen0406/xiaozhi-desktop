@@ -1,48 +1,128 @@
-appId: com.electron.app
+appId: com.xiaozhi.desktop
 productName: xiaozhi-desktop
 directories:
   buildResources: build
+  output: release
 files:
+  # 包含构建输出和资源
+  - out/**/*
+  - resources/**/*
+  - package.json
+
+  # 排除源代码和配置文件
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+
+  # 排除开发用的旧数据库目录
+  - '!config/*'
+
+  # 排除文档和脚本
+  - '!*.md'
+  - '!scripts/*'
+
+  # 排除 node_modules 中的开发依赖（减小体积）
+  - '!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}'
+  - '!node_modules/*/{test,__tests__,tests,powered-test,example,examples}'
+  - '!node_modules/*.d.ts'
+  - '!node_modules/.bin'
+  - '!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}'
+  - '!.editorconfig'
+  - '!**/._*'
+  - '!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}'
+  - '!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}'
+  - '!**/{appveyor.yml,.travis.yml,circle.yml}'
+  - '!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}'
 asarUnpack:
+  # 静态资源（唤醒词模型、托盘图标等）
   - resources/**
+
+  # 原生模块必须解包（ASAR 限制）
+  # 原因：某些 Node API（如 child_process.exec、fs.open、process.dlopen）
+  # 不支持在 ASAR 中执行二进制文件，需要解包到文件系统
+
+  # SQLite 数据库引擎
+  - node_modules/better-sqlite3/**/*.node
+
+  # 语音识别引擎（Sherpa ONNX）
+  - node_modules/sherpa-onnx-node/**/*.node
+  - node_modules/sherpa-onnx-darwin-arm64/**/*.node
+  - node_modules/sherpa-onnx-darwin-x64/**/*.node
+  - node_modules/sherpa-onnx-linux-x64/**/*.node
+  - node_modules/sherpa-onnx-win-x64/**/*.node
+
+  # 全局快捷键钩子（UIOHook）
+  - node_modules/uiohook-napi/**/*.node
+
+  # 截图工具
+  - node_modules/node-screenshots/**/*.node
+  - node_modules/node-screenshots-darwin-arm64/**/*.node
+  - node_modules/node-screenshots-darwin-universal/**/*.node
+
+  # 图像处理（Sharp）
+  - node_modules/sharp/**/*.node
+  - node_modules/@img/**/*.node
+
+  # 所有平台的共享库
+  - node_modules/**/*.dylib # macOS
+  - node_modules/**/*.so # Linux
+  - node_modules/**/*.dll # Windows
 win:
   executableName: xiaozhi-desktop
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
 mac:
   icon: build/icon.icns
+  category: public.app-category.productivity
+  # 只构建当前架构（避免 DMG 文件名冲突）
+  # 如需构建其他架构：
+  #   - arm64: pnpm run build && electron-builder --mac --arm64
+  #   - x64:   pnpm run build && electron-builder --mac --x64
+  #   - universal: pnpm run build && electron-builder --mac --universal
+  target:
+    - dmg
+    - zip
   # 不签名配置：不需要 hardenedRuntime 和 entitlements
   # 设置 CSC_IDENTITY_AUTO_DISCOVERY=false 确保不自动签名
   extendInfo:
     LSUIElement: false
-    NSCameraUsageDescription: Application requests access to the device's camera.
-    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSCameraUsageDescription: 小智桌面需要访问您的摄像头以提供视觉识别功能。
+    NSMicrophoneUsageDescription: 小智桌面需要访问您的麦克风以进行语音交互。
+    NSDocumentsFolderUsageDescription: 小智桌面需要访问您的文档文件夹以保存和管理文件。
+    NSDownloadsFolderUsageDescription: 小智桌面需要访问您的下载文件夹以保存下载的文件。
+    NSDesktopFolderUsageDescription: 小智桌面需要访问您的桌面以保存文件。
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
+  # 只构建当前架构（避免文件名冲突）
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: xiaozhi.me
   category: Utility
+  executableName: xiaozhi-desktop
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+# 自动更新配置（如果需要）
+# publish:
+#   provider: generic
+#   url: https://your-update-server.com/releases
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
+# 压缩选项（可选，减小包体积）
+compression: normal # store | normal | maximum

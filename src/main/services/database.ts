@@ -13,7 +13,6 @@ import type {
 } from '../types/database'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import process from 'node:process'
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { getLogger } from '../utils/logger'
@@ -21,16 +20,11 @@ import { getLogger } from '../utils/logger'
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null
   private db: Database.Database
-  private logger = getLogger('Database')  // 移到类内部
+  private logger = getLogger('Database') // 移到类内部
 
   private constructor() {
-    let dbDir: string
-    if (app.isPackaged) {
-      dbDir = join(app.getPath('userData'), 'data')
-    }
-    else {
-      dbDir = join(process.cwd(), 'config')
-    }
+    // 统一使用 userData/data 目录（遵循 Electron 规范）
+    const dbDir = join(app.getPath('userData'), 'data')
 
     if (!existsSync(dbDir)) {
       mkdirSync(dbDir, { recursive: true })

@@ -26,6 +26,10 @@ export default defineConfig({
           // 算法名称
           'hmac-sha256',
           'aes-128-ctr',
+          // 埋点服务敏感信息
+          'https://ywvzubcpdwgxpttoxwhm.supabase.co/functions/v1/bright-task',
+          'junsen-track-2024-LightDot',
+          '6ba7b810-9dad-11d1-80b4-00c04fd430c8', // UUID namespace
         ],
       }),
     ],
@@ -41,6 +45,10 @@ export default defineConfig({
               || id.includes('deviceFingerprintDB')
               || id.includes('configManagerDB')) {
               return 'activation'
+            }
+            // 埋点服务（包含 endpoint 和 token）
+            if (id.includes('AnalyticsService')) {
+              return 'analytics'
             }
             // 协议层（包含加密逻辑）
             if (id.includes('protocols/')) {
