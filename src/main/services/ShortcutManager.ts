@@ -5,6 +5,7 @@ import { globalShortcut } from 'electron'
 import { getLogger } from '../utils/logger'
 import {
   ensureMainWindow,
+  getCurrentModeWindow,
   toggleSettings,
   toggleToChat,
   toggleToLive2d,
@@ -155,9 +156,21 @@ export class ShortcutManager {
         break
 
       case 'app.activate': {
-        const mainWin = ensureMainWindow()
-        mainWin.show()
-        mainWin.focus()
+        // 显示当前显示模式对应的窗口（与 Dock 图标行为一致）
+        const targetWindow = getCurrentModeWindow()
+
+        if (targetWindow && !targetWindow.isDestroyed()) {
+          if (!targetWindow.isVisible()) {
+            targetWindow.show()
+          }
+          targetWindow.focus()
+        }
+        else {
+          // 如果当前模式的窗口不存在，创建主窗口
+          const mainWin = ensureMainWindow()
+          mainWin.show()
+          mainWin.focus()
+        }
         break
       }
 

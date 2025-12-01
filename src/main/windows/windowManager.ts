@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import process from 'node:process'
+import { hide as hideHover } from '../hover/controller'
 import { getLogger } from '../utils/logger'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
 
@@ -140,6 +141,8 @@ export function toggleToMain(): void {
   // 关闭 panel 窗口（仅在 miniview 模式下可用）
   if (windowRefs.panel.current)
     windowRefs.panel.current.hide()
+  // 隐藏悬浮窗
+  hideHover()
   setDisplayMode('main')
 }
 
@@ -186,6 +189,8 @@ export function toggleToChat(): void {
   // 关闭 panel 窗口（仅在 miniview 模式下可用）
   if (windowRefs.panel.current)
     windowRefs.panel.current.hide()
+  // 隐藏悬浮窗
+  hideHover()
   setDisplayMode('chat')
 }
 
@@ -206,6 +211,8 @@ export function toggleToLive2d(): void {
   // 关闭 panel 窗口（仅在 miniview 模式下可用）
   if (windowRefs.panel.current)
     windowRefs.panel.current.hide()
+  // 隐藏悬浮窗
+  hideHover()
   setDisplayMode('live2d')
 }
 
