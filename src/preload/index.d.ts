@@ -224,6 +224,10 @@ export interface RendererApi {
   analyticsGetConfig: () => Promise<any>
   analyticsUpdateConfig: (config: any) => Promise<{ success: boolean }>
   analyticsFlush: () => Promise<{ success: boolean }>
+
+  // 剪贴板 API
+  clipboardWriteText: (text: string) => Promise<void>
+  clipboardReadText: () => Promise<string | null>
 }
 
 // ShortcutConfig 从共享类型导入

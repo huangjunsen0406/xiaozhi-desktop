@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, analyticsApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, analyticsApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -153,6 +153,10 @@ const api = {
   modelGetFolderPath: modelApi.getFolderPath,
   modelOnChanged: modelApi.onChanged,
   modelRemoveChangedListener: modelApi.removeChangedListener,
+
+  // 剪贴板 API
+  clipboardWriteText: clipboardApi.writeText,
+  clipboardReadText: clipboardApi.readText,
 }
 
 // 使用 contextBridge 暴露 API

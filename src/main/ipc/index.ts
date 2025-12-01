@@ -11,6 +11,7 @@ import { registerAudioIpc } from './audioIpc'
 import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
 import { registerCameraConfigIpc } from './cameraConfigIpc'
 import { registerChatIpc } from './chatIpc'
+import { registerClipboardIpcChannels } from './clipboardIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
 import { registerModelIpc } from './modelIpc'
@@ -39,6 +40,7 @@ export function registerBasicIpcChannels(): void {
   registerMusicIpc()
   registerAnalyticsIpcChannels()
   registerModelIpc()
+  registerClipboardIpcChannels()
 
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()

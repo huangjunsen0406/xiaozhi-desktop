@@ -87,8 +87,13 @@ async function startActivation() {
 
 // 复制验证码
 async function copyCode() {
-  await navigator.clipboard.writeText(activationCode.value)
-  console.log('验证码已复制')
+  try {
+    await window.api.clipboardWriteText(activationCode.value)
+    console.log('验证码已复制')
+  }
+  catch (error) {
+    console.error('复制失败:', error)
+  }
 }
 
 // 跳转激活页面
@@ -164,7 +169,7 @@ const codeArray = computed(() => {
       <div v-else class="text-gray-400 text-[12px]">
         等待验证码...
       </div>
-      <div class=" bg-[#165dff] dark:bg-[#1d2129] py-[10px] px-[30px] box-border rounded-lg text-white text-center cursor-pointer" @click="copyCode">
+      <div class=" bg-[#165dff] dark:bg-[#1d2129] border border-transparent dark:border-white/60 py-[10px] px-[30px] box-border rounded-lg text-white text-center cursor-pointer" @click="copyCode">
         复制
       </div>
     </div>
