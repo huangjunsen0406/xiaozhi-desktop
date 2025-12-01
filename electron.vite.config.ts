@@ -94,7 +94,7 @@ export default defineConfig({
     ],
   },
   renderer: {
-    publicDir: resolve(__dirname, 'src/renderer/public'),
+    // publicDir: resolve(__dirname, 'src/renderer/public'),
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),

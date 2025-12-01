@@ -26,8 +26,9 @@ function getModelsDir(): string {
  */
 function getBuiltinModelsDir(): string {
   if (app.isPackaged) {
-    // 生产环境：从 asar 内的资源目录读取
-    return path.join(__dirname, '../../renderer/Resources')
+    // 生产环境：从 extraResources 中读取（app.asar 外部）
+    // extraResources 会被复制到 process.resourcesPath 目录
+    return path.join(process.resourcesPath, 'live2d-models')
   }
   else {
     // 开发环境：从项目目录读取
@@ -97,8 +98,9 @@ async function markModelsInitialized(): Promise<void> {
 
 /**
  * 复制内置模型到用户目录
+ * @returns 返回复制的模型数量
  */
-async function copyBuiltinModels(): Promise<void> {
+async function copyBuiltinModels(): Promise<number> {
   const builtinDir = getBuiltinModelsDir()
   const userDir = getModelsDir()
 
@@ -107,7 +109,7 @@ async function copyBuiltinModels(): Promise<void> {
   // 检查内置模型目录是否存在
   if (!(await fs.pathExists(builtinDir))) {
     logger.warn(`内置模型目录不存在: ${builtinDir}`)
-    return
+    return 0
   }
 
   try {
@@ -145,9 +147,11 @@ async function copyBuiltinModels(): Promise<void> {
     }
 
     logger.info(`内置模型复制完成，共复制 ${copiedCount} 个模型`)
+    return copiedCount
   }
   catch (error) {
     logger.error('复制内置模型失败', error)
+    return 0
   }
 }
 
@@ -164,8 +168,16 @@ async function initializeModels(): Promise<void> {
   }
 
   logger.info('首次启动，开始复制内置模型...')
-  await copyBuiltinModels()
-  await markModelsInitialized()
+  const copiedCount = await copyBuiltinModels()
+
+  // 只有成功复制了模型才标记为已初始化
+  if (copiedCount > 0) {
+    await markModelsInitialized()
+    logger.info(`模型初始化成功，已复制 ${copiedCount} 个模型`)
+  }
+  else {
+    logger.warn('没有复制任何模型，不标记为已初始化')
+  }
 }
 
 /**

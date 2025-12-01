@@ -32,6 +32,7 @@ declare module 'vue' {
     NButton: typeof import('naive-ui')['NButton']
     NInput: typeof import('naive-ui')['NInput']
     NInputOtp: typeof import('naive-ui')['NInputOtp']
+    NMarquee: typeof import('naive-ui')['NMarquee']
     NScrollbar: typeof import('naive-ui')['NScrollbar']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

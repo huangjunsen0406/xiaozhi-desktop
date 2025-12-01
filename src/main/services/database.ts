@@ -66,9 +66,9 @@ export class DatabaseManager {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT UNIQUE NOT NULL,
         device_id TEXT,
-        ota_version_url TEXT DEFAULT NULL,
+        ota_version_url TEXT DEFAULT 'https://api.tenclass.net/xiaozhi/ota/',
         activation_version TEXT DEFAULT 'v2',
-        authorization_url TEXT DEFAULT NULL,
+        authorization_url TEXT DEFAULT 'https://xiaozhi.me/',
         websocket_url TEXT,
         websocket_access_token TEXT,
         mqtt_endpoint TEXT,
@@ -189,6 +189,9 @@ export class DatabaseManager {
     // 数据库迁移：从 keywords_list 迁移到 keyword_zh/keyword_en
     this.migrateWakeWordConfig()
 
+    // 数据库迁移：修复 network_config 的空默认值
+    this.migrateNetworkConfigDefaults()
+
     this.logger.info('数据库表初始化完成')
   }
 
@@ -290,6 +293,55 @@ export class DatabaseManager {
     }
     catch (error) {
       this.logger.error('迁移唤醒词配置失败:', error)
+    }
+  }
+
+  /**
+   * 迁移网络配置：修复空的默认值字段
+   */
+  private migrateNetworkConfigDefaults(): void {
+    try {
+      const config = this.getNetworkConfig()
+
+      // 如果配置不存在，不需要迁移
+      if (!config) {
+        return
+      }
+
+      // 检查是否需要更新默认值
+      const needsUpdate = !config.ota_version_url || !config.authorization_url
+
+      if (needsUpdate) {
+        this.logger.info('检测到空的网络配置默认值，开始修复...')
+
+        const updates: Record<string, string> = {}
+
+        if (!config.ota_version_url) {
+          updates.ota_version_url = 'https://api.tenclass.net/xiaozhi/ota/'
+        }
+
+        if (!config.authorization_url) {
+          updates.authorization_url = 'https://xiaozhi.me/'
+        }
+
+        // 批量更新
+        if (Object.keys(updates).length > 0) {
+          const fields = Object.keys(updates)
+          const setClause = fields.map(f => `${f} = ?`).join(', ')
+          const values = fields.map(f => updates[f])
+
+          this.db.prepare(`
+            UPDATE network_config
+            SET ${setClause}, updated_at = strftime('%s', 'now')
+            WHERE id = ?
+          `).run(...values, config.id)
+
+          this.logger.info('网络配置默认值修复完成:', updates)
+        }
+      }
+    }
+    catch (error) {
+      this.logger.error('迁移网络配置失败:', error)
     }
   }
 
@@ -402,12 +454,13 @@ export class DatabaseManager {
   getAllConfig(): Record<string, string | null> {
     const config = this.getNetworkConfig()
     if (!config) {
+      // 如果没有配置记录，返回空配置（应该不会发生，因为 ConfigManager 会创建）
       return {
         client_id: '',
         device_id: '',
-        ota_version_url: 'https://api.tenclass.net/xiaozhi/ota/',
-        activation_version: 'v2',
-        authorization_url: 'https://xiaozhi.me/',
+        ota_version_url: '',
+        activation_version: '',
+        authorization_url: '',
         websocket_url: null,
         websocket_access_token: null,
         mqtt_endpoint: null,
@@ -419,20 +472,21 @@ export class DatabaseManager {
       }
     }
 
+    // 返回数据库中的实际值（包括默认值）
     return {
-      client_id: config.client_id,
-      device_id: config.device_id,
-      ota_version_url: config.ota_version_url,
-      activation_version: config.activation_version,
-      authorization_url: config.authorization_url,
-      websocket_url: config.websocket_url,
-      websocket_access_token: config.websocket_access_token,
-      mqtt_endpoint: config.mqtt_endpoint,
-      mqtt_client_id: config.mqtt_client_id,
-      mqtt_username: config.mqtt_username,
-      mqtt_password: config.mqtt_password,
-      mqtt_publish_topic: config.mqtt_publish_topic,
-      mqtt_subscribe_topic: config.mqtt_subscribe_topic,
+      client_id: config.client_id || '',
+      device_id: config.device_id || '',
+      ota_version_url: config.ota_version_url || '',
+      activation_version: config.activation_version || '',
+      authorization_url: config.authorization_url || '',
+      websocket_url: config.websocket_url || null,
+      websocket_access_token: config.websocket_access_token || null,
+      mqtt_endpoint: config.mqtt_endpoint || null,
+      mqtt_client_id: config.mqtt_client_id || null,
+      mqtt_username: config.mqtt_username || null,
+      mqtt_password: config.mqtt_password || null,
+      mqtt_publish_topic: config.mqtt_publish_topic || null,
+      mqtt_subscribe_topic: config.mqtt_subscribe_topic || null,
     }
   }
 

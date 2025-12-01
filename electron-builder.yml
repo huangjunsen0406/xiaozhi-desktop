@@ -36,9 +36,22 @@ files:
   - '!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}'
   - '!**/{appveyor.yml,.travis.yml,circle.yml}'
   - '!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}'
+
+# 额外资源：复制到 app.asar 外部的 Contents/Resources 目录
+extraResources:
+  # 唤醒词模型文件（必须在文件系统中，不能在 ASAR 内）
+  - from: resources/wake-word-models
+    to: wake-word-models
+
+  # Live2D 默认模型文件（用于首次启动时复制到用户目录）
+  - from: out/renderer/Resources
+    to: live2d-models
+
 asarUnpack:
-  # 静态资源（唤醒词模型、托盘图标等）
-  - resources/**
+  # ASAR 解包：只解包已打包进 app.asar 的资源
+  # 注意：wake-word-models 通过 extraResources 处理，不需要在这里解包
+  - resources/icon.png
+  - resources/tray/**
 
   # 原生模块必须解包（ASAR 限制）
   # 原因：某些 Node API（如 child_process.exec、fs.open、process.dlopen）

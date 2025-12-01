@@ -331,8 +331,18 @@ export const useAppStore = defineStore('app', () => {
       currentSessionId.value = await getTodaySession()
       console.log('自动创建会话:', currentSessionId.value)
     }
-    else if (message.type === 'llm' && message.emotion) {
+
+    // 更新表情
+    if (message.type === 'llm' && message.emotion) {
       emotion.value = message.emotion
+    }
+    if (message.type === 'tts' && message.text) {
+      // TTS 消息显示用户说的话
+      currentText.value = message.text
+    }
+    else if (message.state === 'stop') {
+      // LLM 结束时清空文本
+      currentText.value = ''
     }
   }
 

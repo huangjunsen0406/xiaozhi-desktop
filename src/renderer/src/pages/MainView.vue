@@ -56,7 +56,6 @@ async function toggleCall() {
     class="relative flex flex-col items-center justify-center w-full h-screen gap-4 p-5 overflow-hidden bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950"
     style="-webkit-app-region: drag"
   >
-
     <!-- Linux 自定义窗口控制按钮（Win 有原生 overlay，不重复渲染） -->
     <div
       v-if="platform === 'linux'"
@@ -81,9 +80,17 @@ async function toggleCall() {
       class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12 transition-opacity duration-300"
     >
 
-    <!-- 标题 -->
-    <div class="text-base text-gray-700 dark:text-gray-300" :class="[appStore.isCalling ? 'visible' : 'collapse']">
-      请开始说话
+    <!-- 标题 - 显示 AI 回复或提示文本 -->
+    <div
+      class="text-base text-gray-700 dark:text-gray-300 text-center px-4 max-w-md"
+      :class="[appStore.isCalling ? 'visible' : 'collapse']"
+    >
+      <n-marquee v-if="appStore.currentText">
+        {{ appStore.currentText }}
+      </n-marquee>
+      <template v-else>
+        请开始说话
+      </template>
     </div>
 
     <!-- Dots 组件 + 按钮组：固定相距 100px -->

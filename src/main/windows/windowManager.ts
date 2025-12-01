@@ -137,6 +137,9 @@ export function toggleToMain(): void {
     windowRefs.chat.current.hide()
   if (windowRefs.live2d.current)
     windowRefs.live2d.current.hide()
+  // 关闭 panel 窗口（仅在 miniview 模式下可用）
+  if (windowRefs.panel.current)
+    windowRefs.panel.current.hide()
   setDisplayMode('main')
 }
 
@@ -180,6 +183,9 @@ export function toggleToChat(): void {
     windowRefs.mini.current.hide()
   if (windowRefs.live2d.current)
     windowRefs.live2d.current.hide()
+  // 关闭 panel 窗口（仅在 miniview 模式下可用）
+  if (windowRefs.panel.current)
+    windowRefs.panel.current.hide()
   setDisplayMode('chat')
 }
 
@@ -197,6 +203,9 @@ export function toggleToLive2d(): void {
     windowRefs.mini.current.hide()
   if (windowRefs.chat.current)
     windowRefs.chat.current.hide()
+  // 关闭 panel 窗口（仅在 miniview 模式下可用）
+  if (windowRefs.panel.current)
+    windowRefs.panel.current.hide()
   setDisplayMode('live2d')
 }
 
