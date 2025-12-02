@@ -25,6 +25,8 @@ export function buildBackgroundAudioWindow(): BrowserWindow {
       webSecurity: false, // 禁用 Web 安全以允许 getUserMedia
       nodeIntegration: false,
       backgroundThrottling: false, // 禁用后台节流，保持音频处理性能
+      // 允许自动播放音频和视频
+      additionalArguments: ['--autoplay-policy=no-user-gesture-required'],
     },
   })
 

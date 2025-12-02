@@ -1,7 +1,9 @@
 import type OpenAI from 'openai'
 import type { ChatPlugin } from '../../plugins/ChatPlugin'
 import type { PropertyList, PropertyType } from '../types'
+import * as os from 'node:os'
 import { Buffer } from 'node:buffer'
+import { app, BrowserWindow } from 'electron'
 import { getApplication } from '../../services/Application'
 import { DatabaseManager } from '../../services/database'
 import { getLogger } from '../../utils/logger'
@@ -11,6 +13,7 @@ import { SystemVolumeController } from '../../utils/SystemVolumeController'
 import { AppLauncher } from './app/AppLauncher'
 import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
+import { getCameraInstance } from './camera'
 import { MusicToolsManager } from './music'
 import { ScreenshotTool } from './screenshot'
 import { TimerService } from './timer'
@@ -680,7 +683,6 @@ Examples:
       })
 
       // 获取摄像头实例并拍照
-      const { getCameraInstance } = await import('./camera')
       const camera = getCameraInstance(cameraOptions)
       const captureResult = await camera.capture()
 
@@ -1113,7 +1115,6 @@ Examples:
       logger.info('获取当前主题')
 
       // 从任一窗口获取主题设置
-      const { BrowserWindow } = await import('electron')
       const windows = BrowserWindow.getAllWindows()
 
       if (windows.length === 0) {
@@ -1356,8 +1357,6 @@ Examples:
     try {
       logger.info('获取系统信息')
 
-      const os = await import('node:os')
-      const { app } = await import('electron')
       // eslint-disable-next-line node/prefer-global/process
       const processVersions = process.versions
 
