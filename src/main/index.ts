@@ -74,6 +74,42 @@ app.on('ready', () => {
 // 在 app ready 之前注册自定义协议 scheme
 registerModelProtocolScheme()
 
+// 单实例锁定：防止多开
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  // 如果获取锁失败，说明已经有实例在运行，直接退出
+  logger.info('应用已在运行，退出当前实例')
+  app.quit()
+}
+else {
+  // 当第二个实例尝试启动时，唤醒第一个实例的窗口
+  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+    logger.info('检测到第二个实例启动，唤醒现有窗口')
+
+    // 获取当前显示模式对应的窗口
+    const targetWindow = getCurrentModeWindow()
+
+    if (targetWindow && !targetWindow.isDestroyed()) {
+      // 如果窗口最小化，恢复它
+      if (targetWindow.isMinimized()) {
+        targetWindow.restore()
+      }
+
+      // 显示并聚焦窗口
+      targetWindow.show()
+      targetWindow.focus()
+
+      // macOS: 确保 Dock 图标显示
+      ensureDockVisible()
+    }
+    else {
+      // 如果窗口不存在，创建主窗口
+      ensureMainWindow()
+    }
+  })
+}
+
 app.whenReady().then(async () => {
   // 初始化日志系统
   initLogger()

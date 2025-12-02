@@ -51,6 +51,7 @@ asarUnpack:
   # ASAR 解包：只解包已打包进 app.asar 的资源
   # 注意：wake-word-models 通过 extraResources 处理，不需要在这里解包
   - resources/icon.png
+  - resources/icon.ico
   - resources/tray/**
 
   # 原生模块必须解包（ASAR 限制）
