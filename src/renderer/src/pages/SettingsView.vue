@@ -30,10 +30,12 @@ import HotkeySettings from '../components/settings/HotkeySettings.vue'
 import ModelSettings from '../components/settings/ModelSettings.vue'
 import SystemSettings from '../components/settings/SystemSettings.vue'
 import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
+import TitleBar from '../components/TitleBar.vue'
 
 type Key = 'system' | 'appearance' | 'model' | 'emotion' | 'wake' | 'camera' | 'audio' | 'hotkey'
 const selected = ref<Key>('system')
 const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
+const showTitleBar = window.electron.process.platform !== 'darwin'
 
 const menuOptions = [
   { label: '系统选项', key: 'system', icon: withIcon(IconCarbonSettings) },
@@ -127,8 +129,9 @@ async function onCustomClick() {
 <template>
   <!-- 整页容器 -->
   <div class="h-screen flex flex-col bg-white dark:bg-custom-dark">
-    <!-- 标题栏拖拽区（固定高度） -->
-    <div class="h-[28px] shrink-0" style="-webkit-app-region: drag" />
+    <!-- 标题栏 -->
+    <TitleBar v-if="showTitleBar" />
+    <div v-else class="h-[28px] shrink-0" style="-webkit-app-region: drag" />
 
     <!-- 左右分栏 -->
     <NLayout has-sider class="flex-1 min-h-0">

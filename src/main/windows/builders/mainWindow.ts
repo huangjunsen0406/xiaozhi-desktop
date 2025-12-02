@@ -1,23 +1,25 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import linuxIcon from '../../../../resources/tray/icon-32.png?asset'
 import winIcon from '../../../../resources/tray/icon.ico?asset'
 import { handleWindowClose } from '../windowManager'
 
 export function buildMainWindow(): BrowserWindow {
+  const isMac = process.platform === 'darwin'
   const win = new BrowserWindow({
     width: 300,
     height: 400,
     show: false,
-    frame: true,
+    frame: isMac,
+    title: app.getName(),
     fullscreenable: false,
     skipTaskbar: true,
     hiddenInMissionControl: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     ...(process.platform === 'win32'
-      ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 40 } as const }
+      ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 32 } as const }
       : {}),
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon: linuxIcon as unknown as string } : {}),

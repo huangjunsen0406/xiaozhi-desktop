@@ -249,7 +249,7 @@ function handleKeydown(event: KeyboardEvent) {
       :class="[isSidebarOpen ? 'w-64' : 'w-[68px]']"
     >
       <!-- Drag Region (Top Left) -->
-      <div class="h-10 w-full" style="-webkit-app-region: drag" />
+      <div class="h-7 w-full shrink-0" style="-webkit-app-region: drag" />
 
       <!-- Sidebar Header -->
       <div class="px-4 pb-2 text-xs font-medium text-gray-400 whitespace-nowrap">
@@ -299,7 +299,7 @@ function handleKeydown(event: KeyboardEvent) {
     <!-- Main Chat Area -->
     <div class="flex-1 flex flex-col relative bg-white dark:bg-gray-900">
       <!-- Drag Region (Top Right) -->
-      <div class="h-10 w-full flex-shrink-0" style="-webkit-app-region: drag" />
+      <div class="h-7 w-full flex-shrink-0" style="-webkit-app-region: drag" />
 
       <!-- Messages Area -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto px-20 py-4">
