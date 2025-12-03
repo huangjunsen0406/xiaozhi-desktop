@@ -98,6 +98,22 @@ export interface BackgroundAudioStatus {
   error?: string
 }
 
+export interface SystemConfig {
+  client_id: string
+  device_id: string
+  ota_version_url: string
+  websocket_url: string
+  websocket_access_token: string
+  mqtt_endpoint: string
+  mqtt_client_id: string
+  mqtt_username: string
+  mqtt_password: string
+  mqtt_publish_topic: string
+  mqtt_subscribe_topic: string
+  activation_version: string
+  authorization_url: string
+}
+
 export type DeviceState = 'idle' | 'connecting' | 'listening' | 'speaking'
 
 export type ListeningMode = 'auto' | 'manual' | 'realtime'
@@ -241,13 +257,6 @@ export interface NetworkConfig {
   mqtt_password?: string | null
   mqtt_publish_topic?: string | null
   mqtt_subscribe_topic?: string | null
-}
-
-export interface SystemConfig {
-  language?: string
-  theme?: string
-  autoStart?: boolean
-  [key: string]: unknown
 }
 
 export interface ShortcutConfig {

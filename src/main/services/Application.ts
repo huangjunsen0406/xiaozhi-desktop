@@ -726,6 +726,16 @@ export class Application {
       this.isShuttingDown = false
     }
   }
+
+  async sendWakeWordDetected(text: string): Promise<void> {
+    const ok = await this.connectProtocol()
+    if (!ok) {
+      this.logger.error('协议未连接，无法发送文本')
+      return
+    }
+
+    await this.protocol!.sendWakeWordDetected(text)
+  }
 }
 
 /**

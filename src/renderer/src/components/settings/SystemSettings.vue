@@ -1,22 +1,7 @@
 <script setup lang="ts">
+import type { SystemConfig } from '@shared/types'
 import { NForm, NFormItem, NInput, NSelect, useMessage } from 'naive-ui'
 import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
-
-interface SystemConfig {
-  client_id: string
-  device_id: string
-  ota_version_url: string
-  websocket_url: string
-  websocket_access_token: string
-  mqtt_endpoint: string
-  mqtt_client_id: string
-  mqtt_username: string
-  mqtt_password: string
-  mqtt_publish_topic: string
-  mqtt_subscribe_topic: string
-  activation_version: string
-  authorization_url: string
-}
 
 const emit = defineEmits<{ (e: 'dirty-change', dirty: boolean): void }>()
 
