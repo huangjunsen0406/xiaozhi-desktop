@@ -12,23 +12,6 @@ import { Plugin } from './Plugin'
 
 const logger = getLogger('AudioPlugin')
 
-/**
- * 音频性能指标
- */
-interface AudioMetrics {
-  /** 总接收帧数（来自渲染进程） */
-  totalFrames: number
-  /** 已编码帧数（实际进行 Opus 编码的） */
-  encodedFrames: number
-  /** 丢弃帧数（背压控制） */
-  droppedFrames: number
-  /** 累计编码时间（ms） */
-  totalEncodeTime: number
-  /** 累计发送时间（ms） */
-  totalSendTime: number
-  /** 最后一次指标重置时间 */
-  lastResetTime: number
-}
 
 /**
  * 音频插件
@@ -69,19 +52,8 @@ export class AudioPlugin extends Plugin {
   private consecutiveDrops = 0
   /** 丢帧日志节流阈值 */
   private readonly DROP_LOG_THRESHOLD = 50 // 每 50 帧打印一次
-
-  // ========== 性能指标 ==========
-  private metrics: AudioMetrics = {
-    totalFrames: 0,
-    encodedFrames: 0,
-    droppedFrames: 0,
-    totalEncodeTime: 0,
-    totalSendTime: 0,
-    lastResetTime: Date.now(),
-  }
-
-  /** 指标打印间隔（帧数） */
-  private readonly METRICS_LOG_INTERVAL = 500 // 每 500 帧（约 10 秒）打印一次
+  /** 丢弃帧数（背压控制） */
+  private droppedFrames = 0
 
   /**
    * 插件初始化
@@ -220,12 +192,12 @@ export class AudioPlugin extends Plugin {
     const bufferedAmount = ws.bufferedAmount || 0
     if (bufferedAmount > this.MAX_BUFFER_SIZE) {
       this.consecutiveDrops++
-      this.metrics.droppedFrames++
+      this.droppedFrames++
 
       // 节流日志：每 DROP_LOG_THRESHOLD 帧打印一次
       if (this.consecutiveDrops % this.DROP_LOG_THRESHOLD === 1) {
         logger.warn(
-          `[AudioPlugin] 网络拥塞，丢弃帧 (buffered: ${(bufferedAmount / 1024).toFixed(1)}KB, 连续丢弃: ${this.consecutiveDrops})`,
+          `网络拥塞，丢弃帧 (buffered: ${(bufferedAmount / 1024).toFixed(1)}KB, 连续丢弃: ${this.consecutiveDrops})`,
         )
       }
       return true
@@ -239,67 +211,11 @@ export class AudioPlugin extends Plugin {
     return false
   }
 
-  /**
-   * 打印性能指标（节流）
-   */
-  private logMetricsIfNeeded(): void {
-    if (this.metrics.totalFrames % this.METRICS_LOG_INTERVAL !== 0) {
-      return
-    }
-
-    const elapsed = (Date.now() - this.metrics.lastResetTime) / 1000
-
-    // 平均编码时间：只计算实际编码的帧
-    const avgEncodeTime = this.metrics.encodedFrames > 0
-      ? (this.metrics.totalEncodeTime / this.metrics.encodedFrames).toFixed(2)
-      : '-'
-
-    // 丢帧率：相对于已编码帧
-    const dropRate = this.metrics.encodedFrames > 0
-      ? ((this.metrics.droppedFrames / (this.metrics.encodedFrames + this.metrics.droppedFrames)) * 100).toFixed(1)
-      : '0.0'
-
-    // 编码率：编码帧占总帧的比例
-    const encodeRate = this.metrics.totalFrames > 0
-      ? ((this.metrics.encodedFrames / this.metrics.totalFrames) * 100).toFixed(1)
-      : '0.0'
-
-    logger.info(
-      `性能指标: 总帧=${this.metrics.totalFrames}, `
-      + `编码=${this.metrics.encodedFrames}(${encodeRate}%), `
-      + `平均编码=${avgEncodeTime}ms, 丢帧=${this.metrics.droppedFrames}(${dropRate}%), `
-      + `耗时=${elapsed.toFixed(1)}s`,
-    )
-  }
-
-  /**
-   * 重置性能指标
-   */
-  resetMetrics(): void {
-    this.metrics = {
-      totalFrames: 0,
-      encodedFrames: 0,
-      droppedFrames: 0,
-      totalEncodeTime: 0,
-      totalSendTime: 0,
-      lastResetTime: Date.now(),
-    }
-    this.consecutiveDrops = 0
-  }
-
-  /**
-   * 获取当前性能指标快照
-   */
-  getMetrics(): Readonly<AudioMetrics> {
-    return { ...this.metrics }
-  }
 
   /**
    * 处理来自渲染进程的 PCM 数据
    */
   private handlePCMFromRenderer(pcmData: Int16Array): void {
-    this.metrics.totalFrames++
-
     try {
       // 1. 发送到服务器（仅在应该采集时）
       if (this.app?.shouldCaptureAudio()) {
@@ -316,19 +232,14 @@ export class AudioPlugin extends Plugin {
           return
         }
 
-        // 编码 PCM → Opus（记录耗时）
-        const encodeStart = performance.now()
+        // 编码 PCM → Opus
         const opusFrame = opusCodec.encode(pcmData)
-        this.metrics.totalEncodeTime += performance.now() - encodeStart
-        this.metrics.encodedFrames++
 
         // 发送到 WebSocket 服务器
         if (this.protocol && this.protocol.isAudioChannelOpened()) {
-          const sendStart = performance.now()
           this.protocol.sendAudio(opusFrame).catch((error) => {
             logger.error('发送音频失败', error)
           })
-          this.metrics.totalSendTime += performance.now() - sendStart
         }
       }
     }
@@ -338,9 +249,6 @@ export class AudioPlugin extends Plugin {
     finally {
       // 2. 通知音频监听器（始终执行，即使不发送到服务器）
       this.notifyAudioListeners(pcmData)
-
-      // 3. 定期打印性能指标
-      this.logMetricsIfNeeded()
     }
   }
 
@@ -398,26 +306,6 @@ export class AudioPlugin extends Plugin {
   async shutdown(): Promise<void> {
     logger.info('正在关闭...')
 
-    // 打印最终性能报告
-    if (this.metrics.totalFrames > 0) {
-      const elapsed = (Date.now() - this.metrics.lastResetTime) / 1000
-      const avgEncodeTime = this.metrics.encodedFrames > 0
-        ? (this.metrics.totalEncodeTime / this.metrics.encodedFrames).toFixed(2)
-        : '-'
-      const encodeRate = ((this.metrics.encodedFrames / this.metrics.totalFrames) * 100).toFixed(1)
-      const dropRate = this.metrics.encodedFrames > 0
-        ? ((this.metrics.droppedFrames / (this.metrics.encodedFrames + this.metrics.droppedFrames)) * 100).toFixed(1)
-        : '0.0'
-
-      logger.info('========== 最终性能报告 ==========')
-      logger.info(`总接收帧数: ${this.metrics.totalFrames}`)
-      logger.info(`编码帧数: ${this.metrics.encodedFrames} (${encodeRate}%)`)
-      logger.info(`丢弃帧数: ${this.metrics.droppedFrames} (${dropRate}%)`)
-      logger.info(`平均编码时间: ${avgEncodeTime}ms`)
-      logger.info(`运行时长: ${elapsed.toFixed(1)}s`)
-      logger.info('=====================================')
-    }
-
     // 停止后台音频窗口的采集
     if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
       logger.info('通知后台音频窗口停止采集并清理资源')
@@ -434,8 +322,9 @@ export class AudioPlugin extends Plugin {
     this.protocol = null
     this.backgroundAudioWindow = null
 
-    // 重置指标
-    this.resetMetrics()
+    // 重置计数器
+    this.consecutiveDrops = 0
+    this.droppedFrames = 0
 
     // 调用父类 shutdown
     await super.shutdown()

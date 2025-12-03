@@ -1,29 +1,40 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
-import { BrowserWindow, shell } from 'electron'
-import linuxIcon from '../../../../resources/tray/icon-32.png?asset'
-import winIcon from '../../../../resources/tray/icon.ico?asset'
+import { app, BrowserWindow, nativeImage, shell } from 'electron'
+
+function getAppIcon() {
+  if (process.platform === 'win32') {
+    // Windows: 使用 icon.ico
+    return join(__dirname, '../../resources/icon.ico')
+  }
+  else if (process.platform === 'linux') {
+    // Linux: 使用 icon.png
+    return nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+  }
+  return undefined
+}
 
 export function buildSettingsWindow(): BrowserWindow {
+  const isMac = process.platform === 'darwin'
+  const icon = getAppIcon()
+
   const win = new BrowserWindow({
     width: 920,
     height: 600,
     show: false,
-    frame: true,
+    frame: isMac,
+    title: app.getName(),
     skipTaskbar: true,
     hiddenInMissionControl: true,
     resizable: false,
     movable: true,
-    transparent: true,
-    backgroundColor: '#00000000',
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     ...(process.platform === 'win32'
-      ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 40 } as const }
+      ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 32 } as const }
       : {}),
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon: linuxIcon as unknown as string } : {}),
-    ...(process.platform === 'win32' ? { icon: winIcon as unknown as string } : {}),
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

@@ -162,19 +162,31 @@ export class MusicPlayer {
     try {
       if (!args || typeof args.filePath !== 'string') {
         console.error('[MusicPlayer] 缺少文件路径')
+        this.notifyMainProcess({ state: 'error', error: '缺少文件路径' })
         return
       }
 
       const { filePath, startPosition, volume, loop, playbackRate } = args
 
       console.log(`[MusicPlayer] 播放: ${filePath}`)
+      this.notifyMainProcess({ state: 'loading', message: `准备播放: ${filePath}` })
 
       // 设置音频源（支持 URL 和本地文件路径）
       if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
         this.audio.src = filePath
+        console.log(`[MusicPlayer] 设置在线音源: ${filePath}`)
+        this.notifyMainProcess({ message: `设置在线音源: ${filePath}` })
       }
       else {
-        this.audio.src = `file://${filePath}`
+        // Windows 路径: D:\path\to\file.mp3 -> file:///D:/path/to/file.mp3
+        // macOS/Linux: /path/to/file.mp3 -> file:///path/to/file.mp3
+        const normalizedPath = filePath.replace(/\\/g, '/')
+        const fileUrl = normalizedPath.startsWith('/')
+          ? `file://${normalizedPath}`
+          : `file:///${normalizedPath}`
+        this.audio.src = fileUrl
+        console.log(`[MusicPlayer] 设置本地文件: ${filePath} -> ${fileUrl}`)
+        this.notifyMainProcess({ message: `设置本地文件: ${fileUrl}` })
       }
 
       // 应用配置
@@ -195,13 +207,20 @@ export class MusicPlayer {
       }
 
       // 播放
-      this.audio.play().catch((error) => {
-        console.error('播放失败', error)
-        this.notifyMainProcess({
-          state: 'error',
-          error: error instanceof Error ? error.message : '播放失败',
+      console.log('[MusicPlayer] 调用 audio.play()')
+      this.notifyMainProcess({ message: '开始调用 audio.play()' })
+      this.audio.play()
+        .then(() => {
+          console.log('[MusicPlayer] audio.play() 成功')
+          this.notifyMainProcess({ message: 'audio.play() 调用成功' })
         })
-      })
+        .catch((error) => {
+          console.error('播放失败', error)
+          this.notifyMainProcess({
+            state: 'error',
+            error: error instanceof Error ? error.message : '播放失败',
+          })
+        })
     }
     catch (error) {
       console.error('播放异常', error)

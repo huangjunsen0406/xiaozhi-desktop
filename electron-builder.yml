@@ -51,6 +51,7 @@ asarUnpack:
   # ASAR 解包：只解包已打包进 app.asar 的资源
   # 注意：wake-word-models 通过 extraResources 处理，不需要在这里解包
   - resources/icon.png
+  - resources/icon.ico
   - resources/tray/**
 
   # 原生模块必须解包（ASAR 限制）
@@ -85,6 +86,7 @@ asarUnpack:
   - node_modules/**/*.dll # Windows
 win:
   executableName: xiaozhi-desktop
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
@@ -95,8 +97,11 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  createStartMenuShortcut: true
   oneClick: false
   allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
 mac:
   icon: build/icon.icns
   category: public.app-category.productivity
@@ -122,12 +127,18 @@ dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   # 只构建当前架构（避免文件名冲突）
+  icon: build/icon.png
   target:
     - AppImage
     - deb
   maintainer: xiaozhi.me
   category: Utility
   executableName: xiaozhi-desktop
+  desktop:
+    Name: 小智桌面
+    Comment: 智能桌面助手
+    Categories: Utility;
+    Icon: xiaozhi-desktop
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false

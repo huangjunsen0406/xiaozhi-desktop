@@ -26,9 +26,15 @@ jobs:
         with:
           node-version: 20
 
-      # macOS 上给 node-gyp 准备一个带 distutils 的 Python
+      # macOS 和 Windows 上给 node-gyp 准备 Python
       - name: Setup Python for node-gyp (macOS)
         if: matrix.os == 'macos-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Python for node-gyp (Windows)
+        if: matrix.os == 'windows-latest'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'

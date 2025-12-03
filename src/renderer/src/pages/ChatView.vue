@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { NButton, NDropdown } from 'naive-ui'
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import AudioWave from '../components/AudioWave.vue'
-import ChatImage from '../components/ChatImage.vue'
+import ChatMessage from '../components/ChatMessage.vue'
 import { useAppStore } from '../stores/app'
 
 // UI 状态
@@ -17,6 +17,19 @@ const isLocalListening = ref(false)
 // 使用全局 App Store
 const appStore = useAppStore()
 
+// 计算唯一的消息 key（使用 id 或 timestamp 作为后备）
+const messageKeys = computed(() =>
+  appStore.messages.map(msg => msg.id ?? `${msg.timestamp}-${msg.role}`)
+)
+
+// 预计算会话列表的禁用状态，避免在模板中重复计算
+const sessionsWithDeleteStatus = computed(() =>
+  appStore.sessions.map(item => ({
+    ...item,
+    canDelete: !(appStore.isCurrentSessionToday && item.sessionId === appStore.currentSessionId)
+  }))
+)
+
 // 监听后端状态变化，同步到本地状态
 watch(
   () => appStore.isManualMode,
@@ -26,13 +39,19 @@ watch(
   { immediate: true },
 )
 
-// 监听消息变化，自动滚动到底部
+// 优化：只在消息长度变化且最后一条消息是新增时才滚动
+// 避免用户输入时频繁触发滚动
+let lastMessageLength = 0
 watch(
   () => appStore.messages.length,
-  () => {
-    nextTick(() => {
-      scrollToBottom()
-    })
+  (newLength) => {
+    if (newLength > lastMessageLength) {
+      // 只在消息增加时滚动
+      lastMessageLength = newLength
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
   },
 )
 
@@ -97,11 +116,6 @@ async function sendMessage() {
       console.log('发送文本前停止手动模式')
       isLocalListening.value = false
       await appStore.stopListeningManual()
-    }
-
-    // 等待状态稳定
-    if (appStore.isAutoMode || appStore.isManualMode) {
-      await new Promise(resolve => setTimeout(resolve, 100))
     }
 
     // 确保有当前会话
@@ -249,7 +263,7 @@ function handleKeydown(event: KeyboardEvent) {
       :class="[isSidebarOpen ? 'w-64' : 'w-[68px]']"
     >
       <!-- Drag Region (Top Left) -->
-      <div class="h-10 w-full" style="-webkit-app-region: drag" />
+      <div class="h-7 w-full shrink-0" style="-webkit-app-region: drag" />
 
       <!-- Sidebar Header -->
       <div class="px-4 pb-2 text-xs font-medium text-gray-400 whitespace-nowrap">
@@ -259,7 +273,7 @@ function handleKeydown(event: KeyboardEvent) {
       <!-- History List -->
       <div class="flex-1 overflow-y-auto px-2 space-y-1">
         <div
-          v-for="item in appStore.sessions"
+          v-for="item in sessionsWithDeleteStatus"
           :key="item.id"
           class="group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors whitespace-nowrap relative"
           :class="[
@@ -275,7 +289,7 @@ function handleKeydown(event: KeyboardEvent) {
             v-if="item.active && isSidebarOpen"
             trigger="click"
             :options="[
-              { label: '删除对话', key: 'delete', disabled: appStore.isCurrentSessionToday && item.sessionId === appStore.currentSessionId },
+              { label: '删除对话', key: 'delete', disabled: !item.canDelete },
             ]"
             @select="(key: string) => key === 'delete' && deleteSession(item.sessionId)"
           >
@@ -299,43 +313,15 @@ function handleKeydown(event: KeyboardEvent) {
     <!-- Main Chat Area -->
     <div class="flex-1 flex flex-col relative bg-white dark:bg-gray-900">
       <!-- Drag Region (Top Right) -->
-      <div class="h-10 w-full flex-shrink-0" style="-webkit-app-region: drag" />
+      <div class="h-7 w-full flex-shrink-0" style="-webkit-app-region: drag" />
 
       <!-- Messages Area -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto px-20 py-4">
-        <div v-for="(msg, index) in appStore.messages" :key="index" class="mb-8 flex flex-col">
-          <!-- User Message -->
-          <div v-if="msg.role === 'user'" class="self-end max-w-[80%]">
-            <!-- 图片 -->
-            <ChatImage
-              v-if="msg.imageData"
-              :image-data="msg.imageData"
-              class-name="rounded-lg mb-2 max-w-full"
-              alt="User uploaded image"
-            />
-            <!-- 文本 -->
-            <div class="bg-[#F3F3F3] dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed">
-              {{ msg.content }}
-            </div>
-          </div>
-
-          <!-- Assistant Message -->
-          <div v-else class="self-start max-w-[80%]">
-            <!-- 图片 -->
-            <ChatImage
-              v-if="msg.imageData"
-              :image-data="msg.imageData"
-              class-name="rounded-lg mb-2 max-w-full shadow-md"
-              alt="Screenshot or photo"
-            />
-            <!-- 文本 (只在有内容时显示) -->
-            <div v-if="msg.content && msg.content !== '[图片]'" class="text-gray-900 dark:text-gray-100 text-sm leading-relaxed whitespace-pre-line">
-              {{ msg.content }}
-              <!-- 流式输出指示器 -->
-              <span v-if="msg.isStreaming" class="inline-block w-2 h-4 ml-1 bg-gray-400 animate-pulse" />
-            </div>
-          </div>
-        </div>
+        <ChatMessage
+          v-for="(msg, index) in appStore.messages"
+          :key="messageKeys[index]"
+          :message="msg"
+        />
       </div>
 
       <!-- Input Area -->

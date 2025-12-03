@@ -7,6 +7,8 @@ import type {
   ToolCallback,
 } from './types'
 import { getLogger } from '../utils/logger'
+import { getConfigManager } from '../services/configManagerDB'
+import { getCameraInstance } from './tools/camera'
 import { SystemToolsManager } from './tools/SystemToolsManager'
 import { PropertyList, PropertyType } from './types'
 
@@ -360,9 +362,6 @@ export class McpServer {
         this.visionConfig.token = token
 
         // 同时直接设置到 Camera 实例（与 C++ 版本保持一致）
-        const { getCameraInstance } = await import('./tools/camera')
-        const { getConfigManager } = await import('../services/configManagerDB')
-
         const configManager = getConfigManager()
         const allConfig = configManager.getAll()
 

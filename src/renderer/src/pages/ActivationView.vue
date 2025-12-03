@@ -124,7 +124,7 @@ const codeArray = computed(() => {
   <!-- 透明窗口一体 UI：窗口 500x330，内部居中卡片 -->
   <div class="w-full h-screen gap-4 p-5 overflow-hidden bg-white dark:bg-custom-dark">
     <!-- 拖拽 -->
-    <div class="fixed top-0 left-0 right-0 w-full h-[10px]" style="-webkit-app-region: drag" />
+    <div class="fixed top-0 left-0 right-0 w-full h-7" style="-webkit-app-region: drag" />
     <!-- 激活状态栏 -->
     <div class="flex items-center justify-between">
       <div class="text-gray-700 dark:text-gray-300 !font-bold">

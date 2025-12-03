@@ -76,7 +76,12 @@ export function registerModelProtocolHandler(): void {
       }
 
       // 使用 net.fetch 从文件系统读取
-      const fileUrl = `file://${normalizedPath}`
+      // Windows: D:\path\to\file -> file:///D:/path/to/file
+      // macOS/Linux: /path/to/file -> file:///path/to/file
+      const pathWithForwardSlashes = normalizedPath.replace(/\\/g, '/')
+      const fileUrl = pathWithForwardSlashes.startsWith('/')
+        ? `file://${pathWithForwardSlashes}`
+        : `file:///${pathWithForwardSlashes}`
       return net.fetch(fileUrl)
     }
     catch (error) {
