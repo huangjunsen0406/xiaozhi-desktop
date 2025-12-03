@@ -29,6 +29,7 @@ export class Live2DPlugin extends Plugin {
   }
 
   private live2dWindow: BrowserWindow | null = null
+  private lastVolume = 0 // 上一帧音量，用于平滑
 
   /**
    * 插件初始化
@@ -62,7 +63,13 @@ export class Live2DPlugin extends Plugin {
       }
 
       // 2. 计算音量 (RMS - Root Mean Square)
-      const volume = this.calculateVolume(pcmBuffer)
+      let volume = this.calculateVolume(pcmBuffer)
+
+      // 2.5. 平滑音量变化，避免抖动（主进程侧也做一次平滑）
+      // 使用简单的指数移动平均 (EMA)
+      const smoothFactor = 0.7 // 0.7 表示新值权重，越大越接近实时，越小越平滑
+      volume = this.lastVolume * (1 - smoothFactor) + volume * smoothFactor
+      this.lastVolume = volume
 
       // 3. 发送音量到 Live2D 窗口
       if (!this.live2dWindow.isDestroyed()) {
@@ -113,9 +120,16 @@ export class Live2DPlugin extends Plugin {
 
       const rms = Math.sqrt(sumSquares / int16Array.length)
 
-      // 放大并限制到 [0, 1] 范围
-      // 乘以 3 是为了让音量更明显
-      const volume = Math.min(1, rms * 3)
+      // 增强音量表现力
+      // 1. 放大倍数从 3 提升到 8，让音量更明显
+      let volume = rms * 8
+
+      // 2. 应用幂次曲线，增强小音量的表现
+      // 使用 0.6 次方可以让小音量更明显，同时保持大音量不失真
+      volume = volume ** 0.6
+
+      // 3. 限制到 [0, 1] 范围
+      volume = Math.min(1, Math.max(0, volume))
 
       return volume
     }
