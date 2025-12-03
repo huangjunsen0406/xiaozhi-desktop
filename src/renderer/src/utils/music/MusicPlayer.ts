@@ -15,6 +15,7 @@ export interface MusicCommand {
  */
 export class MusicPlayer {
   private audio: HTMLAudioElement
+  private currentState: PlaybackState = 'idle'
 
   constructor() {
     console.log('初始化渲染进程音乐播放器')
@@ -36,18 +37,21 @@ export class MusicPlayer {
     // 播放开始
     this.audio.addEventListener('play', () => {
       console.log('开始播放')
+      this.currentState = 'playing'
       this.notifyMainProcess({ state: 'playing' })
     })
 
     // 播放暂停
     this.audio.addEventListener('pause', () => {
       console.log('已暂停')
+      this.currentState = 'paused'
       this.notifyMainProcess({ state: 'paused' })
     })
 
     // 播放结束
     this.audio.addEventListener('ended', () => {
       console.log('播放结束')
+      this.currentState = 'stopped'
       this.notifyMainProcess({
         state: 'stopped',
         currentTime: 0,
@@ -77,6 +81,7 @@ export class MusicPlayer {
         : '未知错误'
 
       console.error('播放错误', errorMessage, event)
+      this.currentState = 'error'
       this.notifyMainProcess({
         state: 'error',
         error: errorMessage,
@@ -86,7 +91,11 @@ export class MusicPlayer {
     // 加载开始
     this.audio.addEventListener('loadstart', () => {
       console.log('开始加载音乐')
-      this.notifyMainProcess({ state: 'loading' })
+      // 只有在非播放状态时才设置为 loading，避免覆盖 playing 状态
+      if (this.currentState !== 'playing') {
+        this.currentState = 'loading'
+        this.notifyMainProcess({ state: 'loading' })
+      }
     })
 
     // 可以播放
@@ -162,6 +171,7 @@ export class MusicPlayer {
     try {
       if (!args || typeof args.filePath !== 'string') {
         console.error('[MusicPlayer] 缺少文件路径')
+        this.currentState = 'error'
         this.notifyMainProcess({ state: 'error', error: '缺少文件路径' })
         return
       }
@@ -169,6 +179,7 @@ export class MusicPlayer {
       const { filePath, startPosition, volume, loop, playbackRate } = args
 
       console.log(`[MusicPlayer] 播放: ${filePath}`)
+      this.currentState = 'loading'
       this.notifyMainProcess({ state: 'loading', message: `准备播放: ${filePath}` })
 
       // 设置音频源（支持 URL 和本地文件路径）
@@ -264,6 +275,7 @@ export class MusicPlayer {
     try {
       this.audio.pause()
       this.audio.currentTime = 0
+      this.currentState = 'stopped'
       this.notifyMainProcess({
         state: 'stopped',
         currentTime: 0,

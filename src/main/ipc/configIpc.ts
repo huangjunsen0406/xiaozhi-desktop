@@ -117,9 +117,13 @@ export function registerConfigIpc(): void {
   /**
    * 批量更新配置
    */
-  ipcMain.handle('config:update-all', (_, config: Record<string, string | undefined>) => {
+  ipcMain.handle('config:update-all', async (_, config: Record<string, string | undefined>) => {
     try {
       logger.info('批量更新配置', config)
+
+      // 检查是否修改了 OTA URL
+      const otaUrlChanged = config.ota_version_url !== undefined
+        && config.ota_version_url !== configManager.getOtaVersionUrl()
 
       // 直接使用扁平格式更新
       const updates: Record<string, string | null> = {}
@@ -160,6 +164,98 @@ export function registerConfigIpc(): void {
       configManager.updateBatch(updates)
 
       logger.info('配置更新成功')
+
+      // 如果 OTA URL 被修改，触发刷新
+      if (otaUrlChanged) {
+        logger.info('OTA URL 已修改，触发刷新配置')
+        try {
+          const { getActivationService } = await import('../services/ActivationService')
+          const activationService = getActivationService()
+
+          // 重新获取 OTA 配置
+          const deviceFingerprint = activationService.getDeviceFingerprint()
+          if (deviceFingerprint) {
+            const otaUrl = configManager.getOtaVersionUrl()
+            const deviceId = configManager.getDeviceId()
+            const clientId = configManager.getClientId()
+            const activationVersion = configManager.getActivationVersion()
+
+            if (otaUrl && deviceId) {
+              const headers: Record<string, string> = {
+                'Device-Id': deviceId,
+                'Client-Id': clientId || '',
+                'Content-Type': 'application/json',
+                'Accept-Language': 'zh-CN',
+              }
+
+              if (activationVersion === 'v2') {
+                headers['Activation-Version'] = '2'
+              }
+
+              const hmacKey = deviceFingerprint.getHmacKey()
+              const payload = {
+                application: {
+                  version: '2.0.0',
+                  elf_sha256: hmacKey || 'unknown',
+                },
+                board: {
+                  type: 'desktop',
+                  name: 'xiaozhi-desktop',
+                  ip: '127.0.0.1',
+                  mac: deviceId,
+                },
+              }
+
+              logger.info(`请求 OTA 配置: ${otaUrl}`)
+              const axios = (await import('axios')).default
+              const response = await axios.post(otaUrl, payload, {
+                headers,
+                timeout: 10000,
+              })
+
+              if (response.status === 200 && response.data) {
+                const data = response.data
+
+                // 更新 MQTT 配置
+                if (data.mqtt) {
+                  configManager.setMqttInfo(data.mqtt)
+                  logger.info('MQTT 配置已刷新')
+                }
+
+                // 更新 WebSocket 配置
+                if (data.websocket) {
+                  if (data.websocket.url) {
+                    configManager.setWebsocketUrl(data.websocket.url)
+                    logger.info(`WebSocket URL 已刷新: ${data.websocket.url}`)
+                  }
+                  if (data.websocket.token) {
+                    configManager.setWebsocketAccessToken(data.websocket.token)
+                    logger.info('WebSocket Token 已刷新')
+                  }
+                }
+
+                logger.info('OTA 配置刷新成功')
+
+                // 刷新协议配置，让新的 WebSocket/MQTT 配置生效
+                try {
+                  const { getApplication } = await import('../services/Application')
+                  const application = getApplication()
+                  application.reloadProtocolConfig()
+                  logger.info('协议配置已刷新')
+                }
+                catch (reloadError) {
+                  logger.error('刷新协议配置失败', reloadError)
+                }
+              }
+            }
+          }
+        }
+        catch (refreshError) {
+          logger.error('刷新 OTA 配置失败', refreshError)
+          // 不影响配置保存，只记录错误
+        }
+      }
+
       return { success: true }
     }
     catch (error) {

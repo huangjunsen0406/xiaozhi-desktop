@@ -71,6 +71,19 @@ export class WebSocketProtocol extends Protocol {
   }
 
   /**
+   * 重新加载配置（用于配置更新后刷新）
+   */
+  reloadConfig(): void {
+    logger.info('重新加载 WebSocket 配置')
+    this.loadConfig()
+    logger.info('WebSocket 配置已更新', {
+      url: this.websocketUrl,
+      deviceId: this.deviceId,
+      clientId: this.clientId,
+    })
+  }
+
+  /**
    * 连接到 WebSocket 服务器
    */
   async connect(): Promise<boolean> {

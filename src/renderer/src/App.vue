@@ -60,7 +60,21 @@ onMounted(async () => {
     const removeCameraListener = window.api.cameraOnCaptureRequest(async () => {
       console.log('收到摄像头捕获请求')
       try {
-        const imageBlob = await captureFromWebcam()
+        // 获取摄像头配置
+        const config = await window.api.cameraConfigGetConfig()
+        console.log('使用摄像头配置:', {
+          deviceId: config.deviceId,
+          width: config.captureWidth,
+          height: config.captureHeight,
+        })
+
+        // 使用配置的参数捕获图像
+        const imageBlob = await captureFromWebcam(
+          config.captureWidth || 640,
+          config.captureHeight || 480,
+          config.deviceId || undefined,
+        )
+
         const arrayBuffer = await imageBlob.arrayBuffer()
         const uint8Array = new Uint8Array(arrayBuffer)
         window.api.cameraSendCaptureResult(true, uint8Array)
