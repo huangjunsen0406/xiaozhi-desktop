@@ -97,8 +97,22 @@ async function copyCode() {
 }
 
 // 跳转激活页面
-function jump() {
-  window.api.openExternal('https://xiaozhi.me/')
+async function jump() {
+  try {
+    // 从配置中获取授权 URL
+    const result = await window.api.systemGetConfig()
+    if (!result.success || !result.data) {
+      throw new Error('获取配置失败')
+    }
+    const config = result.data
+    const authUrl = config.authorization_url || 'https://xiaozhi.me/'
+    window.api.openExternal(authUrl)
+  }
+  catch (error) {
+    console.error('获取授权 URL 失败:', error)
+    // 降级到默认 URL
+    window.api.openExternal('https://xiaozhi.me/')
+  }
 }
 
 // 关闭窗口

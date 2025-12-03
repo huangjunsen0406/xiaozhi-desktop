@@ -7,23 +7,33 @@
  * 捕获摄像头图像
  * @param width - 画面宽度
  * @param height - 画面高度
+ * @param deviceId - 可选的摄像头设备 ID
  * @returns 图像 Blob
  */
 export async function captureFromWebcam(
   width = 640,
   height = 480,
+  deviceId?: string,
 ): Promise<Blob> {
   let stream: MediaStream | null = null
 
   try {
-    console.log('请求摄像头权限...')
+    console.log('请求摄像头权限...', { width, height, deviceId })
+
+    // 构建视频约束
+    const videoConstraints: MediaTrackConstraints = {
+      width: { ideal: width },
+      height: { ideal: height },
+    }
+
+    // 如果指定了设备ID，添加到约束中
+    if (deviceId) {
+      videoConstraints.deviceId = { exact: deviceId }
+    }
 
     // 请求摄像头权限
     stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: width },
-        height: { ideal: height },
-      },
+      video: videoConstraints,
       audio: false,
     })
 

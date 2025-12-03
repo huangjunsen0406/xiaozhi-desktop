@@ -1,0 +1,56 @@
+# GitHub Release 自动生成配置
+# 参考: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+
+changelog:
+  # 排除的标签（这些 PR 不会出现在 changelog 中）
+  exclude:
+    labels:
+      - ignore-for-release
+      - dependencies
+      - documentation
+
+  # 分类配置
+  categories:
+    - title: 🚀 新功能 (Features)
+      labels:
+        - feature
+        - enhancement
+        - feat
+
+    - title: 🐛 Bug 修复 (Bug Fixes)
+      labels:
+        - bug
+        - fix
+        - bugfix
+
+    - title: 📝 文档更新 (Documentation)
+      labels:
+        - documentation
+        - docs
+
+    - title: ⚡️ 性能优化 (Performance)
+      labels:
+        - performance
+        - perf
+        - optimization
+
+    - title: 🔧 重构 (Refactor)
+      labels:
+        - refactor
+        - refactoring
+
+    - title: 🧪 测试 (Tests)
+      labels:
+        - test
+        - tests
+
+    - title: 🔨 构建/CI (Build & CI)
+      labels:
+        - build
+        - ci
+        - chore
+
+    # 其他未分类的 PR
+    - title: 📦 其他变更 (Other Changes)
+      labels:
+        - "*"

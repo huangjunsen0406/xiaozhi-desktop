@@ -48,8 +48,8 @@ export const useAppStore = defineStore('app', () => {
   /** 当前会话的消息列表（UI 显示用） */
   const messages = ref<ChatMessageType[]>([])
 
-  /** 是否正在通话（设备非空闲或通道打开） */
-  const isCalling = computed(() => deviceState.value !== 'idle' || channelOpen.value)
+  /** 是否正在通话（设备非空闲且通道打开） */
+  const isCalling = computed(() => deviceState.value !== 'idle' && channelOpen.value)
 
   /** 是否正在连接 */
   const isConnecting = computed(() => deviceState.value === 'connecting')

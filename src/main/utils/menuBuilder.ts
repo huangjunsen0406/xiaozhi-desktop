@@ -1,32 +1,70 @@
 import type { MenuItemConstructorOptions } from 'electron'
+import process from 'node:process'
 import { app, Menu } from 'electron'
 import { getCurrentDisplayMode, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
-
 /**
- * 构建应用菜单（仅包含设置和退出）
+ * 构建应用菜单（包含 Edit 菜单以支持复制粘贴等操作）
  */
 export function buildAppMenu(): Menu {
   const appName = app.getName()
+  const isMac = process.platform === 'darwin'
 
-  const submenu: MenuItemConstructorOptions[] = []
+  const template: MenuItemConstructorOptions[] = []
 
-  submenu.push({
-    label: '设置…',
-    accelerator: 'CmdOrCtrl+,',
-    click: () => {
-      toggleSettings()
-    },
+  // macOS 应用菜单
+  if (isMac) {
+    const appSubmenu: MenuItemConstructorOptions[] = [
+      {
+        label: '设置…',
+        accelerator: 'CmdOrCtrl+,',
+        click: () => {
+          toggleSettings()
+        },
+      },
+      { type: 'separator' },
+      { role: 'quit', label: `退出 ${appName}` },
+    ]
+
+    template.push({
+      label: appName,
+      submenu: appSubmenu,
+    })
+  }
+  else {
+    // Windows/Linux 应用菜单
+    const appSubmenu: MenuItemConstructorOptions[] = [
+      {
+        label: '设置…',
+        accelerator: 'CmdOrCtrl+,',
+        click: () => {
+          toggleSettings()
+        },
+      },
+      { type: 'separator' },
+      { role: 'quit', label: `退出 ${appName}` },
+    ]
+
+    template.push({
+      label: '应用',
+      submenu: appSubmenu,
+    })
+  }
+
+  // Edit 菜单 - 支持复制粘贴等操作
+  template.push({
+    label: '编辑',
+    submenu: [
+      { role: 'undo', label: '撤销' },
+      { role: 'redo', label: '重做' },
+      { type: 'separator' },
+      { role: 'cut', label: '剪切' },
+      { role: 'copy', label: '复制' },
+      { role: 'paste', label: '粘贴' },
+      { role: 'selectAll', label: '全选' },
+    ],
   })
 
-  submenu.push({ type: 'separator' })
-  submenu.push({ role: 'quit', label: `退出 ${appName}` })
-
-  return Menu.buildFromTemplate([
-    {
-      label: appName,
-      submenu,
-    },
-  ])
+  return Menu.buildFromTemplate(template)
 }
 
 /**

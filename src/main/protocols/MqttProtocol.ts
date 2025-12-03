@@ -121,6 +121,18 @@ export class MqttProtocol extends Protocol {
   }
 
   /**
+   * 重新加载配置（用于配置更新后刷新）
+   */
+  reloadConfig(): boolean {
+    logger.info('重新加载 MQTT 配置')
+    const success = this.loadMqttConfig()
+    if (success) {
+      logger.info('MQTT 配置已更新')
+    }
+    return success
+  }
+
+  /**
    * 连接到 MQTT 服务器
    */
   async connect(): Promise<boolean> {

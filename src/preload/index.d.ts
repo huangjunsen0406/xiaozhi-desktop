@@ -12,6 +12,7 @@ import type {
   DeviceInfo,
   ServerMessage,
   ShortcutConfig,
+  SystemConfig,
   WakeWordConfig,
 } from '@shared/types'
 import type { Buffer } from 'node:buffer'
@@ -35,17 +36,8 @@ export type {
   DeviceInfo,
   ServerMessage,
   ShortcutConfig,
+  SystemConfig,
   WakeWordConfig,
-}
-
-/**
- * 系统配置类型
- */
-export interface SystemConfig {
-  language?: string
-  theme?: string
-  autoStart?: boolean
-  [key: string]: unknown
 }
 
 /**
@@ -117,8 +109,8 @@ export interface RendererApi {
   appOnServerMessage: (callback: (message: ServerMessage) => void) => void
   appRemoveServerMessageListener: () => void
   // System Config APIs
-  systemGetConfig: () => Promise<SystemConfig>
-  systemUpdateConfig: (config: Partial<SystemConfig>) => Promise<{ success: boolean, error?: string }>
+  systemGetConfig: () => Promise<{ success: boolean, data?: SystemConfig, error?: string }>
+  systemUpdateConfig: (config: SystemConfig) => Promise<{ success: boolean, error?: string }>
   // Wake Word APIs
   wakeWordGetConfig: () => Promise<{ success: boolean, data?: WakeWordConfig, error?: string }>
   wakeWordUpdateConfig: (updates: Partial<WakeWordConfig>) => Promise<{ success: boolean, error?: string }>
