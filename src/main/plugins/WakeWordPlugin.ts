@@ -218,6 +218,7 @@ export class WakeWordPlugin extends Plugin {
 
       // 情况2 & 通用: 启动自动对话（会自动连接协议）
       logger.info('启动自动对话')
+      await this.app.sendWakeWordDetected('唤醒')
       await this.app.startAutoConversation()
     }
     catch (error) {

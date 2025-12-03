@@ -1,8 +1,8 @@
 import type OpenAI from 'openai'
 import type { ChatPlugin } from '../../plugins/ChatPlugin'
 import type { PropertyList, PropertyType } from '../types'
-import * as os from 'node:os'
 import { Buffer } from 'node:buffer'
+import * as os from 'node:os'
 import { app, BrowserWindow } from 'electron'
 import { getApplication } from '../../services/Application'
 import { DatabaseManager } from '../../services/database'
@@ -668,36 +668,69 @@ Examples:
       const cameraConfig = db.getFormattedCameraConfig()
 
       const cameraOptions = {
-        // 如果本地配置了 VL API，则使用本地配置
         vlApiKey: cameraConfig.useLocalVision ? cameraConfig.vlApiKey : '',
         vlUrl: cameraConfig.useLocalVision ? cameraConfig.vlUrl : '',
         vlModel: cameraConfig.vlModel || 'glm-4v-plus',
-        // explainUrl 和 explainToken 会在 MCP 初始化时设置到 Camera 实例
         deviceId: cameraConfig.deviceId || '',
         clientId: '', // TODO: 从网络配置读取
       }
-
-      logger.info(`摄像头配置:`, {
-        useLocalVision: cameraConfig.useLocalVision,
-        hasVlUrl: !!cameraOptions.vlUrl,
-      })
 
       // 获取摄像头实例并拍照
       const camera = getCameraInstance(cameraOptions)
       const captureResult = await camera.capture()
 
-      if (captureResult.success && captureResult.data) {
-        // 保存图片到数据库
-        const imageBase64 = captureResult.data.toString('base64')
-        const app = getApplication()
-        const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
-        await chatPlugin?.saveImage(imageBase64, 'camera')
+      if (!captureResult.success || !captureResult.data) {
+        logger.error('拍照失败:', captureResult.message)
+        return JSON.stringify({
+          success: false,
+          message: captureResult.message || '拍照失败',
+        })
       }
 
-      // 分析图片
-      const analyzeResult = await camera.analyze(question)
-      logger.info(`拍照完成`)
-      return JSON.stringify(analyzeResult)
+      logger.info('拍照成功，开始分析...')
+
+      // 保存图片到数据库
+      const imageBase64 = captureResult.data.toString('base64')
+      const app = getApplication()
+      const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+      await chatPlugin?.saveImage(imageBase64, 'camera')
+
+      // 从 MCP Server 获取 vision 配置（与截图相同的逻辑）
+      const { McpServer } = await import('../McpServer')
+      const mcpServer = McpServer.getInstance()
+      const visionConfig = mcpServer.getVisionConfig()
+
+      // 构建分析请求（与截图相同的优先级）
+      const useLocalVision = cameraConfig.useLocalVision
+      let analysisResult: string
+
+      if (useLocalVision && cameraConfig.vlApiKey && cameraConfig.vlUrl) {
+        // 使用本地 VL API 分析
+        logger.info('使用本地 VL API 分析照片')
+        analysisResult = await this.analyzeImageWithLocalVL(
+          imageBase64,
+          question || '请描述这张照片的内容',
+          cameraConfig,
+        )
+      }
+      else if (visionConfig.url && visionConfig.token) {
+        // 使用 MCP 客户端下发的 vision API
+        logger.info('使用 MCP vision API 分析照片')
+        analysisResult = await this.analyzeImageWithMCPVision(
+          imageBase64,
+          question || '请描述这张照片的内容',
+          { url: visionConfig.url, token: visionConfig.token },
+        )
+      }
+      else {
+        logger.warn('未配置 vision API')
+        return JSON.stringify({
+          success: false,
+          message: '未配置视觉分析 API，无法分析照片内容',
+        })
+      }
+
+      return analysisResult
     }
     catch (error) {
       logger.error('拍照失败:', error)

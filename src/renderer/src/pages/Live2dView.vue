@@ -298,7 +298,7 @@ function startLipSyncAnimation(): void {
 
     // 平滑过渡: 使用线性插值 (lerp)
     // currentValue = currentValue + (targetValue - currentValue) * lerpFactor
-    const lerpFactor = 0.3 // 平滑系数,越大越快,越小越平滑
+    const lerpFactor = 0.5 // 平滑系数，从 0.3 提升到 0.5，加快响应速度
 
     currentMouthValue += (targetMouthValue - currentMouthValue) * lerpFactor
 

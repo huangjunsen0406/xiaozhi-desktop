@@ -568,6 +568,28 @@ export class Application {
   }
 
   /**
+   * 重新加载协议配置
+   * 用于配置更新后刷新连接参数
+   */
+  reloadProtocolConfig(): void {
+    if (!this.protocol) {
+      this.logger.warn('协议未初始化，无法重新加载配置')
+      return
+    }
+
+    this.logger.info('重新加载协议配置')
+
+    // 调用协议的 reloadConfig 方法
+    if ('reloadConfig' in this.protocol && typeof this.protocol.reloadConfig === 'function') {
+      this.protocol.reloadConfig()
+      this.logger.info('协议配置已刷新')
+    }
+    else {
+      this.logger.warn('当前协议不支持配置重新加载')
+    }
+  }
+
+  /**
    * 只读访问器：音频通道是否打开
    */
   isAudioChannelOpened(): boolean {
@@ -725,6 +747,16 @@ export class Application {
     finally {
       this.isShuttingDown = false
     }
+  }
+
+  async sendWakeWordDetected(text: string): Promise<void> {
+    const ok = await this.connectProtocol()
+    if (!ok) {
+      this.logger.error('协议未连接，无法发送文本')
+      return
+    }
+
+    await this.protocol!.sendWakeWordDetected(text)
   }
 }
 
