@@ -13,6 +13,7 @@ declare module 'vue' {
     AudioWave: typeof import('./components/AudioWave.vue')['default']
     CameraSettings: typeof import('./components/settings/CameraSettings.vue')['default']
     ChatImage: typeof import('./components/ChatImage.vue')['default']
+    ChatMessage: typeof import('./components/ChatMessage.vue')['default']
     Dots: typeof import('./components/Dots.vue')['default']
     EmotionSettings: typeof import('./components/settings/EmotionSettings.vue')['default']
     HotkeySettings: typeof import('./components/settings/HotkeySettings.vue')['default']
