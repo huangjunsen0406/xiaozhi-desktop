@@ -62,12 +62,85 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: pnpm run build:win
 
+      # 打包后检查：确认 .node 文件已正确放入 app.asar.unpacked
+      - name: Verify packaged native modules (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          echo "=== Checking sherpa-onnx in win-unpacked ==="
+          $basePath = "release\win-unpacked\resources\app.asar.unpacked\node_modules\sherpa-onnx-win-x64"
+          if (Test-Path $basePath) {
+            echo "✅ sherpa-onnx-win-x64 directory exists"
+            Get-ChildItem $basePath -Recurse | Select-Object FullName
+            $nodeFile = Join-Path $basePath "sherpa-onnx.node"
+            if (Test-Path $nodeFile) {
+              echo "✅ sherpa-onnx.node found!"
+            } else {
+              echo "❌ sherpa-onnx.node NOT found!"
+              exit 1
+            }
+          } else {
+            echo "❌ sherpa-onnx-win-x64 directory NOT found!"
+            echo "Listing available directories:"
+            Get-ChildItem "release\win-unpacked\resources" -Recurse -Directory | Select-Object FullName
+            exit 1
+          }
+
+      - name: Verify packaged native modules (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "=== Checking sherpa-onnx in mac-unpacked ==="
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            PKG="sherpa-onnx-darwin-arm64"
+          else
+            PKG="sherpa-onnx-darwin-x64"
+          fi
+          BASE_PATH="release/mac-arm64/xiaozhi-desktop.app/Contents/Resources/app.asar.unpacked/node_modules/$PKG"
+          if [ ! -d "$BASE_PATH" ]; then
+            BASE_PATH="release/mac/xiaozhi-desktop.app/Contents/Resources/app.asar.unpacked/node_modules/$PKG"
+          fi
+          if [ -d "$BASE_PATH" ]; then
+            echo "✅ $PKG directory exists"
+            ls -la "$BASE_PATH"
+            if [ -f "$BASE_PATH/sherpa-onnx.node" ]; then
+              echo "✅ sherpa-onnx.node found!"
+            else
+              echo "❌ sherpa-onnx.node NOT found!"
+              exit 1
+            fi
+          else
+            echo "❌ $PKG directory NOT found!"
+            find release -name "app.asar.unpacked" -type d 2>/dev/null | head -5
+            exit 1
+          fi
+
+      - name: Verify packaged native modules (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo "=== Checking sherpa-onnx in linux-unpacked ==="
+          BASE_PATH="release/linux-unpacked/resources/app.asar.unpacked/node_modules/sherpa-onnx-linux-x64"
+          if [ -d "$BASE_PATH" ]; then
+            echo "✅ sherpa-onnx-linux-x64 directory exists"
+            ls -la "$BASE_PATH"
+            if [ -f "$BASE_PATH/sherpa-onnx.node" ]; then
+              echo "✅ sherpa-onnx.node found!"
+            else
+              echo "❌ sherpa-onnx.node NOT found!"
+              exit 1
+            fi
+          else
+            echo "❌ sherpa-onnx-linux-x64 directory NOT found!"
+            find release -name "app.asar.unpacked" -type d 2>/dev/null | head -5
+            exit 1
+          fi
+
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          # 自动根据 PR 生成 release notes
-          generate_release_notes: true
+          # 只让 Linux job 生成 release notes，避免三个平台重复写入
+          generate_release_notes: ${{ matrix.os == 'ubuntu-latest' }}
           files: |
             release/*.exe
             release/*.zip

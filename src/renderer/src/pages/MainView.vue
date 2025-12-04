@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import type { EmotionType } from '../types/emotion'
-import { NButton } from 'naive-ui'
+import { NButton, NMarquee } from 'naive-ui'
 import { watch } from 'vue'
 import Dots from '../components/Dots.vue'
-import TitleBar from '../components/TitleBar.vue'
 import { useEmotion } from '../composables/useEmotion'
 import { useAppStore } from '../stores/app'
 
 const platform = window.electron.process.platform
-const showTitleBar = platform !== 'darwin'
+const isMac = platform === 'darwin'
 
 // 使用全局 App Store
 const appStore = useAppStore()
@@ -26,13 +25,12 @@ watch(() => appStore.emotion, (newEmotion) => {
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
   try {
-    if (appStore.isAutoMode) {
-      // 挂断电话 - 停止自动对话
+    // 只要不是 idle 状态就挂断（包括 connecting、listening、speaking）
+    if (appStore.deviceState !== 'idle') {
       console.log('挂断电话')
       await appStore.stopAutoConversation()
     }
     else {
-      // 拨打电话 - 开始自动对话
       console.log('拨打电话')
       await appStore.startAutoConversation()
     }
@@ -41,12 +39,32 @@ async function toggleCall() {
     console.error('切换通话状态失败', error)
   }
 }
+
+// 打开设置
+function toggleSettings() {
+  window.api.toggleSettings()
+}
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-screen bg-white dark:bg-gray-900 overflow-hidden">
-    <TitleBar v-if="showTitleBar" />
-    <div v-else class="h-7 shrink-0" style="-webkit-app-region: drag" />
+  <div class="relative flex flex-col w-full h-screen bg-white dark:bg-gray-900 overflow-hidden">
+    <!-- 顶部拖拽区域 + 设置按钮 -->
+    <div class="flex items-center justify-between h-8 px-2 shrink-0" style="-webkit-app-region: drag">
+      <!-- macOS 红绿灯占位 -->
+      <div v-if="isMac" class="w-16" />
+      <div v-else class="flex-1" />
+
+      <!-- 右上角设置按钮 -->
+      <button
+        class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
+        style="-webkit-app-region: no-drag"
+        type="button"
+        aria-label="设置"
+        @click="toggleSettings"
+      >
+        <icon-carbon-settings class="w-4 h-4" />
+      </button>
+    </div>
 
     <div class="relative flex flex-col items-center justify-center flex-1 gap-4 p-5 overflow-hidden" style="-webkit-app-region: no-drag">
       <!-- 表情头像 -->
@@ -59,19 +77,18 @@ async function toggleCall() {
       <!-- 标题 - 显示 AI 回复或提示文本 -->
       <div
         class="text-base text-gray-700 dark:text-gray-300 text-center px-4 max-w-md"
-        :class="[appStore.isCalling ? 'visible' : 'collapse']"
       >
-        <n-marquee v-if="appStore.currentText">
+        <NMarquee v-if="appStore.currentText">
           {{ appStore.currentText }}
-        </n-marquee>
-        <template v-else>
+        </NMarquee>
+        <template v-else-if="appStore.isCalling && !appStore.currentText">
           请开始说话
         </template>
       </div>
 
       <!-- Dots 组件 + 按钮组：固定相距 100px -->
       <div class="flex flex-col items-center gap-y-[100px] mt-12">
-        <Dots :is-show="appStore.isCalling" />
+        <Dots :is-show="appStore.isCalling && !appStore.currentText" />
         <div class="flex items-center gap-2" style="-webkit-app-region: no-drag">
           <!-- 电话按钮：点击拨打/挂断 -->
           <NButton quaternary circle @click="toggleCall">

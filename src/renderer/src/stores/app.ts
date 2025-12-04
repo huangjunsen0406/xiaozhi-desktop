@@ -49,7 +49,7 @@ export const useAppStore = defineStore('app', () => {
   const messages = ref<ChatMessageType[]>([])
 
   /** 是否正在通话（设备非空闲且通道打开） */
-  const isCalling = computed(() => deviceState.value !== 'idle' && channelOpen.value)
+  const isCalling = computed(() => deviceState.value !== 'idle')
 
   /** 是否正在连接 */
   const isConnecting = computed(() => deviceState.value === 'connecting')
@@ -155,6 +155,7 @@ export const useAppStore = defineStore('app', () => {
    */
   async function stopAutoConversation(): Promise<void> {
     try {
+      currentText.value = ''
       await window.api.appStopAutoConversation()
       console.log('自动对话已停止')
     }
@@ -340,8 +341,8 @@ export const useAppStore = defineStore('app', () => {
       // TTS 消息显示用户说的话
       currentText.value = message.text
     }
-    else if (message.state === 'stop') {
-      // LLM 结束时清空文本
+
+    else if (message.type === 'tts' && message.state === 'stop') {
       currentText.value = ''
     }
   }
