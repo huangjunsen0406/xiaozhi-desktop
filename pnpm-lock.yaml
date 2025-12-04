@@ -92,6 +92,22 @@ importers:
       ws:
         specifier: ^8.18.3
         version: 8.18.3
+    optionalDependencies:
+      sherpa-onnx-darwin-arm64:
+        specifier: ^1.12.17
+        version: 1.12.17
+      sherpa-onnx-darwin-x64:
+        specifier: ^1.12.17
+        version: 1.12.17
+      sherpa-onnx-linux-arm64:
+        specifier: ^1.12.17
+        version: 1.12.17
+      sherpa-onnx-linux-x64:
+        specifier: ^1.12.17
+        version: 1.12.17
+      sherpa-onnx-win-x64:
+        specifier: ^1.12.17
+        version: 1.12.17
     devDependencies:
       '@antfu/eslint-config':
         specifier: ^5.3.0
