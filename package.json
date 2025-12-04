@@ -14,9 +14,10 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps && node scripts/fix-sherpa-onnx-rpath.js || true",
+    "postinstall": "electron-builder install-app-deps && node -e \"process.platform === 'darwin' && require('child_process').execSync('node scripts/fix-sherpa-onnx-rpath.js', {stdio: 'inherit'})\" || true",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win --publish=never",
+    "verify:sherpa": "node -e \"const fs=require('fs');const p=process.platform==='win32'?'sherpa-onnx-win-x64':process.platform==='darwin'?(process.arch==='arm64'?'sherpa-onnx-darwin-arm64':'sherpa-onnx-darwin-x64'):'sherpa-onnx-linux-x64';const f='node_modules/'+p+'/sherpa-onnx.node';if(!fs.existsSync(f)){console.error('❌ Missing:',f);process.exit(1)}console.log('✅ Found:',f)\"",
     "build:mac": "npm run build && electron-builder --mac --publish=never",
     "build:linux": "npm run build && electron-builder --linux --publish=never",
     "release": "node scripts/release.js"
@@ -50,6 +51,13 @@
     "uuid": "^13.0.0",
     "vue-router": "^4.5.1",
     "ws": "^8.18.3"
+  },
+  "optionalDependencies": {
+    "sherpa-onnx-darwin-arm64": "^1.12.17",
+    "sherpa-onnx-darwin-x64": "^1.12.17",
+    "sherpa-onnx-linux-arm64": "^1.12.17",
+    "sherpa-onnx-linux-x64": "^1.12.17",
+    "sherpa-onnx-win-x64": "^1.12.17"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^5.3.0",

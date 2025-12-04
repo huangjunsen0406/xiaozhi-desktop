@@ -47,6 +47,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify sherpa-onnx native module
+        run: pnpm run verify:sherpa
+
       - name: Build for Linux
         if: matrix.os == 'ubuntu-latest'
         run: pnpm run build:linux

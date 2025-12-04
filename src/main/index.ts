@@ -153,35 +153,48 @@ app.whenReady().then(async () => {
 
   ensureDockVisible()
 
+  // 初始化激活服务
   const activationService = getActivationService()
-  activationService.handleStartup().then(async (result) => {
-    if (result.success) {
-      logger.info('创建后台音频窗口...')
-      const backgroundAudioWindow = ensureBackgroundAudioWindow()
+  const initResult = await activationService.initializeBasic()
 
-      const application = getApplication()
-      await application.initialize('websocket')
+  if (!initResult.success) {
+    logger.warn('基础设备信息初始化失败，但继续启动应用', initResult.error)
+  }
 
-      const audioPlugin = application.getAudioPlugin()
-      if (audioPlugin && backgroundAudioWindow) {
-        audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
-        logger.info('AudioPlugin 窗口引用已设置')
-      }
+  // 创建后台音频窗口
+  logger.info('创建后台音频窗口...')
+  const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
-      await application.start()
+  // 初始化应用
+  const application = getApplication()
+  await application.initialize('websocket')
 
-      const ipcContext: IpcContext = { application }
-      registerAppIpcChannels(ipcContext)
+  const audioPlugin = application.getAudioPlugin()
+  if (audioPlugin && backgroundAudioWindow) {
+    audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
+    logger.info('AudioPlugin 窗口引用已设置')
+  }
 
-      ensureMainWindow()
+  await application.start()
+
+  const ipcContext: IpcContext = { application }
+  registerAppIpcChannels(ipcContext)
+
+  // 先显示主窗口，让用户看到界面
+  ensureMainWindow()
+
+  // 异步检查激活状态
+  activationService.checkActivationStatus().then((result) => {
+    if (result.error) {
+      logger.warn('激活状态检查失败（已忽略）', result.error)
+      // 可以在这里通过 IPC 向渲染进程发送通知，显示错误提示
+      // 例如：mainWindow.webContents.send('activation:error', result.error)
     }
     else {
-      logger.error('激活检测失败', new Error(result.error || result.message))
-      app.quit()
+      logger.info('激活状态检查完成', result.message)
     }
   }).catch((error) => {
-    logger.error('激活检测出错', error)
-    app.quit()
+    logger.error('激活状态检查出错（已忽略）', error)
   })
 
   app.on('activate', () => {

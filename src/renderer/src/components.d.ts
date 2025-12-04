@@ -34,6 +34,7 @@ declare module 'vue' {
     IconCarbonSidePanelOpen: typeof import('~icons/carbon/side-panel-open')['default']
     IconCarbonSubtract: typeof import('~icons/carbon/subtract')['default']
     ModelSettings: typeof import('./components/settings/ModelSettings.vue')['default']
+    MusicSourceSettings: typeof import('./components/settings/MusicSourceSettings.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
     NInput: typeof import('naive-ui')['NInput']
     NInputOtp: typeof import('naive-ui')['NInputOtp']

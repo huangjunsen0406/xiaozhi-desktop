@@ -16,8 +16,17 @@ export function registerActivationIpc(): void {
   ipcMain.handle('activation:initialize', async () => {
     try {
       logger.info('开始系统初始化')
-      const result = await activationService.handleStartup()
+
+      // 先初始化基础设备信息
+      const initResult = await activationService.initializeBasic()
+      if (!initResult.success) {
+        logger.warn('基础设备信息初始化失败', initResult.error)
+      }
+
+      // 再检查激活状态（包含 OTA 请求）
+      const result = await activationService.checkActivationStatus()
       logger.info('系统初始化完成', result)
+
       return {
         success: result.success,
         need_activation_ui: result.needActivationUI,
