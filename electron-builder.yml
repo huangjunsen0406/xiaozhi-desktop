@@ -9,6 +9,36 @@ files:
   - resources/**/*
   - package.json
 
+  # ⚠️ 关键：显式包含原生模块（否则 asarUnpack 无效）
+  # SQLite
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
+  - node_modules/prebuild-install/**/*
+
+  # Sherpa ONNX 语音识别
+  - node_modules/sherpa-onnx-node/**/*
+  - node_modules/sherpa-onnx-darwin-arm64/**/*
+  - node_modules/sherpa-onnx-darwin-x64/**/*
+  - node_modules/sherpa-onnx-linux-x64/**/*
+  - node_modules/sherpa-onnx-linux-arm64/**/*
+  - node_modules/sherpa-onnx-win-x64/**/*
+  - node_modules/node-gyp-build-optional-packages/**/*
+
+  # 全局快捷键钩子
+  - node_modules/uiohook-napi/**/*
+
+  # 截图工具
+  - node_modules/node-screenshots/**/*
+  - node_modules/node-screenshots-darwin-arm64/**/*
+  - node_modules/node-screenshots-darwin-universal/**/*
+  - node_modules/node-screenshots-win32-x64-msvc/**/*
+  - node_modules/node-screenshots-linux-x64-gnu/**/*
+
+  # 图像处理 Sharp
+  - node_modules/sharp/**/*
+  - node_modules/@img/**/*
+
   # 排除源代码和配置文件
   - '!**/.vscode/*'
   - '!src/*'
@@ -61,12 +91,13 @@ asarUnpack:
   # SQLite 数据库引擎
   - node_modules/better-sqlite3/**/*.node
 
-  # 语音识别引擎（Sherpa ONNX）
-  - node_modules/sherpa-onnx-node/**/*.node
-  - node_modules/sherpa-onnx-darwin-arm64/**/*.node
-  - node_modules/sherpa-onnx-darwin-x64/**/*.node
-  - node_modules/sherpa-onnx-linux-x64/**/*.node
-  - node_modules/sherpa-onnx-win-x64/**/*.node
+  # 语音识别引擎（Sherpa ONNX）- 整个目录解包，包含 .node 和 .dll/.dylib/.so
+  - node_modules/sherpa-onnx-node/**/*
+  - node_modules/sherpa-onnx-darwin-arm64/**/*
+  - node_modules/sherpa-onnx-darwin-x64/**/*
+  - node_modules/sherpa-onnx-linux-x64/**/*
+  - node_modules/sherpa-onnx-linux-arm64/**/*
+  - node_modules/sherpa-onnx-win-x64/**/*
 
   # 全局快捷键钩子（UIOHook）
   - node_modules/uiohook-napi/**/*.node
@@ -141,7 +172,9 @@ linux:
     Icon: xiaozhi-desktop
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
-npmRebuild: false
+# Windows 必须开启 npmRebuild，否则原生模块 .node 文件可能不正确
+# 如果你在 CI 中已经手动运行了 electron-rebuild，可以设为 false
+npmRebuild: true
 # 自动更新配置（如果需要）
 # publish:
 #   provider: generic
