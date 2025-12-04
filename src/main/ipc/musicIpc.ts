@@ -20,7 +20,6 @@ export function registerMusicIpc(): void {
    * 当音乐播放状态变化时，渲染进程会通知主进程
    */
   ipcMain.on('music:status-update', (_event, status: Partial<MusicStatus>) => {
-    logger.info('收到音乐状态更新:', status)
     musicPlayer.updateStatus(status)
   })
 

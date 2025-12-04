@@ -72,12 +72,37 @@ export class DeviceFingerprintManager {
     try {
       const nets = networkInterfaces()
 
+      // 排除虚拟网卡的关键词
+      const virtualAdapterPatterns = [
+        /vpn/i,
+        /virtual/i,
+        /vethernet/i,
+        /vmware/i,
+        /virtualbox/i,
+        /hyperv/i,
+        /hyper-v/i,
+        /wsl/i,
+        /docker/i,
+        /vbox/i,
+        /tap/i,
+        /tun/i,
+      ]
+
+      const isVirtualAdapter = (name: string): boolean => {
+        return virtualAdapterPatterns.some(pattern => pattern.test(name))
+      }
+
+      // 第一轮: 查找物理网卡的 IPv4 地址
       for (const name of Object.keys(nets)) {
         const netInfo = nets[name]
         if (!netInfo)
           continue
 
         if (name.toLowerCase().includes('loopback') || name.toLowerCase().includes('lo'))
+          continue
+
+        // 跳过虚拟网卡
+        if (isVirtualAdapter(name))
           continue
 
         for (const net of netInfo) {
@@ -86,19 +111,24 @@ export class DeviceFingerprintManager {
             const mac = net.mac
             if (mac && mac !== '00:00:00:00:00:00') {
               const normalized = this.normalizeMacAddress(mac)
-              this.logger.info(`  • 找到 MAC 地址: ${normalized} (${name})`)
+              this.logger.info(`  • 找到物理 MAC 地址: ${normalized} (${name})`)
               return normalized
             }
           }
         }
       }
 
+      // 第二轮: 查找任何非虚拟的网卡
       for (const name of Object.keys(nets)) {
         const netInfo = nets[name]
         if (!netInfo)
           continue
 
         if (name.toLowerCase().includes('loopback') || name.toLowerCase().includes('lo'))
+          continue
+
+        // 跳过虚拟网卡
+        if (isVirtualAdapter(name))
           continue
 
         for (const net of netInfo) {
@@ -110,7 +140,7 @@ export class DeviceFingerprintManager {
         }
       }
 
-      this.logger.warn('未找到有效的 MAC 地址')
+      this.logger.warn('未找到有效的物理 MAC 地址,将基于 machine-id 生成虚拟 MAC')
       return null
     }
     catch (error) {
@@ -129,12 +159,47 @@ export class DeviceFingerprintManager {
     }
   }
 
+  /**
+   * 基于 machine-id 生成一个稳定的虚拟 MAC 地址
+   * 使用本地管理地址范围，确保不与真实硬件冲突
+   */
+  private generateVirtualMacFromMachineId(machineIdValue: string): string {
+    // 使用 SHA256 对 machine-id 进行哈希
+    const hash = createHash('sha256').update(machineIdValue).digest('hex')
+
+    // 取前 12 个字符作为 MAC 地址
+    const macHex = hash.substring(0, 12)
+
+    // 格式化为 MAC 地址格式 (xx:xx:xx:xx:xx:xx)
+    const macParts = macHex.match(/.{2}/g) || []
+
+    // 设置本地管理地址标志位 (第一个字节的第二位设为 1)
+    // 这样生成的 MAC 地址不会与真实硬件冲突
+    if (macParts.length > 0 && macParts[0]) {
+      const firstByte = Number.parseInt(macParts[0], 16)
+      macParts[0] = (firstByte | 0x02).toString(16).padStart(2, '0')
+    }
+
+    const virtualMac = macParts.join(':')
+    this.logger.info(`  • 基于 machine-id 生成虚拟 MAC: ${virtualMac}`)
+
+    return virtualMac
+  }
+
   private async generateFingerprint(): Promise<DeviceFingerprint> {
+    const machineIdValue = await this.getMachineId()
+    let macAddress = this.getMacAddress()
+
+    // 如果获取不到真实 MAC 地址，基于 machine-id 生成虚拟 MAC
+    if (!macAddress) {
+      macAddress = this.generateVirtualMacFromMachineId(machineIdValue)
+    }
+
     return {
       system: process.platform,
       hostname: this.getHostname(),
-      mac_address: this.getMacAddress(),
-      machine_id: await this.getMachineId(),
+      mac_address: macAddress,
+      machine_id: machineIdValue,
     }
   }
 

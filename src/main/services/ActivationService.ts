@@ -48,24 +48,55 @@ export class ActivationService {
     return ActivationService.instance
   }
 
-  async handleStartup(): Promise<ActivationResult> {
+  /**
+   * 初始化基础设备信息
+   */
+  async initializeBasic(): Promise<ActivationResult> {
     this.logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    this.logger.info('开始处理启动流程')
+    this.logger.info('开始初始化基础设备信息')
     this.logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
     try {
       await this.initializeDeviceFingerprint()
       await this.initializeConfig()
+
+      this.logger.info('基础设备信息初始化完成')
+      return {
+        success: true,
+        needActivationUI: false,
+        message: '基础设备信息初始化完成',
+      }
+    }
+    catch (error) {
+      this.logger.error('基础初始化失败', error)
+      return {
+        success: false,
+        needActivationUI: false,
+        message: '基础初始化失败',
+        error: String(error),
+      }
+    }
+  }
+
+  /**
+   * 检查激活状态
+   */
+  async checkActivationStatus(): Promise<ActivationResult> {
+    this.logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    this.logger.info('开始检查激活状态')
+    this.logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    try {
       const otaConfig = await this.fetchOtaConfig()
       const activationVersion = this.configManager.getActivationVersion() || 'v1'
       this.logger.info(`激活版本: ${activationVersion}`)
 
       if (activationVersion === 'v1') {
-        this.logger.info('v1 协议初始化完成')
+        this.logger.info('v1 协议，跳过激活检查')
         return {
           success: true,
           needActivationUI: false,
-          message: 'v1 协议初始化完成',
+          message: 'v1 协议，跳过激活检查',
         }
       }
 
@@ -78,11 +109,12 @@ export class ActivationService {
       return result
     }
     catch (error) {
-      this.logger.error('初始化失败', error)
+      this.logger.error('激活状态检查失败', error)
+      // 不返回 success: false，避免阻止应用运行
       return {
-        success: false,
+        success: true, // 注意：这里返回 true，允许应用继续运行
         needActivationUI: false,
-        message: '初始化失败',
+        message: '激活状态检查失败（已忽略）',
         error: String(error),
       }
     }
