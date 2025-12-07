@@ -16,10 +16,11 @@
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps && node -e \"process.platform === 'darwin' && require('child_process').execSync('node scripts/fix-sherpa-onnx-rpath.js', {stdio: 'inherit'})\" || true",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win --publish=never",
+    "clean": "node -e \"require('fs').rmSync('release', {recursive: true, force: true})\"",
+    "build:win": "npm run clean && npm run build && electron-builder --win --publish=never",
     "verify:sherpa": "node -e \"const fs=require('fs');const p=process.platform==='win32'?'sherpa-onnx-win-x64':process.platform==='darwin'?(process.arch==='arm64'?'sherpa-onnx-darwin-arm64':'sherpa-onnx-darwin-x64'):'sherpa-onnx-linux-x64';const f='node_modules/'+p+'/sherpa-onnx.node';if(!fs.existsSync(f)){console.error('❌ Missing:',f);process.exit(1)}console.log('✅ Found:',f)\"",
-    "build:mac": "npm run build && electron-builder --mac --publish=never",
-    "build:linux": "npm run build && electron-builder --linux --publish=never",
+    "build:mac": "npm run clean && npm run build && electron-builder --mac --publish=never",
+    "build:linux": "npm run clean && npm run build && electron-builder --linux --publish=never",
     "release": "node scripts/release.js"
   },
   "dependencies": {

@@ -26,9 +26,9 @@ extraResources:
     to: live2d-models
 
 asarUnpack:
-  # ASAR 解包：解包资源文件
-  # 注意：.node 文件会被 electron-builder 自动识别并排除在 asar 之外，无需显式配置
-  - resources/**
+  # ASAR 解包:只解包 sherpa-onnx 原生模块
+  # 注意:.node 文件会被 electron-builder 自动识别并排除在 asar 之外,无需显式配置
+  # resources/** 已经通过 extraResources 配置复制,不需要在这里再次解包
   - node_modules/sherpa-onnx-*/**/*
 
 win:
