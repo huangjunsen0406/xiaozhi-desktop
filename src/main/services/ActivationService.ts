@@ -88,6 +88,8 @@ export class ActivationService {
 
     try {
       const otaConfig = await this.fetchOtaConfig()
+
+      this.logger.info('OTA 配置:', otaConfig)
       const activationVersion = this.configManager.getActivationVersion() || 'v1'
       this.logger.info(`激活版本: ${activationVersion}`)
 
@@ -101,6 +103,8 @@ export class ActivationService {
       }
 
       const result = this.analyzeActivationStatus(otaConfig)
+
+      this.logger.info('分析激活状态:', result)
 
       if (result.needActivationUI) {
         showActivation()
@@ -183,6 +187,10 @@ export class ActivationService {
       },
     }
 
+    this.logger.info('OTA 配置请求头:', headers)
+
+    this.logger.info('OTA 配置请求参数:', payload)
+
     this.logger.info(`获取 OTA 配置: ${otaUrl}`)
 
     try {
@@ -190,6 +198,8 @@ export class ActivationService {
         headers,
         timeout: 10000,
       })
+
+      this.logger.info('OTA 配置响应:', response)
 
       if (response.status !== 200) {
         throw new Error(`OTA 服务器返回错误: ${response.status}`)

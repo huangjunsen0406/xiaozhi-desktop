@@ -50,18 +50,6 @@ export default defineConfig({
             if (id.includes('AnalyticsService')) {
               return 'analytics'
             }
-            // 协议层（包含加密逻辑）
-            if (id.includes('protocols/')) {
-              return 'protocol'
-            }
-            // 数据库操作
-            if (id.includes('services/database')) {
-              return 'database'
-            }
-            // MCP 工具
-            if (id.includes('mcp/')) {
-              return 'mcp'
-            }
             // 核心服务（Application、ShortcutManager）
             if (id.includes('services/Application')
               || id.includes('services/ShortcutManager')) {
@@ -71,12 +59,9 @@ export default defineConfig({
             if (id.includes('audio/') || id.includes('AudioPlugin')) {
               return 'audio'
             }
-            // IoT 设备控制
-            if (id.includes('iot/')) {
-              return 'iot'
-            }
           },
         },
+        external: ['sherpa-onnx-node'],
       },
     },
   },

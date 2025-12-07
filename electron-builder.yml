@@ -4,68 +4,16 @@ directories:
   buildResources: build
   output: release
 files:
-  # 包含构建输出和资源
-  - out/**/*
-  - resources/**/*
-  - package.json
-
-  # ⚠️ 关键：显式包含原生模块（否则 asarUnpack 无效）
-  # SQLite
-  - node_modules/better-sqlite3/**/*
-  - node_modules/bindings/**/*
-  - node_modules/file-uri-to-path/**/*
-  - node_modules/prebuild-install/**/*
-
-  # Sherpa ONNX 语音识别
-  - node_modules/sherpa-onnx-node/**/*
-  - node_modules/sherpa-onnx-darwin-arm64/**/*
-  - node_modules/sherpa-onnx-darwin-x64/**/*
-  - node_modules/sherpa-onnx-linux-x64/**/*
-  - node_modules/sherpa-onnx-linux-arm64/**/*
-  - node_modules/sherpa-onnx-win-x64/**/*
-  - node_modules/node-gyp-build-optional-packages/**/*
-
-  # 全局快捷键钩子
-  - node_modules/uiohook-napi/**/*
-
-  # 截图工具
-  - node_modules/node-screenshots/**/*
-  - node_modules/node-screenshots-darwin-arm64/**/*
-  - node_modules/node-screenshots-darwin-universal/**/*
-  - node_modules/node-screenshots-win32-x64-msvc/**/*
-  - node_modules/node-screenshots-linux-x64-gnu/**/*
-
-  # 图像处理 Sharp
-  - node_modules/sharp/**/*
-  - node_modules/@img/**/*
-
-  # 排除源代码和配置文件
+  # 排除源代码和配置文件（electron-builder 会自动包含 out、resources、node_modules）
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-
-  # 排除开发用的旧数据库目录
   - '!config/*'
-
-  # 排除文档和脚本
   - '!*.md'
   - '!scripts/*'
-
-  # 排除 node_modules 中的开发依赖（减小体积）
-  - '!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}'
-  - '!node_modules/*/{test,__tests__,tests,powered-test,example,examples}'
-  - '!node_modules/*.d.ts'
-  - '!node_modules/.bin'
-  - '!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}'
-  - '!.editorconfig'
-  - '!**/._*'
-  - '!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}'
-  - '!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}'
-  - '!**/{appveyor.yml,.travis.yml,circle.yml}'
-  - '!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}'
 
 # 额外资源：复制到 app.asar 外部的 Contents/Resources 目录
 extraResources:
@@ -78,46 +26,18 @@ extraResources:
     to: live2d-models
 
 asarUnpack:
-  # ASAR 解包：只解包已打包进 app.asar 的资源
-  # 注意：wake-word-models 通过 extraResources 处理，不需要在这里解包
-  - resources/icon.png
-  - resources/icon.ico
-  - resources/tray/**
+  # ASAR 解包：解包资源文件
+  # 注意：.node 文件会被 electron-builder 自动识别并排除在 asar 之外，无需显式配置
+  - resources/**
+  - node_modules/sherpa-onnx-*/**/*
 
-  # 原生模块必须解包（ASAR 限制）
-  # 原因：某些 Node API（如 child_process.exec、fs.open、process.dlopen）
-  # 不支持在 ASAR 中执行二进制文件，需要解包到文件系统
-
-  # SQLite 数据库引擎
-  - node_modules/better-sqlite3/**/*.node
-
-  # 语音识别引擎（Sherpa ONNX）- 整个目录解包，包含 .node 和 .dll/.dylib/.so
-  - node_modules/sherpa-onnx-node/**/*
-  - node_modules/sherpa-onnx-darwin-arm64/**/*
-  - node_modules/sherpa-onnx-darwin-x64/**/*
-  - node_modules/sherpa-onnx-linux-x64/**/*
-  - node_modules/sherpa-onnx-linux-arm64/**/*
-  - node_modules/sherpa-onnx-win-x64/**/*
-
-  # 全局快捷键钩子（UIOHook）
-  - node_modules/uiohook-napi/**/*.node
-
-  # 截图工具
-  - node_modules/node-screenshots/**/*.node
-  - node_modules/node-screenshots-darwin-arm64/**/*.node
-  - node_modules/node-screenshots-darwin-universal/**/*.node
-
-  # 图像处理（Sharp）
-  - node_modules/sharp/**/*.node
-  - node_modules/@img/**/*.node
-
-  # 所有平台的共享库
-  - node_modules/**/*.dylib # macOS
-  - node_modules/**/*.so # Linux
-  - node_modules/**/*.dll # Windows
 win:
   executableName: xiaozhi-desktop
   icon: build/icon.ico
+  # 排除其他平台的 sherpa-onnx 包（减小包体积）
+  files:
+    - '!node_modules/sherpa-onnx-darwin-*/**/*'
+    - '!node_modules/sherpa-onnx-linux-*/**/*'
   target:
     - target: nsis
       arch:
@@ -136,6 +56,10 @@ nsis:
 mac:
   icon: build/icon.icns
   category: public.app-category.productivity
+  # 排除其他平台的 sherpa-onnx 包（减小包体积）
+  files:
+    - '!node_modules/sherpa-onnx-win-*/**/*'
+    - '!node_modules/sherpa-onnx-linux-*/**/*'
   # 只构建当前架构（避免 DMG 文件名冲突）
   # 如需构建其他架构：
   #   - arm64: pnpm run build && electron-builder --mac --arm64
@@ -159,6 +83,10 @@ dmg:
 linux:
   # 只构建当前架构（避免文件名冲突）
   icon: build/icon.png
+  # 排除其他平台的 sherpa-onnx 包（减小包体积）
+  files:
+    - '!node_modules/sherpa-onnx-darwin-*/**/*'
+    - '!node_modules/sherpa-onnx-win-*/**/*'
   target:
     - AppImage
     - deb
@@ -172,9 +100,8 @@ linux:
     Icon: xiaozhi-desktop
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
-# Windows 必须开启 npmRebuild，否则原生模块 .node 文件可能不正确
-# 如果你在 CI 中已经手动运行了 electron-rebuild，可以设为 false
-npmRebuild: true
+# 使用预编译的平台特定包（sherpa-onnx-darwin-*, sherpa-onnx-win-*），无需重新编译
+npmRebuild: false
 # 自动更新配置（如果需要）
 # publish:
 #   provider: generic
