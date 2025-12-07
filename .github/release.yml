@@ -44,7 +44,7 @@ changelog:
         - test
         - tests
 
-    - title: 🔨 构建/CI (Build & CI)
+    - title: '🔨 构建/CI (Build & CI)'
       labels:
         - build
         - ci
@@ -53,4 +53,4 @@ changelog:
     # 其他未分类的 PR
     - title: 📦 其他变更 (Other Changes)
       labels:
-        - "*"
+        - '*'

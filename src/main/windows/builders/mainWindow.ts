@@ -27,8 +27,8 @@ export function buildMainWindow(): BrowserWindow {
     frame: isMac,
     title: app.getName(),
     fullscreenable: false,
-    skipTaskbar: true,
-    hiddenInMissionControl: true,
+    skipTaskbar: false,
+    hiddenInMissionControl: false,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     ...(process.platform === 'win32'
       ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 32 } as const }

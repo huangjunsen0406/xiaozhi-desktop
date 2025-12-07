@@ -1,12 +1,24 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
-import { BrowserWindow, screen } from 'electron'
+import { BrowserWindow, nativeImage, screen } from 'electron'
 
 import { getLogger } from '../../utils/logger'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('Live2dWindow')
+
+function getAppIcon() {
+  if (process.platform === 'win32') {
+    // Windows: 使用 icon.ico
+    return join(__dirname, '../../resources/icon.ico')
+  }
+  else if (process.platform === 'linux') {
+    // Linux: 使用 icon.png
+    return nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+  }
+  return undefined
+}
 // import { initLive2dDragBehavior } from '../behaviors/Live2dDragBehavior'
 
 /**
@@ -24,6 +36,8 @@ export function buildLive2dWindow(): BrowserWindow {
   const defaultX = screenWidth - windowSize.width - 50
   const defaultY = screenHeight - windowSize.height - 50
 
+  const icon = getAppIcon()
+
   const win = new BrowserWindow({
     x: defaultX,
     y: defaultY,
@@ -37,10 +51,11 @@ export function buildLive2dWindow(): BrowserWindow {
     resizable: false,
     movable: true,
     alwaysOnTop: true,
-    skipTaskbar: true,
+    skipTaskbar: false,
     fullscreenable: false,
-    hiddenInMissionControl: true,
+    hiddenInMissionControl: false,
     type: process.platform === 'darwin' ? 'panel' : undefined,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

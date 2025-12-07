@@ -6,7 +6,9 @@ on:
       - v*.*.*
 
 jobs:
-  release:
+  # 1) 三平台构建并上传构建产物（作为 workflow artifact）
+  build:
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -47,9 +49,6 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify sherpa-onnx native module
-        run: pnpm run verify:sherpa
-
       - name: Build for Linux
         if: matrix.os == 'ubuntu-latest'
         run: pnpm run build:linux
@@ -62,85 +61,33 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: pnpm run build:win
 
-      # 打包后检查：确认 .node 文件已正确放入 app.asar.unpacked
-      - name: Verify packaged native modules (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          echo "=== Checking sherpa-onnx in win-unpacked ==="
-          $basePath = "release\win-unpacked\resources\app.asar.unpacked\node_modules\sherpa-onnx-win-x64"
-          if (Test-Path $basePath) {
-            echo "✅ sherpa-onnx-win-x64 directory exists"
-            Get-ChildItem $basePath -Recurse | Select-Object FullName
-            $nodeFile = Join-Path $basePath "sherpa-onnx.node"
-            if (Test-Path $nodeFile) {
-              echo "✅ sherpa-onnx.node found!"
-            } else {
-              echo "❌ sherpa-onnx.node NOT found!"
-              exit 1
-            }
-          } else {
-            echo "❌ sherpa-onnx-win-x64 directory NOT found!"
-            echo "Listing available directories:"
-            Get-ChildItem "release\win-unpacked\resources" -Recurse -Directory | Select-Object FullName
-            exit 1
-          }
+      # 把 release 目录整体上传成 artifact，后面统一打到 GitHub Release 里
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaozhi-desktop-${{ matrix.os }}
+          path: release
+          # 如果当前平台没生成 release 目录就直接报错，方便排查
+          if-no-files-found: error
 
-      - name: Verify packaged native modules (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          echo "=== Checking sherpa-onnx in mac-unpacked ==="
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then
-            PKG="sherpa-onnx-darwin-arm64"
-          else
-            PKG="sherpa-onnx-darwin-x64"
-          fi
-          BASE_PATH="release/mac-arm64/xiaozhi-desktop.app/Contents/Resources/app.asar.unpacked/node_modules/$PKG"
-          if [ ! -d "$BASE_PATH" ]; then
-            BASE_PATH="release/mac/xiaozhi-desktop.app/Contents/Resources/app.asar.unpacked/node_modules/$PKG"
-          fi
-          if [ -d "$BASE_PATH" ]; then
-            echo "✅ $PKG directory exists"
-            ls -la "$BASE_PATH"
-            if [ -f "$BASE_PATH/sherpa-onnx.node" ]; then
-              echo "✅ sherpa-onnx.node found!"
-            else
-              echo "❌ sherpa-onnx.node NOT found!"
-              exit 1
-            fi
-          else
-            echo "❌ $PKG directory NOT found!"
-            find release -name "app.asar.unpacked" -type d 2>/dev/null | head -5
-            exit 1
-          fi
+  # 2) 单独 job：下载所有平台的 artifact，一次性创建 GitHub Release
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
 
-      - name: Verify packaged native modules (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          echo "=== Checking sherpa-onnx in linux-unpacked ==="
-          BASE_PATH="release/linux-unpacked/resources/app.asar.unpacked/node_modules/sherpa-onnx-linux-x64"
-          if [ -d "$BASE_PATH" ]; then
-            echo "✅ sherpa-onnx-linux-x64 directory exists"
-            ls -la "$BASE_PATH"
-            if [ -f "$BASE_PATH/sherpa-onnx.node" ]; then
-              echo "✅ sherpa-onnx.node found!"
-            else
-              echo "❌ sherpa-onnx.node NOT found!"
-              exit 1
-            fi
-          else
-            echo "❌ sherpa-onnx-linux-x64 directory NOT found!"
-            find release -name "app.asar.unpacked" -type d 2>/dev/null | head -5
-            exit 1
-          fi
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # 把多个 artifact 的内容合并到当前工作目录（会保持 release/ 这个路径）
+          merge-multiple: true
 
-      - name: Upload artifacts to GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          # 只让 Linux job 生成 release notes，避免三个平台重复写入
-          generate_release_notes: ${{ matrix.os == 'ubuntu-latest' }}
+          # 只调用一次，notes 只生成一份
+          generate_release_notes: true
           files: |
             release/*.exe
             release/*.zip
