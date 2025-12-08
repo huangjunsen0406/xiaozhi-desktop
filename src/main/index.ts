@@ -115,6 +115,27 @@ app.whenReady().then(async () => {
   initLogger()
   logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
 
+  // 检查并处理企业版代理问题
+  if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+    logger.warn('检测到系统代理配置:', {
+      HTTP_PROXY: process.env.HTTP_PROXY,
+      HTTPS_PROXY: process.env.HTTPS_PROXY,
+    })
+    logger.info('尝试绕过代理以解决企业版网络问题...')
+
+    try {
+      // 方案1: 对特定域名设置 direct 连接（不使用代理）
+      const { session } = await import('electron')
+      await session.defaultSession.setProxy({
+        mode: 'direct', // 直连，不使用代理
+      })
+      logger.info('✓ 已设置直连模式（绕过系统代理）')
+    }
+    catch (error) {
+      logger.error('设置代理配置失败', error)
+    }
+  }
+
   // 注册自定义协议处理器
   registerModelProtocolHandler()
 
