@@ -30,6 +30,9 @@ asarUnpack:
   # 注意:.node 文件会被 electron-builder 自动识别并排除在 asar 之外,无需显式配置
   # resources/** 已经通过 extraResources 配置复制,不需要在这里再次解包
   - node_modules/sherpa-onnx-*/**/*
+  # 解包 sharp 及其依赖（包含预编译的 libvips）
+  - node_modules/sharp/**/*
+  - node_modules/@img/**/*
 
 win:
   executableName: xiaozhi-desktop
