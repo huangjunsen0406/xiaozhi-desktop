@@ -21,7 +21,7 @@ enum AudioState {
   ERROR = 'error',
 }
 
-type CommandType = 'initialize' | 'switchDevices' | 'cleanup'
+type CommandType = 'initialize' | 'switchDevices' | 'updateConfig' | 'cleanup'
 
 interface Command {
   type: CommandType
@@ -78,6 +78,9 @@ class AudioCommandQueue {
         break
       case 'switchDevices':
         await doSwitchDevices()
+        break
+      case 'updateConfig':
+        await doUpdateConfig()
         break
       case 'cleanup':
         await doCleanup()
@@ -201,6 +204,33 @@ async function doSwitchDevices(): Promise<void> {
 }
 
 /**
+ * 执行配置更新（采样率、帧长度等）
+ */
+async function doUpdateConfig(): Promise<void> {
+  // 未初始化，跳过更新
+  if (currentState === AudioState.UNINITIALIZED || currentState === AudioState.ERROR) {
+    console.log('音频系统未初始化，跳过配置更新')
+    return
+  }
+
+  try {
+    console.log('更新音频配置...')
+
+    // 更新采集器配置
+    await capture.updateConfig()
+
+    // 更新播放器配置
+    await playback.updateConfig()
+
+    console.log('✓ 音频配置已更新')
+  }
+  catch (error) {
+    console.error('更新配置失败', error)
+    // 配置更新失败不改变状态，继续使用旧配置
+  }
+}
+
+/**
  * 执行清理
  */
 async function doCleanup(): Promise<void> {
@@ -231,6 +261,10 @@ window.api.onAudioCommand((command: string, _data?: Record<string, unknown>) => 
     case 'switchDevices':
       // 用户在设置中更改了音频设备
       commandQueue.enqueue('switchDevices', 1)
+      break
+    case 'updateConfig':
+      // 用户在设置中更改了音频配置（采样率、帧长度等）
+      commandQueue.enqueue('updateConfig', 1)
       break
     case 'cleanup':
       // 应用即将退出，清理资源

@@ -74,23 +74,51 @@ export class OpusCodec {
   /**
    * 解码 Opus 数据为 PCM
    * @param opusFrame Opus 编码的 Buffer
-   * @returns Int16 PCM Buffer (480 samples)
+   * @returns Int16 PCM Buffer
    */
   decode(opusFrame: Buffer): Buffer {
     try {
       // Opus 解码
       const pcmBuffer = this.decoder.decode(opusFrame)
 
-      // 验证输出大小
-      const expectedSize = AudioConfig.OUTPUT_FRAME_SIZE * 2 // Int16 = 2 bytes per sample
-      if (pcmBuffer.length !== expectedSize) {
-        logger.warn(`解码后 PCM 大小不正确: ${pcmBuffer.length}, 期望: ${expectedSize}`)
-      }
-
       return Buffer.from(pcmBuffer)
     }
     catch (error) {
       logger.error('Opus 解码失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 重建编解码器（配置更新时调用）
+   * 用于动态更新采样率等参数
+   */
+  rebuild(): void {
+    try {
+      logger.info('开始重建 OpusCodec...')
+
+      // 重建编码器
+      logger.info(`重建编码器: ${AudioConfig.INPUT_SAMPLE_RATE}Hz, ${AudioConfig.CHANNELS}ch`)
+      this.encoder = new OpusScript(
+        AudioConfig.INPUT_SAMPLE_RATE as any,
+        AudioConfig.CHANNELS as any,
+        OpusScript.Application.VOIP,
+      )
+
+      // 重建解码器
+      logger.info(`重建解码器: ${AudioConfig.OUTPUT_SAMPLE_RATE}Hz, ${AudioConfig.CHANNELS}ch`)
+      this.decoder = new OpusScript(
+        AudioConfig.OUTPUT_SAMPLE_RATE as any,
+        AudioConfig.CHANNELS as any,
+        OpusScript.Application.VOIP,
+      )
+
+      logger.info('OpusCodec 重建完成 ✓')
+      logger.info(`编码器: ${AudioConfig.INPUT_SAMPLE_RATE}Hz, ${AudioConfig.CHANNELS}ch`)
+      logger.info(`解码器: ${AudioConfig.OUTPUT_SAMPLE_RATE}Hz, ${AudioConfig.CHANNELS}ch`)
+    }
+    catch (error) {
+      logger.error('OpusCodec 重建失败:', error)
       throw error
     }
   }

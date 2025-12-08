@@ -104,6 +104,52 @@ export class AudioPlayback {
   }
 
   /**
+   * 更新配置（动态更新采样率和帧长度）
+   * 用于配置变更时无需重启应用
+   */
+  async updateConfig(): Promise<void> {
+    console.log('更新音频播放配置...')
+
+    try {
+      // 重新加载配置
+      const audioConfig = await window.api.audioGetConfig()
+      const newSampleRate = audioConfig.outputSampleRate || 24000
+      const newFrameDuration = audioConfig.frameDuration || 20
+
+      // 检查是否有变化
+      if (newSampleRate === this.sampleRate && newFrameDuration === this.frameDuration) {
+        console.log('配置未变化，跳过更新')
+        return
+      }
+
+      console.log('检测到配置变化:', {
+        旧采样率: this.sampleRate,
+        新采样率: newSampleRate,
+        旧帧长度: this.frameDuration,
+        新帧长度: newFrameDuration,
+      })
+
+      // 更新本地配置
+      this.sampleRate = newSampleRate
+      this.frameDuration = newFrameDuration
+      this.frameSize = Math.floor(this.sampleRate * (this.frameDuration / 1000))
+
+      console.log('✓ 音频播放配置已更新:', {
+        sampleRate: this.sampleRate,
+        frameDuration: this.frameDuration,
+        frameSize: this.frameSize,
+      })
+
+      // 注意：AudioContext 不需要重建
+      // 因为 createBuffer 时会指定采样率，浏览器会自动重采样到设备采样率
+    }
+    catch (error) {
+      console.error('更新音频播放配置失败:', error)
+      throw error
+    }
+  }
+
+  /**
    * 播放 PCM 数据
    * @param pcmBuffer Buffer 包含 Int16 PCM 数据
    */
@@ -121,12 +167,13 @@ export class AudioPlayback {
         pcmBuffer.byteLength / 2,
       )
 
-      // 验证数据长度
-      if (int16Array.length !== this.frameSize) {
-        console.warn(
-          `PCM 数据长度不正确: ${int16Array.length}, 期望: ${this.frameSize}`,
-        )
-      }
+      // 注意：不验证数据长度，因为服务端可能使用不同的帧大小
+      // 客户端配置的帧长度主要用于本地采集，解码时应该灵活处理
+      // if (int16Array.length !== this.frameSize) {
+      //   console.warn(
+      //     `PCM 数据长度不正确: ${int16Array.length}, 期望: ${this.frameSize}`,
+      //   )
+      // }
 
       // Int16 → Float32 转换
       const float32Array = this.convertInt16ToFloat32(int16Array)

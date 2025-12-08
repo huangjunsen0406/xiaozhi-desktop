@@ -31,32 +31,43 @@ export class AudioCapture {
       this.channels = audioConfig.channels || 1
       this.frameDuration = audioConfig.frameDuration || 20
 
-      // 计算帧大小 (samples)
-      const bufferSize = Math.floor(this.sampleRate * (this.frameDuration / 1000))
-
       console.log('音频配置:', {
-        sampleRate: this.sampleRate,
-        channels: this.channels,
-        frameDuration: this.frameDuration,
-        bufferSize,
+        目标采样率: this.sampleRate,
+        声道数: this.channels,
+        帧长度: this.frameDuration,
       })
 
-      // 创建音频上下文
+      // 创建音频上下文（请求目标采样率）
       this.audioContext = new AudioContext({
         sampleRate: this.sampleRate,
       })
 
-      console.log(`AudioContext 创建成功: ${this.audioContext.sampleRate}Hz`)
+      // 获取实际采样率（浏览器可能不支持请求的采样率）
+      const actualSampleRate = this.audioContext.sampleRate
+
+      console.log(`AudioContext 创建成功: 请求 ${this.sampleRate}Hz, 实际 ${actualSampleRate}Hz`)
+
+      // 使用实际采样率计算 bufferSize
+      const bufferSize = Math.floor(actualSampleRate * (this.frameDuration / 1000))
+
+      console.log('采集参数:', {
+        实际采样率: actualSampleRate,
+        目标采样率: this.sampleRate,
+        bufferSize,
+        需要重采样: actualSampleRate !== this.sampleRate,
+      })
 
       // 加载 AudioWorklet 模块
       await this.audioContext.audioWorklet.addModule('./worklets/pcm-capture-processor.js')
 
       console.log('AudioWorklet 模块加载成功')
 
-      // 创建 Worklet 节点，传递配置参数
+      // 创建 Worklet 节点，传递配置参数（包括重采样参数）
       this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-capture-processor', {
         processorOptions: {
-          bufferSize,
+          inputSampleRate: actualSampleRate, // 实际采样率
+          outputSampleRate: this.sampleRate, // 目标采样率
+          bufferSize, // 使用实际采样率计算的 bufferSize
         },
       })
 
@@ -141,6 +152,67 @@ export class AudioCapture {
 
     // 使用新设备重新启动
     await this.start(deviceId)
+  }
+
+  /**
+   * 更新配置（动态更新采样率和帧长度）
+   * 用于配置变更时无需重启应用
+   */
+  async updateConfig(): Promise<void> {
+    console.log('更新音频采集配置...')
+
+    try {
+      // 重新加载配置
+      const audioConfig = await window.api.audioGetConfig()
+      const newSampleRate = audioConfig.inputSampleRate || 16000
+      const newFrameDuration = audioConfig.frameDuration || 20
+
+      // 检查是否有变化
+      if (newSampleRate === this.sampleRate && newFrameDuration === this.frameDuration) {
+        console.log('配置未变化，跳过更新')
+        return
+      }
+
+      console.log('检测到配置变化:', {
+        旧采样率: this.sampleRate,
+        新采样率: newSampleRate,
+        旧帧长度: this.frameDuration,
+        新帧长度: newFrameDuration,
+      })
+
+      // 更新本地配置
+      this.sampleRate = newSampleRate
+      this.frameDuration = newFrameDuration
+
+      if (!this.audioContext || !this.workletNode) {
+        console.warn('AudioContext 未初始化，跳过更新')
+        return
+      }
+
+      // 计算新的 bufferSize
+      const actualSampleRate = this.audioContext.sampleRate
+      const bufferSize = Math.floor(actualSampleRate * (this.frameDuration / 1000))
+
+      console.log('发送配置更新到 AudioWorklet:', {
+        实际采样率: actualSampleRate,
+        目标采样率: this.sampleRate,
+        bufferSize,
+      })
+
+      // 发送更新消息给 AudioWorklet（利用现有的动态配置机制）
+      this.workletNode.port.postMessage({
+        type: 'updateConfig',
+        inputSampleRate: actualSampleRate,
+        outputSampleRate: this.sampleRate,
+        bufferSize,
+      })
+
+      console.log('✓ 音频采集配置已更新')
+    }
+    catch (error) {
+      console.error('更新音频采集配置失败:', error)
+      throw error
+    }
   }
 
   /**

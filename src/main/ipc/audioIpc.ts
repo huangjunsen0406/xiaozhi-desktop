@@ -94,6 +94,42 @@ export function registerAudioIpc(): void {
       const { AudioConfig: AudioConfigInstance } = await import('../constants/DeviceState')
       AudioConfigInstance.reload()
 
+      // 检查是否需要重建 OpusCodec（采样率或帧长度变化）
+      const needsRebuild = 'inputSampleRate' in config
+        || 'outputSampleRate' in config
+        || 'channels' in config
+        || 'frameDuration' in config
+
+      if (needsRebuild) {
+        // 重建 OpusCodec
+        const codec = getOpusCodec()
+        if (codec) {
+          codec.rebuild()
+          logger.info('✓ OpusCodec 已根据新配置重建')
+        }
+
+        // 通知后台音频窗口更新配置
+        const { BrowserWindow } = await import('electron')
+        const windows = BrowserWindow.getAllWindows()
+        let notified = false
+
+        windows.forEach((win) => {
+          // 判断是否是后台音频窗口（通过 URL 判断）
+          const url = win.webContents.getURL()
+          if (url.includes('audio.html') || url.includes('#/audio')) {
+            win.webContents.send('audio:command', 'updateConfig')
+            notified = true
+          }
+        })
+
+        if (notified) {
+          logger.info('✓ 已通知后台音频窗口更新配置')
+        }
+        else {
+          logger.warn('未找到后台音频窗口，配置将在下次初始化时生效')
+        }
+      }
+
       return success()
     },
   })

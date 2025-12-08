@@ -138,6 +138,9 @@ async function loadConfig(): Promise<void> {
  */
 async function handleSave(): Promise<void> {
   try {
+    // 记录保存前的配置（用于判断是否需要重新初始化）
+    const previousConfig = await window.api.audioGetConfig()
+
     const config: {
       enableNoiseReduction: boolean
       enableEchoCancellation: boolean
@@ -182,7 +185,18 @@ async function handleSave(): Promise<void> {
     await window.api.audioUpdateConfig(config)
 
     console.log('音频配置已保存:', config)
-    message.success('音频设置已保存')
+
+    // 检查是否修改了采样率或帧长度
+    const needsReinitialization =
+      config.inputSampleRate !== previousConfig.inputSampleRate ||
+      config.outputSampleRate !== previousConfig.outputSampleRate ||
+      config.frameDuration !== previousConfig.frameDuration
+
+    if (needsReinitialization) {
+      message.success('音频设置已保存并自动应用', { duration: 3000 })
+    } else {
+      message.success('音频设置已保存')
+    }
   }
   catch (error) {
     console.error('保存音频配置失败:', error)
