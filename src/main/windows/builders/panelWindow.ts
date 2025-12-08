@@ -2,8 +2,11 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
+import { getAppIcon } from '../../utils/appIcon'
 
 export function buildPanelWindow(): BrowserWindow {
+  const icon = getAppIcon()
+
   const win = new BrowserWindow({
     width: 920,
     height: 180,
@@ -17,6 +20,7 @@ export function buildPanelWindow(): BrowserWindow {
     skipTaskbar: true,
     hiddenInMissionControl: true,
     type: process.platform === 'darwin' ? 'panel' : undefined,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

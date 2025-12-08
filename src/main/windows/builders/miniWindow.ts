@@ -2,9 +2,12 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
+import { getAppIcon } from '../../utils/appIcon'
 import { handleWindowClose } from '../windowManager'
 
 export function buildMiniWindow(): BrowserWindow {
+  const icon = getAppIcon()
+
   const win = new BrowserWindow({
     width: 72,
     height: 72,
@@ -19,6 +22,7 @@ export function buildMiniWindow(): BrowserWindow {
     fullscreenable: false,
     skipTaskbar: true,
     hiddenInMissionControl: true,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

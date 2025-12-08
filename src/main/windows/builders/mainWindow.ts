@@ -1,20 +1,9 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
-import { app, BrowserWindow, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
+import { getAppIcon } from '../../utils/appIcon'
 import { handleWindowClose } from '../windowManager'
-
-function getAppIcon() {
-  if (process.platform === 'win32') {
-    // Windows: 使用 icon.ico
-    return join(__dirname, '../../resources/icon.ico')
-  }
-  else if (process.platform === 'linux') {
-    // Linux: 使用 icon.png
-    return nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
-  }
-  return undefined
-}
 
 export function buildMainWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'

@@ -144,7 +144,7 @@ const codeArray = computed(() => {
       <div class="text-gray-700 dark:text-gray-300 !font-bold">
         设备激活
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2" style="-webkit-app-region: no-drag">
         <!-- 小圆点 -->
         <div class="flex items-center gap-2 text-[11px] text-base text-gray-700 dark:text-gray-300">
           <div class="w-2 h-2 rounded-full" :style="{ backgroundColor: statusColor }" />
@@ -183,12 +183,12 @@ const codeArray = computed(() => {
       <div v-else class="text-gray-400 text-[12px]">
         等待验证码...
       </div>
-      <div class=" bg-[#165dff] dark:bg-[#1d2129] border border-transparent dark:border-white/60 py-[10px] px-[30px] box-border rounded-lg text-white text-center cursor-pointer" @click="copyCode">
+      <div class=" bg-[#165dff] dark:bg-[#1d2129] border border-transparent dark:border-white/60 py-[10px] px-[30px] box-border rounded-lg text-white text-center cursor-pointer" style="-webkit-app-region: no-drag" @click="copyCode">
         复制
       </div>
     </div>
     <!-- 复制按钮 -->
-    <div class="text-[11px] mt-[20px] bg-[#165dff] dark:bg-[#1d2129] p-[10px] box-border rounded-lg text-white text-center cursor-pointer" @click="jump">
+    <div class="text-[11px] mt-[20px] bg-[#165dff] dark:bg-[#1d2129] p-[10px] box-border rounded-lg text-white text-center cursor-pointer" style="-webkit-app-region: no-drag" @click="jump">
       跳转激活
     </div>
   </div>

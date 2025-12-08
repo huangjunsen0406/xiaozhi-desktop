@@ -1,24 +1,12 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
-import { BrowserWindow, nativeImage, screen } from 'electron'
-
+import { BrowserWindow, screen } from 'electron'
+import { getAppIcon } from '../../utils/appIcon'
 import { getLogger } from '../../utils/logger'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('Live2dWindow')
-
-function getAppIcon() {
-  if (process.platform === 'win32') {
-    // Windows: 使用 icon.ico
-    return join(__dirname, '../../resources/icon.ico')
-  }
-  else if (process.platform === 'linux') {
-    // Linux: 使用 icon.png
-    return nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
-  }
-  return undefined
-}
 // import { initLive2dDragBehavior } from '../behaviors/Live2dDragBehavior'
 
 /**
