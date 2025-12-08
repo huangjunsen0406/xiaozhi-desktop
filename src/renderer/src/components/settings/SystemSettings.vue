@@ -108,18 +108,22 @@ defineExpose({ handleSave, handleCustomButton })
 <template>
   <div class="min-h-0">
     <NForm label-placement="left" :label-width="160">
-      <!-- 基本标识 -->
-      <NFormItem label="客户端ID">
-        <NInput v-model:value="form.client_id" disabled placeholder="请输入客户端ID" />
+      <!-- 自定义 -->
+      <NFormItem label="OTA 版本 URL">
+        <NInput v-model:value="form.ota_version_url" placeholder="https://.../ota/" />
+      </NFormItem>
+      <NFormItem label="授权 URL">
+        <NInput v-model:value="form.authorization_url" placeholder="https://xiaozhi.me/" />
       </NFormItem>
       <NFormItem label="设备ID">
         <NInput v-model:value="form.device_id" placeholder="请输入设备ID（如 MAC ）" />
       </NFormItem>
+      <!-- 基本标识 -->
+      <NFormItem label="客户端ID">
+        <NInput v-model:value="form.client_id" disabled placeholder="请输入客户端ID" />
+      </NFormItem>
 
       <!-- 网络配置 -->
-      <NFormItem label="OTA 版本 URL">
-        <NInput v-model:value="form.ota_version_url" placeholder="https://.../ota/" />
-      </NFormItem>
       <NFormItem label="WebSocket URL">
         <NInput v-model:value="form.websocket_url" disabled placeholder="wss://..." />
       </NFormItem>
@@ -158,9 +162,6 @@ defineExpose({ handleSave, handleCustomButton })
           ]"
           placeholder="请选择激活协议版本"
         />
-      </NFormItem>
-      <NFormItem label="授权 URL">
-        <NInput v-model:value="form.authorization_url" placeholder="https://xiaozhi.me/" />
       </NFormItem>
     </NForm>
   </div>
