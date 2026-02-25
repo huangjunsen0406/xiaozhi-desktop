@@ -14,7 +14,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps && node scripts/verify-sharp.js && node -e \"process.platform === 'darwin' && require('child_process').execSync('node scripts/fix-sherpa-onnx-rpath.js', {stdio: 'inherit'})\" || true",
+    "postinstall": "electron-builder install-app-deps && node -e \"process.platform === 'darwin' && require('child_process').execSync('node scripts/fix-sherpa-onnx-rpath.js', {stdio: 'inherit'})\" || true",
     "build:unpack": "npm run build && electron-builder --dir",
     "clean": "node -e \"require('fs').rmSync('release', {recursive: true, force: true})\"",
     "build:win": "npm run clean && npm run build && electron-builder --win --publish=never",
@@ -39,8 +39,6 @@
     "node-machine-id": "^1.1.12",
     "node-screenshots": "^0.2.1",
     "openai": "^6.9.1",
-    "opus-decoder": "^0.7.11",
-    "opus-encdec": "^0.1.1",
     "opusscript": "^0.1.1",
     "pinia": "^3.0.4",
     "pinyin": "^4.0.0",
@@ -89,9 +87,7 @@
     "onlyBuiltDependencies": [
       "electron",
       "esbuild",
-      "@discordjs/opus",
-      "better-sqlite3",
-      "sharp"
+      "better-sqlite3"
     ]
   }
 }

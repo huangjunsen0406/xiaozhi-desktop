@@ -26,21 +26,24 @@ extraResources:
     to: live2d-models
 
 asarUnpack:
-  # ASAR 解包:只解包 sherpa-onnx 原生模块
-  # 注意:.node 文件会被 electron-builder 自动识别并排除在 asar 之外,无需显式配置
-  # resources/** 已经通过 extraResources 配置复制,不需要在这里再次解包
+  # ASAR 解包: 需要从文件系统直接访问的资源
+  # 注意: .node 文件会被 electron-builder 自动识别并排除在 asar 之外,无需显式配置
+  - resources/**
   - node_modules/sherpa-onnx-*/**/*
-  # 解包 sharp 及其依赖（包含预编译的 libvips）
-  - node_modules/sharp/**/*
-  - node_modules/@img/**/*
+  # sharp 和 @img 不需要解包,可以在 asar 中正常工作
 
 win:
   executableName: xiaozhi-desktop
   icon: build/icon.ico
-  # 排除其他平台的 sherpa-onnx 包（减小包体积）
+  # 排除其他平台的原生模块包（减小包体积）
   files:
     - '!node_modules/sherpa-onnx-darwin-*/**/*'
     - '!node_modules/sherpa-onnx-linux-*/**/*'
+    # 排除其他平台的 sharp 预编译包
+    - '!node_modules/@img/sharp-darwin-*/**/*'
+    - '!node_modules/@img/sharp-linux-*/**/*'
+    - '!node_modules/@img/sharp-libvips-darwin-*/**/*'
+    - '!node_modules/@img/sharp-libvips-linux-*/**/*'
   target:
     - target: nsis
       arch:
@@ -59,10 +62,14 @@ nsis:
 mac:
   icon: build/icon.icns
   category: public.app-category.productivity
-  # 排除其他平台的 sherpa-onnx 包（减小包体积）
+  # 排除其他平台的原生模块包（减小包体积）
   files:
     - '!node_modules/sherpa-onnx-win-*/**/*'
     - '!node_modules/sherpa-onnx-linux-*/**/*'
+    # 排除其他平台的 sharp 预编译包
+    - '!node_modules/@img/sharp-win32-*/**/*'
+    - '!node_modules/@img/sharp-linux-*/**/*'
+    - '!node_modules/@img/sharp-libvips-linux-*/**/*'
   # 只构建当前架构（避免 DMG 文件名冲突）
   # 如需构建其他架构：
   #   - arm64: pnpm run build && electron-builder --mac --arm64
@@ -86,10 +93,14 @@ dmg:
 linux:
   # 只构建当前架构（避免文件名冲突）
   icon: build/icon.png
-  # 排除其他平台的 sherpa-onnx 包（减小包体积）
+  # 排除其他平台的原生模块包（减小包体积）
   files:
     - '!node_modules/sherpa-onnx-darwin-*/**/*'
     - '!node_modules/sherpa-onnx-win-*/**/*'
+    # 排除其他平台的 sharp 预编译包
+    - '!node_modules/@img/sharp-darwin-*/**/*'
+    - '!node_modules/@img/sharp-win32-*/**/*'
+    - '!node_modules/@img/sharp-libvips-darwin-*/**/*'
   target:
     - AppImage
     - deb
