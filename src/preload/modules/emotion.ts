@@ -2,6 +2,7 @@
  * Emotion (表情) API 模块
  */
 import { ipcRenderer } from 'electron'
+import { assertIpcSuccess } from '../utils/ipc'
 
 export const emotionApi = {
   // 打开文件选择器
@@ -9,8 +10,10 @@ export const emotionApi = {
     ipcRenderer.invoke('emotion:select-image'),
 
   // 上传自定义表情
-  uploadCustom: (emotionType: string, sourcePath: string): Promise<{ success: boolean, error?: string }> =>
-    ipcRenderer.invoke('emotion:upload-custom', emotionType, sourcePath),
+  uploadCustom: async (emotionType: string, sourcePath: string): Promise<void> => {
+    const result = await ipcRenderer.invoke('emotion:upload-custom', emotionType, sourcePath) as { success: boolean, error?: string }
+    assertIpcSuccess(result, '上传表情失败')
+  },
 
   // 获取映射配置
   getMapping: (): Promise<Record<string, string>> =>
@@ -21,16 +24,15 @@ export const emotionApi = {
     ipcRenderer.invoke('emotion:get-custom-path', emotionType),
 
   // 重置表情（删除自定义）
-  reset: (emotionType: string): Promise<{ success: boolean, error?: string }> =>
-    ipcRenderer.invoke('emotion:reset', emotionType),
-
-  // 监听表情变更事件
-  onEmotionChanged: (callback: (emotionType: string) => void): void => {
-    ipcRenderer.on('emotion:changed', (_event, emotionType) => callback(emotionType))
+  reset: async (emotionType: string): Promise<void> => {
+    const result = await ipcRenderer.invoke('emotion:reset', emotionType) as { success: boolean, error?: string }
+    assertIpcSuccess(result, '重置表情失败')
   },
 
-  // 移除表情变更监听器
-  removeEmotionChangedListener: (): void => {
-    ipcRenderer.removeAllListeners('emotion:changed')
+  // 监听表情变更事件
+  onEmotionChanged: (callback: (emotionType: string) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, emotionType: string) => callback(emotionType)
+    ipcRenderer.on('emotion:changed', handler)
+    return () => ipcRenderer.off('emotion:changed', handler)
   },
 }

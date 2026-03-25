@@ -72,9 +72,9 @@ export class WebCamera extends BaseCamera {
 
       // 获取当前焦点窗口
       const win = BrowserWindow.getFocusedWindow()
-      if (!win) {
-        logger.error('未找到焦点窗口')
-        return { success: false, message: '未找到焦点窗口' }
+      if (!win || win.isDestroyed()) {
+        logger.error('未找到可用的焦点窗口')
+        return { success: false, message: '未找到可用的焦点窗口' }
       }
 
       // 通知渲染进程捕获图像

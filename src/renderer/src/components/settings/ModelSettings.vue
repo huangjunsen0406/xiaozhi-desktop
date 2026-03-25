@@ -50,14 +50,9 @@ async function handleSelectModel(modelId: string) {
     return
 
   try {
-    const result = await window.api.modelSetCurrent(modelId)
-    if (result.success) {
-      currentModelId.value = modelId
-      message.success('模型已切换，重启后生效')
-    }
-    else {
-      message.error(`切换失败: ${result.error}`)
-    }
+    await window.api.modelSetCurrent(modelId)
+    currentModelId.value = modelId
+    message.success('模型已切换，重启后生效')
   }
   catch (error) {
     console.error('切换模型失败', error)
@@ -80,13 +75,8 @@ async function handleImport() {
     importing.value = true
 
     // 2. 导入模型
-    const importResult = await window.api.modelImport(sourcePath)
-    if (!importResult.success) {
-      message.error(`导入失败: ${importResult.error}`)
-      return
-    }
-
-    message.success(`模型 "${importResult.modelId}" 导入成功`)
+    const modelId = await window.api.modelImport(sourcePath)
+    message.success(modelId ? `模型 "${modelId}" 导入成功` : '模型导入成功')
 
     // 3. 刷新列表
     await loadModels()
@@ -107,12 +97,7 @@ async function handleDelete(modelId: string) {
   try {
     deletingModelId.value = modelId
 
-    const result = await window.api.modelDelete(modelId)
-    if (!result.success) {
-      message.error(`删除失败: ${result.error}`)
-      return
-    }
-
+    await window.api.modelDelete(modelId)
     message.success('模型已删除')
 
     // 刷新列表

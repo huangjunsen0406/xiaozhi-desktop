@@ -187,14 +187,15 @@ async function handleSave(): Promise<void> {
     console.log('音频配置已保存:', config)
 
     // 检查是否修改了采样率或帧长度
-    const needsReinitialization =
-      config.inputSampleRate !== previousConfig.inputSampleRate ||
-      config.outputSampleRate !== previousConfig.outputSampleRate ||
-      config.frameDuration !== previousConfig.frameDuration
+    const needsReinitialization
+      = config.inputSampleRate !== previousConfig.inputSampleRate
+        || config.outputSampleRate !== previousConfig.outputSampleRate
+        || config.frameDuration !== previousConfig.frameDuration
 
     if (needsReinitialization) {
       message.success('音频设置已保存并自动应用', { duration: 3000 })
-    } else {
+    }
+    else {
       message.success('音频设置已保存')
     }
   }

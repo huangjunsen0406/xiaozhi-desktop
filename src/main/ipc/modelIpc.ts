@@ -1,3 +1,4 @@
+import type { ModelInfo } from '@shared/types'
 /**
  * 模型管理 IPC 处理器
  *
@@ -38,20 +39,6 @@ function getBuiltinModelsDir(): string {
 
 const CONFIG_FILE_NAME = 'model-config.json'
 const INIT_FLAG_FILE = '.models-initialized'
-
-/**
- * 模型信息接口
- */
-interface ModelInfo {
-  id: string // 文件夹名
-  name: string // 显示名称
-  path: string // 完整路径
-  preview?: string // 预览图 base64
-  hasExpressions: boolean // 是否有表情
-  hasMotions: boolean // 是否有动作
-  expressionCount: number // 表情数量
-  motionCount: number // 动作数量
-}
 
 /**
  * 模型配置接口

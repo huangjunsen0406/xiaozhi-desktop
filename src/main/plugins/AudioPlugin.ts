@@ -1,6 +1,6 @@
+import type { DeviceState } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
-import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { AudioListener } from '../types/audio'
@@ -11,7 +11,6 @@ import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
 
 const logger = getLogger('AudioPlugin')
-
 
 /**
  * 音频插件
@@ -211,7 +210,6 @@ export class AudioPlugin extends Plugin {
     return false
   }
 
-
   /**
    * 处理来自渲染进程的 PCM 数据
    */
@@ -221,8 +219,7 @@ export class AudioPlugin extends Plugin {
       if (this.app?.shouldCaptureAudio()) {
         // 背压控制：检查是否应该丢弃帧
         if (this.shouldDropFrame()) {
-          // 丢弃帧，但仍然通知监听器（唤醒词检测等）
-          this.notifyAudioListeners(pcmData)
+          // 丢弃帧，finally 会统一通知监听器（唤醒词检测等）
           return
         }
 
@@ -267,7 +264,7 @@ export class AudioPlugin extends Plugin {
       const pcmBuffer = opusCodec.decode(opusFrame)
 
       // 1. 发送到后台音频窗口播放
-      if (this.backgroundAudioWindow) {
+      if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
         this.backgroundAudioWindow.webContents.send('audio:opus-decoded', pcmBuffer)
       }
       else {

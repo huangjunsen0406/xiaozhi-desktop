@@ -28,18 +28,12 @@ watch(language, async (newLanguage, oldLanguage) => {
       isUpdatingLanguage.value = true
 
       // 先保存语言切换到后端
-      const result = await window.api.wakeWordUpdateConfig({
+      await window.api.wakeWordUpdateConfig({
         language: newLanguage,
       })
 
-      if (result.success) {
-        // 重新加载配置以获取对应语言的唤醒词
-        await loadConfig()
-      }
-      else {
-        console.error('切换语言失败:', result.error)
-        message.error(`切换语言失败: ${result.error || '未知错误'}`)
-      }
+      // 重新加载配置以获取对应语言的唤醒词
+      await loadConfig()
     }
     catch (error) {
       console.error('切换语言异常:', error)
@@ -58,18 +52,11 @@ watch(language, async (newLanguage, oldLanguage) => {
 async function loadConfig() {
   try {
     loading.value = true
-    const result = await window.api.wakeWordGetConfig()
-
-    if (result.success && result.data) {
-      enableWakeWord.value = result.data.enabled
-      wakeWord.value = result.data.keyword ?? ''
-      threshold.value = result.data.threshold ?? 0.2
-      language.value = result.data.language
-    }
-    else {
-      console.error('加载唤醒词配置失败:', result.error)
-      message.error(`加载配置失败: ${result.error || '未知错误'}`)
-    }
+    const config = await window.api.wakeWordGetConfig()
+    enableWakeWord.value = config.enabled
+    wakeWord.value = config.keyword ?? ''
+    threshold.value = config.threshold ?? 0.2
+    language.value = config.language
   }
   catch (error) {
     console.error('加载唤醒词配置异常:', error)
@@ -87,20 +74,14 @@ async function handleSave() {
   try {
     loading.value = true
 
-    const result = await window.api.wakeWordUpdateConfig({
+    await window.api.wakeWordUpdateConfig({
       enabled: enableWakeWord.value,
       keyword: wakeWord.value,
       threshold: threshold.value,
       language: language.value,
     })
 
-    if (result.success) {
-      message.success('保存成功')
-    }
-    else {
-      console.error('保存唤醒词配置失败:', result.error)
-      message.error(`保存失败: ${result.error || '未知错误'}`)
-    }
+    message.success('保存成功')
   }
   catch (error) {
     console.error('保存唤醒词配置异常:', error)
@@ -118,15 +99,8 @@ async function handleCustomButton() {
   try {
     loading.value = true
 
-    const result = await window.api.wakeWordTest()
-
-    if (result.success) {
-      message.success(`测试成功！模拟检测到唤醒词: ${result.keyword}`)
-    }
-    else {
-      console.error('测试唤醒词失败:', result.error)
-      message.error(`测试失败: ${result.error || '未知错误'}`)
-    }
+    const keyword = await window.api.wakeWordTest()
+    message.success(keyword ? `测试成功！模拟检测到唤醒词: ${keyword}` : '测试成功！')
   }
   catch (error) {
     console.error('测试唤醒词异常:', error)

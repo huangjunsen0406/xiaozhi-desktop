@@ -182,12 +182,12 @@ export class WakeWordPlugin extends Plugin {
     try {
       // 获取当前状态
       const snapshot = this.app.getStateSnapshot()
-      const { device_state, listening_mode, keep_listening } = snapshot
+      const { deviceState, listeningMode, keepListening } = snapshot
 
-      logger.info(`当前状态: deviceState=${device_state}, listeningMode=${listening_mode}, keepListening=${keep_listening}`)
+      logger.info(`当前状态: deviceState=${deviceState}, listeningMode=${listeningMode}, keepListening=${keepListening}`)
 
       // 情况3: 手动监听中，先停止手动模式
-      if (device_state === 'listening' && listening_mode === 'manual') {
+      if (deviceState === 'listening' && listeningMode === 'manual') {
         logger.info('检测到手动模式激活，停止手动模式')
         await this.app.stopListeningManual()
         // 等待状态稳定
@@ -195,7 +195,7 @@ export class WakeWordPlugin extends Plugin {
       }
 
       // 情况1: 说话中，打断语音输出（包括半双工和全双工）
-      if (device_state === 'speaking') {
+      if (deviceState === 'speaking') {
         logger.info('当前正在说话，打断输出')
         await this.app.abortSpeaking(AbortReason.USER_INTERRUPTED)
 
@@ -211,7 +211,7 @@ export class WakeWordPlugin extends Plugin {
       }
 
       // 情况4: 已经在监听中（自动对话模式），忽略唤醒词（避免重复启动）
-      if (device_state === 'listening' && keep_listening && (listening_mode === 'realtime' || listening_mode === 'auto')) {
+      if (deviceState === 'listening' && keepListening && (listeningMode === 'realtime' || listeningMode === 'auto')) {
         logger.info('已在自动监听中，忽略唤醒词')
         return
       }

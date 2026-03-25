@@ -130,7 +130,7 @@ export class ShortcutManager {
         break
 
       case 'conversation.manual': {
-        const state = this.application.getState()
+        const state = this.application.getStateSnapshot()
         if (state.deviceState === 'idle') {
           this.application.startListeningManual()
         }
@@ -141,7 +141,7 @@ export class ShortcutManager {
       }
 
       case 'conversation.auto': {
-        const autoState = this.application.getState()
+        const autoState = this.application.getStateSnapshot()
         if (autoState.channelOpen) {
           this.application.stopAutoConversation()
         }

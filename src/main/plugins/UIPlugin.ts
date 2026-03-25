@@ -1,5 +1,6 @@
-import type { DeviceState } from '../constants/DeviceState'
+import type { DeviceState } from '@shared/types'
 import type { JsonMessage } from '../types/protocol'
+import { ListeningModeValue } from '@shared/types'
 import { webContents } from 'electron'
 import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
@@ -50,19 +51,13 @@ export class UIPlugin extends Plugin {
   broadcastState(state: DeviceState): void {
     // 获取完整的状态快照(包含 listeningMode)
     const snapshot = this.app?.getStateSnapshot() || {
-      device_state: state,
-      listening_mode: 'manual',
-      keep_listening: false,
-      audio_opened: false,
+      deviceState: state,
+      listeningMode: ListeningModeValue.MANUAL,
+      keepListening: false,
+      channelOpen: false,
     }
 
-    const stateData = {
-      deviceState: snapshot.device_state,
-      listeningMode: snapshot.listening_mode,
-      channelOpen: snapshot.audio_opened,
-    }
-
-    this.broadcastToRenderer('app:state-changed', stateData)
+    this.broadcastToRenderer('app:state-changed', snapshot)
     logger.info(`已广播状态变化: ${state}`)
   }
 

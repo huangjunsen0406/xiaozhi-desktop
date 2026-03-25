@@ -4,12 +4,14 @@ import type {
   ActivationResult,
   ActivationStatus,
   AppStateSnapshot,
-  AppStateSnapshotRaw,
   AudioConfig,
+  BackgroundAudioStateUpdate,
   BackgroundAudioStatus,
+  CameraConfig,
   ChatMessage,
   ChatSession,
   DeviceInfo,
+  ModelInfo,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -28,30 +30,18 @@ export type {
   ActivationResult,
   ActivationStatus,
   AppStateSnapshot,
-  AppStateSnapshotRaw,
   AudioConfig,
+  BackgroundAudioStateUpdate,
   BackgroundAudioStatus,
+  CameraConfig,
   ChatMessage,
   ChatSession,
   DeviceInfo,
+  ModelInfo,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
   WakeWordConfig,
-}
-
-/**
- * 模型信息类型
- */
-export interface ModelInfo {
-  id: string
-  name: string
-  path: string
-  preview?: string
-  hasExpressions: boolean
-  hasMotions: boolean
-  expressionCount: number
-  motionCount: number
 }
 
 export interface RendererApi {
@@ -87,8 +77,7 @@ export interface RendererApi {
   activationCheckStatus: () => Promise<ActivationStatus>
   // Audio APIs
   audioSendPCM: (pcm: Int16Array) => void
-  audioOnOpusDecoded: (callback: (pcm: Buffer) => void) => void
-  audioRemoveOpusDecodedListener: () => void
+  audioOnOpusDecoded: (callback: (pcm: Buffer) => void) => () => void
   // Audio Device APIs
   audioGetConfig: () => Promise<AudioConfig>
   audioUpdateConfig: (config: Partial<AudioConfig>) => Promise<void>
@@ -103,61 +92,34 @@ export interface RendererApi {
   appStartAutoConversation: () => Promise<void>
   appStopAutoConversation: () => Promise<void>
   appSendText: (text: string) => Promise<void>
-  appGetState: () => Promise<AppStateSnapshotRaw>
-  appOnStateChanged: (callback: (state: AppStateSnapshot) => void) => void
-  appRemoveStateChangedListener: () => void
-  appOnServerMessage: (callback: (message: ServerMessage) => void) => void
-  appRemoveServerMessageListener: () => void
+  appGetState: () => Promise<AppStateSnapshot>
+  appOnStateChanged: (callback: (state: AppStateSnapshot) => void) => () => void
+  appOnServerMessage: (callback: (message: ServerMessage) => void) => () => void
   // System Config APIs
-  systemGetConfig: () => Promise<{ success: boolean, data?: SystemConfig, error?: string }>
-  systemUpdateConfig: (config: SystemConfig) => Promise<{ success: boolean, error?: string }>
+  systemGetConfig: () => Promise<SystemConfig>
+  systemUpdateConfig: (config: SystemConfig) => Promise<void>
   // Wake Word APIs
-  wakeWordGetConfig: () => Promise<{ success: boolean, data?: WakeWordConfig, error?: string }>
-  wakeWordUpdateConfig: (updates: Partial<WakeWordConfig>) => Promise<{ success: boolean, error?: string }>
-  wakeWordTest: () => Promise<{ success: boolean, keyword?: string, error?: string }>
+  wakeWordGetConfig: () => Promise<WakeWordConfig>
+  wakeWordUpdateConfig: (updates: Partial<WakeWordConfig>) => Promise<void>
+  wakeWordTest: () => Promise<string | undefined>
   // Background Audio Window APIs
-  onAudioCommand: (callback: (command: string, data?: Record<string, unknown>) => void) => void
-  sendAudioState: (state: { initialized?: boolean, capturing?: boolean, error?: string }) => void
-  audioUpdateState: (state: { state?: string, initialized?: boolean, capturing?: boolean, error?: string }) => void
+  onAudioCommand: (callback: (command: string, data?: Record<string, unknown>) => void) => () => void
+  sendAudioState: (state: BackgroundAudioStateUpdate) => void
+  audioUpdateState: (state: BackgroundAudioStateUpdate) => void
   backgroundAudioGetStatus: () => Promise<BackgroundAudioStatus>
   // Emotion APIs
   emotionSelectImage: () => Promise<Electron.OpenDialogReturnValue>
-  emotionUploadCustom: (emotionType: string, sourcePath: string) => Promise<{ success: boolean, error?: string }>
+  emotionUploadCustom: (emotionType: string, sourcePath: string) => Promise<void>
   emotionGetMapping: () => Promise<Record<string, string>>
   emotionGetCustomPath: (emotionType: string) => Promise<string | null>
-  emotionReset: (emotionType: string) => Promise<{ success: boolean, error?: string }>
-  emotionOnChanged: (callback: (emotionType: string) => void) => void
-  emotionRemoveChangedListener: () => void
+  emotionReset: (emotionType: string) => Promise<void>
+  emotionOnChanged: (callback: (emotionType: string) => void) => () => void
   // Camera APIs
   cameraOnCaptureRequest: (callback: () => void) => () => void
   cameraSendCaptureResult: (success: boolean, data?: Uint8Array, message?: string) => void
   // Camera Config APIs
-  cameraConfigGetConfig: () => Promise<{
-    enabled: boolean
-    deviceId: string
-    deviceLabel: string
-    useLocalVision: boolean
-    vlApiKey: string
-    vlUrl: string
-    vlModel: string
-    captureWidth: number
-    captureHeight: number
-    jpegQuality: number
-    maxDimension: number
-  }>
-  cameraConfigUpdateConfig: (config: {
-    enabled?: boolean
-    deviceId?: string
-    deviceLabel?: string
-    useLocalVision?: boolean
-    vlApiKey?: string
-    vlUrl?: string
-    vlModel?: string
-    captureWidth?: number
-    captureHeight?: number
-    jpegQuality?: number
-    maxDimension?: number
-  }) => Promise<void>
+  cameraConfigGetConfig: () => Promise<CameraConfig>
+  cameraConfigUpdateConfig: (config: Partial<CameraConfig>) => Promise<void>
   // Theme APIs
   themeOnChange: (callback: (theme: string) => void) => () => void
   themeGetCurrent: () => Promise<string>
@@ -178,44 +140,32 @@ export interface RendererApi {
   chatUpdateSessionTitle: (sessionId: string, title: string) => Promise<void>
   chatDeleteSession: (sessionId: string) => Promise<void>
   chatClearMessages: (sessionId: string) => Promise<void>
-  chatOnImageCaptured: (callback: (data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => void) => void
-  chatRemoveImageCapturedListener: () => void
-  chatOnMessageAdded: (callback: (data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => void) => void
-  chatRemoveMessageAddedListener: () => void
-  chatOnMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => void
-  chatRemoveMessagesBatchAddedListener: () => void
-  chatOnSessionCreated: (callback: (data: { sessionId: string, timestamp: number }) => void) => void
-  chatRemoveSessionCreatedListener: () => void
+  chatOnImageCaptured: (callback: (data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => void) => () => void
+  chatOnMessageAdded: (callback: (data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => void) => () => void
+  chatOnMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => () => void
+  chatOnSessionCreated: (callback: (data: { sessionId: string, timestamp: number }) => void) => () => void
   // Shortcut APIs
   shortcutGetAll: () => Promise<ShortcutConfig[]>
-  shortcutUpdate: (action: string, accelerator: string | null) => Promise<{ success: boolean }>
+  shortcutUpdate: (action: string, accelerator: string | null) => Promise<void>
   shortcutCheckConflict: (accelerator: string, excludeAction?: string) => Promise<{ conflict: boolean, name: string | null }>
-  shortcutReset: () => Promise<{ success: boolean }>
+  shortcutReset: () => Promise<void>
   // Music APIs
-  musicOnCommand: (callback: (message: { command: string, args?: Record<string, unknown> }) => void) => void
+  musicOnCommand: (callback: (message: { command: string, args?: Record<string, unknown> }) => void) => () => void
   musicStatusUpdate: (status: Record<string, unknown>) => void
 
   // Live2D APIs
-  live2dOnAudioVolume: (callback: (volume: number) => void) => void
-  live2dRemoveAudioVolumeListener: () => void
+  live2dOnAudioVolume: (callback: (volume: number) => void) => () => void
 
   // Model APIs
   modelGetList: () => Promise<ModelInfo[]>
   modelGetCurrent: () => Promise<string>
-  modelSetCurrent: (modelId: string) => Promise<{ success: boolean, error?: string }>
+  modelSetCurrent: (modelId: string) => Promise<void>
   modelSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
-  modelImport: (sourcePath: string) => Promise<{ success: boolean, error?: string, modelId?: string }>
-  modelDelete: (modelId: string) => Promise<{ success: boolean, error?: string }>
-  modelOpenFolder: () => Promise<{ success: boolean }>
+  modelImport: (sourcePath: string) => Promise<string | undefined>
+  modelDelete: (modelId: string) => Promise<void>
+  modelOpenFolder: () => Promise<void>
   modelGetFolderPath: () => Promise<string>
-  modelOnChanged: (callback: (modelId: string) => void) => void
-  modelRemoveChangedListener: () => void
-
-  // Analytics APIs
-  analyticsTrack: (event: string, extra?: Record<string, unknown>) => Promise<{ success: boolean }>
-  analyticsGetConfig: () => Promise<any>
-  analyticsUpdateConfig: (config: any) => Promise<{ success: boolean }>
-  analyticsFlush: () => Promise<{ success: boolean }>
+  modelOnChanged: (callback: (modelId: string) => void) => () => void
 
   // 剪贴板 API
   clipboardWriteText: (text: string) => Promise<void>

@@ -6,7 +6,7 @@ import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
-import { getAnalyticsService } from './services/AnalyticsService'
+
 import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
@@ -139,17 +139,6 @@ app.whenReady().then(async () => {
   // 注册自定义协议处理器
   registerModelProtocolHandler()
 
-  // 初始化埋点服务
-  const analytics = getAnalyticsService()
-  await analytics.initialize()
-
-  // 上报应用启动事件
-  analytics.track('app_start', {
-    version: app.getVersion(),
-    platform: process.platform,
-    isDev: !app.isPackaged,
-  })
-
   electronApp.setAppUserModelId('com.electron')
 
   app.on('browser-window-created', (_, window) => {
@@ -269,11 +258,6 @@ app.on('before-quit', async (event) => {
   catch (error) {
     logger.error('清理后台音频系统失败', error)
   }
-
-  // 上报应用退出事件并等待发送完成
-  const analytics = getAnalyticsService()
-  analytics.track('app_quit')
-  await analytics.shutdown()
 
   await shutdownLogger()
   app.exit(0)

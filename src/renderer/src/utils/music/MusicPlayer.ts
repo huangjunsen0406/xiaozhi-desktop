@@ -16,6 +16,62 @@ export interface MusicCommand {
 export class MusicPlayer {
   private audio: HTMLAudioElement
   private currentState: PlaybackState = 'idle'
+  private lastTimeUpdateNotify = 0
+
+  // 保存事件处理函数引用，以便 dispose 时移除
+  private readonly onPlay = () => {
+    console.log('开始播放')
+    this.currentState = 'playing'
+    this.notifyMainProcess({ state: 'playing' })
+  }
+
+  private readonly onPause = () => {
+    console.log('已暂停')
+    this.currentState = 'paused'
+    this.notifyMainProcess({ state: 'paused' })
+  }
+
+  private readonly onEnded = () => {
+    console.log('播放结束')
+    this.currentState = 'stopped'
+    this.notifyMainProcess({ state: 'stopped', currentTime: 0 })
+  }
+
+  private readonly onLoadedMetadata = () => {
+    console.log(`[MusicPlayer] 元数据加载完成，时长: ${this.audio.duration}秒`)
+    this.notifyMainProcess({ duration: this.audio.duration })
+  }
+
+  private readonly onTimeUpdate = () => {
+    // 节流：至少间隔 500ms 才发送 IPC 通知
+    const now = Date.now()
+    if (now - this.lastTimeUpdateNotify < 500)
+      return
+    this.lastTimeUpdateNotify = now
+    this.notifyMainProcess({ currentTime: this.audio.currentTime })
+  }
+
+  private readonly onError = (event: Event) => {
+    const error = this.audio.error
+    const errorMessage = error
+      ? `加载失败: ${error.message} (code: ${error.code})`
+      : '未知错误'
+    console.error('播放错误', errorMessage, event)
+    this.currentState = 'error'
+    this.notifyMainProcess({ state: 'error', error: errorMessage })
+  }
+
+  private readonly onLoadStart = () => {
+    console.log('开始加载音乐')
+    if (this.currentState !== 'playing') {
+      this.currentState = 'loading'
+      this.notifyMainProcess({ state: 'loading' })
+    }
+  }
+
+  private readonly onCanPlay = () => {
+    console.log('音乐已就绪')
+  }
 
   constructor() {
     console.log('初始化渲染进程音乐播放器')
@@ -34,74 +90,14 @@ export class MusicPlayer {
    * 设置事件监听器
    */
   private setupEventListeners(): void {
-    // 播放开始
-    this.audio.addEventListener('play', () => {
-      console.log('开始播放')
-      this.currentState = 'playing'
-      this.notifyMainProcess({ state: 'playing' })
-    })
-
-    // 播放暂停
-    this.audio.addEventListener('pause', () => {
-      console.log('已暂停')
-      this.currentState = 'paused'
-      this.notifyMainProcess({ state: 'paused' })
-    })
-
-    // 播放结束
-    this.audio.addEventListener('ended', () => {
-      console.log('播放结束')
-      this.currentState = 'stopped'
-      this.notifyMainProcess({
-        state: 'stopped',
-        currentTime: 0,
-      })
-    })
-
-    // 加载元数据
-    this.audio.addEventListener('loadedmetadata', () => {
-      console.log(`[MusicPlayer] 元数据加载完成，时长: ${this.audio.duration}秒`)
-      this.notifyMainProcess({
-        duration: this.audio.duration,
-      })
-    })
-
-    // 播放进度更新
-    this.audio.addEventListener('timeupdate', () => {
-      this.notifyMainProcess({
-        currentTime: this.audio.currentTime,
-      })
-    })
-
-    // 加载错误
-    this.audio.addEventListener('error', (event) => {
-      const error = this.audio.error
-      const errorMessage = error
-        ? `加载失败: ${error.message} (code: ${error.code})`
-        : '未知错误'
-
-      console.error('播放错误', errorMessage, event)
-      this.currentState = 'error'
-      this.notifyMainProcess({
-        state: 'error',
-        error: errorMessage,
-      })
-    })
-
-    // 加载开始
-    this.audio.addEventListener('loadstart', () => {
-      console.log('开始加载音乐')
-      // 只有在非播放状态时才设置为 loading，避免覆盖 playing 状态
-      if (this.currentState !== 'playing') {
-        this.currentState = 'loading'
-        this.notifyMainProcess({ state: 'loading' })
-      }
-    })
-
-    // 可以播放
-    this.audio.addEventListener('canplay', () => {
-      console.log('音乐已就绪')
-    })
+    this.audio.addEventListener('play', this.onPlay)
+    this.audio.addEventListener('pause', this.onPause)
+    this.audio.addEventListener('ended', this.onEnded)
+    this.audio.addEventListener('loadedmetadata', this.onLoadedMetadata)
+    this.audio.addEventListener('timeupdate', this.onTimeUpdate)
+    this.audio.addEventListener('error', this.onError)
+    this.audio.addEventListener('loadstart', this.onLoadStart)
+    this.audio.addEventListener('canplay', this.onCanPlay)
   }
 
   /**
@@ -109,7 +105,6 @@ export class MusicPlayer {
    */
   private listenToMainProcess(): void {
     console.log('开始注册 IPC 监听器')
-
     window.api.musicOnCommand((message: MusicCommand) => {
       const { command, args } = message
 
@@ -359,6 +354,14 @@ export class MusicPlayer {
     this.audio.pause()
     this.audio.src = ''
     // 移除所有事件监听器
+    this.audio.removeEventListener('play', this.onPlay)
+    this.audio.removeEventListener('pause', this.onPause)
+    this.audio.removeEventListener('ended', this.onEnded)
+    this.audio.removeEventListener('loadedmetadata', this.onLoadedMetadata)
+    this.audio.removeEventListener('timeupdate', this.onTimeUpdate)
+    this.audio.removeEventListener('error', this.onError)
+    this.audio.removeEventListener('loadstart', this.onLoadStart)
+    this.audio.removeEventListener('canplay', this.onCanPlay)
     this.audio.remove()
   }
 }

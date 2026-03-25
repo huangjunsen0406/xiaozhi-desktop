@@ -19,15 +19,15 @@ const appStore = useAppStore()
 
 // 计算唯一的消息 key（使用 id 或 timestamp 作为后备）
 const messageKeys = computed(() =>
-  appStore.messages.map(msg => msg.id ?? `${msg.timestamp}-${msg.role}`)
+  appStore.messages.map(msg => msg.id ?? `${msg.timestamp}-${msg.role}`),
 )
 
 // 预计算会话列表的禁用状态，避免在模板中重复计算
 const sessionsWithDeleteStatus = computed(() =>
   appStore.sessions.map(item => ({
     ...item,
-    canDelete: !(appStore.isCurrentSessionToday && item.sessionId === appStore.currentSessionId)
-  }))
+    canDelete: !(appStore.isCurrentSessionToday && item.sessionId === appStore.currentSessionId),
+  })),
 )
 
 // 监听后端状态变化，同步到本地状态

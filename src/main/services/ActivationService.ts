@@ -4,7 +4,6 @@ import axios from 'axios'
 import { getLogger } from '../utils/logger'
 import { showActivation } from '../windows/windowManager'
 
-import { getAnalyticsService } from './AnalyticsService'
 import { getConfigManager } from './configManagerDB'
 import { DeviceFingerprintManager } from './deviceFingerprintDB'
 
@@ -262,7 +261,7 @@ export class ActivationService {
 
     if (localActivated && serverActivated) {
       this.logger.info('  → 设备已激活')
-      getAnalyticsService().track('activation_verified')
+
       return {
         success: true,
         needActivationUI: false,
@@ -357,7 +356,7 @@ export class ActivationService {
           if (response.status === 200) {
             this.logger.info('激活成功')
             this.deviceFingerprint.setActivationStatus(true)
-            getAnalyticsService().track('activation_success', { attempts: attempt + 1 })
+
             return true
           }
 

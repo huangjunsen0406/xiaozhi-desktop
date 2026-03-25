@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import type { DeviceState, ListeningMode } from './stores/app'
 import { useColorMode } from '@vueuse/core'
 import { darkTheme, lightTheme, NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAppStore } from './stores/app'
 import { themeOverrides } from './theme/naiveTheme'
 import { captureFromWebcam } from './utils/camera'
@@ -18,13 +17,21 @@ const mode = useColorMode({
 })
 
 // 判断当前是否为暗色模式（包括 auto 模式下系统为暗色的情况）
+const systemDarkQuery = window.matchMedia('(prefers-color-scheme: dark)')
+const systemIsDark = ref(systemDarkQuery.matches)
+function onSystemThemeChange(e: MediaQueryListEvent) {
+  systemIsDark.value = e.matches
+}
+systemDarkQuery.addEventListener('change', onSystemThemeChange)
+onUnmounted(() => systemDarkQuery.removeEventListener('change', onSystemThemeChange))
+
 const isDark = computed(() => {
   if (mode.value === 'dark')
     return true
   if (mode.value === 'light')
     return false
-  // auto 模式时，检查系统偏好
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  // auto 模式时，响应系统主题变化
+  return systemIsDark.value
 })
 const theme = computed(() => (isDark.value ? darkTheme : lightTheme))
 
@@ -41,17 +48,19 @@ onMounted(async () => {
 
     // 更新 Store
     appStore.updateState({
-      deviceState: state.device_state as DeviceState,
-      listeningMode: state.listening_mode as ListeningMode,
-      channelOpen: state.audio_opened,
+      deviceState: state.deviceState,
+      listeningMode: state.listeningMode,
+      keepListening: state.keepListening,
+      channelOpen: state.channelOpen,
     })
 
     // 监听状态变化
-    window.api.appOnStateChanged((state) => {
+    const removeStateListener = window.api.appOnStateChanged((state) => {
       console.log('状态更新:', state)
       appStore.updateState({
-        deviceState: state.deviceState as DeviceState,
-        listeningMode: state.listeningMode as ListeningMode,
+        deviceState: state.deviceState,
+        listeningMode: state.listeningMode,
+        keepListening: state.keepListening,
         channelOpen: state.channelOpen,
       })
     })
@@ -99,12 +108,12 @@ onMounted(async () => {
     })
 
     // 监听服务器消息
-    window.api.appOnServerMessage((message) => {
+    const removeServerMessageListener = window.api.appOnServerMessage((message) => {
       appStore.handleServerMessage(message)
     })
 
     // 监听单条消息添加事件
-    window.api.chatOnMessageAdded((data) => {
+    const removeMessageAddedListener = window.api.chatOnMessageAdded((data) => {
       console.log('收到消息添加事件:', data)
 
       // 对齐当前会话到事件会话，避免忽略新会话
@@ -121,7 +130,7 @@ onMounted(async () => {
     })
 
     // 监听批量消息添加事件（图片+文本）
-    window.api.chatOnMessagesBatchAdded((data) => {
+    const removeMessagesBatchAddedListener = window.api.chatOnMessagesBatchAdded((data) => {
       console.log('收到批量消息添加事件:', data)
 
       if (appStore.currentSessionId !== data.sessionId) {
@@ -137,7 +146,7 @@ onMounted(async () => {
     })
 
     // 监听会话创建事件（跨天自动创建新会话）
-    window.api.chatOnSessionCreated((data) => {
+    const removeSessionCreatedListener = window.api.chatOnSessionCreated((data) => {
       console.log('收到会话创建事件:', data)
       // 刷新会话列表以显示新会话
       appStore.loadSessions()
@@ -149,23 +158,18 @@ onMounted(async () => {
 
     // 保存清理函数
     onUnmounted(() => {
+      removeStateListener()
       removeCameraListener()
       removeThemeListener()
-      window.api.appRemoveServerMessageListener()
-      window.api.chatRemoveImageCapturedListener()
-      window.api.chatRemoveMessageAddedListener()
-      window.api.chatRemoveMessagesBatchAddedListener()
-      window.api.chatRemoveSessionCreatedListener()
+      removeServerMessageListener()
+      removeMessageAddedListener()
+      removeMessagesBatchAddedListener()
+      removeSessionCreatedListener()
     })
   }
   catch (error) {
     console.error('初始化应用状态失败', error)
   }
-})
-
-onUnmounted(() => {
-  console.log('清理状态监听器')
-  window.api.appRemoveStateChangedListener()
 })
 </script>
 

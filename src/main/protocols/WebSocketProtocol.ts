@@ -1,7 +1,7 @@
 import type { ConnectionInfo, HelloMessage } from './Protocol'
 import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
-import { AudioConfig } from '../constants/DeviceState'
+import { AudioConfig } from '../audio/AudioConfig'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
@@ -336,12 +336,6 @@ export class WebSocketProtocol extends Protocol {
           }
         }
       }
-      else if (Buffer.isBuffer(data)) {
-        // 二进制消息 - 音频数据
-        if (this.onIncomingAudioCallback) {
-          this.onIncomingAudioCallback(data)
-        }
-      }
     }
     catch (error) {
       logger.error('处理消息时出错', error)
@@ -361,9 +355,9 @@ export class WebSocketProtocol extends Protocol {
       transport: 'websocket',
       audio_params: {
         format: 'opus',
-        sample_rate: AudioConfig.INPUT_SAMPLE_RATE,
-        channels: AudioConfig.CHANNELS,
-        frame_duration: AudioConfig.FRAME_DURATION,
+        sample_rate: AudioConfig.inputSampleRate,
+        channels: AudioConfig.channels,
+        frame_duration: AudioConfig.frameDuration,
       },
     }
 
@@ -592,7 +586,6 @@ export class WebSocketProtocol extends Protocol {
   private async cleanup(): Promise<void> {
     this.connected = false
     this.helloReceived = false
-    this.isHandlingConnectionLoss = false
 
     // 清理连接过程中的定时器
     this.clearConnectionTimers()

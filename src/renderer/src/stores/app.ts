@@ -1,3 +1,4 @@
+import type { AppStateSnapshot, DeviceState, ListeningMode } from '@shared/types'
 import type { ChatSession as IpcChatSession } from '../../../preload/index.d'
 import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from '../types/chat'
 /**
@@ -10,25 +11,15 @@ import { computed, ref } from 'vue'
 import { generateSessionTitle, getTodaySessionId, isTodaySession } from '../utils/dateUtils'
 import { mapIpcMessageToChatMessage, mapIpcSessionToChatSession } from '../utils/transformers'
 
-/** 设备状态类型 */
-export type DeviceState = 'idle' | 'connecting' | 'listening' | 'speaking'
-
-/** 监听模式类型 */
-export type ListeningMode = 'auto' | 'manual' | 'realtime'
-
-/** 应用状态快照 */
-export interface AppStateSnapshot {
-  deviceState: DeviceState
-  listeningMode: ListeningMode
-  channelOpen: boolean
-}
-
 export const useAppStore = defineStore('app', () => {
   /** 设备状态 */
   const deviceState = ref<DeviceState>('idle')
 
   /** 监听模式 */
   const listeningMode = ref<ListeningMode>('manual')
+
+  /** 是否持续监听 */
+  const keepListening = ref(false)
 
   /** 音频通道是否打开 */
   const channelOpen = ref(false)
@@ -87,6 +78,7 @@ export const useAppStore = defineStore('app', () => {
   function updateState(state: AppStateSnapshot) {
     deviceState.value = state.deviceState
     listeningMode.value = state.listeningMode
+    keepListening.value = state.keepListening
     channelOpen.value = state.channelOpen
   }
 
@@ -110,6 +102,7 @@ export const useAppStore = defineStore('app', () => {
   function resetState() {
     deviceState.value = 'idle'
     listeningMode.value = 'manual'
+    keepListening.value = false
     channelOpen.value = false
     emotion.value = 'neutral'
     currentText.value = ''
@@ -337,13 +330,12 @@ export const useAppStore = defineStore('app', () => {
     if (message.type === 'llm' && message.emotion) {
       emotion.value = message.emotion
     }
-    if (message.type === 'tts' && message.text) {
+    if (message.type === 'tts' && message.state === 'stop') {
+      currentText.value = ''
+    }
+    else if (message.type === 'tts' && message.text) {
       // TTS 消息显示用户说的话
       currentText.value = message.text
-    }
-
-    else if (message.type === 'tts' && message.state === 'stop') {
-      currentText.value = ''
     }
   }
 
@@ -358,6 +350,7 @@ export const useAppStore = defineStore('app', () => {
     // 设备 & 通话状态
     deviceState,
     listeningMode,
+    keepListening,
     channelOpen,
     emotion,
     currentText,

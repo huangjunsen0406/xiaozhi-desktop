@@ -83,11 +83,7 @@ async function handleUpload(emotionType: EmotionType) {
     uploadingEmotions.value.add(emotionType)
 
     // 3. 上传到主进程
-    const uploadResult = await window.api.emotionUploadCustom(emotionType, sourcePath)
-    if (!uploadResult.success) {
-      message.error(`上传失败: ${uploadResult.error}`)
-      return
-    }
+    await window.api.emotionUploadCustom(emotionType, sourcePath)
 
     // 4. 刷新显示
     const customUrl = await window.api.emotionGetCustomPath(emotionType)
@@ -122,11 +118,7 @@ async function handleReset(emotionType: EmotionType) {
     onPositiveClick: async () => {
       try {
         // 1. 删除自定义图片
-        const result = await window.api.emotionReset(emotionType)
-        if (!result.success) {
-          message.error(`重置失败: ${result.error}`)
-          return
-        }
+        await window.api.emotionReset(emotionType)
 
         // 2. 恢复默认图片
         emotionImages.value[emotionType] = {

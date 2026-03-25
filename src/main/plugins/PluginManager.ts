@@ -1,5 +1,5 @@
+import type { DeviceState } from '@shared/types'
 import type { Buffer } from 'node:buffer'
-import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'
@@ -249,11 +249,15 @@ export class PluginManager {
 
           // 应用超时
           if (opts.timeout > 0) {
+            let timeoutId: ReturnType<typeof setTimeout> | null = null
             await Promise.race([
-              promise,
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error(`执行超时 (${opts.timeout}ms)`)), opts.timeout),
-              ),
+              promise.finally(() => {
+                if (timeoutId)
+                  clearTimeout(timeoutId)
+              }),
+              new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(`执行超时 (${opts.timeout}ms)`)), opts.timeout)
+              }),
             ])
           }
           else {

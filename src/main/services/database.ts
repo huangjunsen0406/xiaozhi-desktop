@@ -1,3 +1,4 @@
+import type { ValidSampleRate } from '@shared/types'
 import type { Buffer } from 'node:buffer'
 import type {
   AudioConfigUpdate,
@@ -223,58 +224,61 @@ export class DatabaseManager {
       if (hasKeywordsList) {
         this.logger.info('检测到旧的 keywords_list 字段，开始迁移...')
 
-        // 读取现有配置
-        const config = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as {
-          id: number
-          enabled: number
-          language: string
-          keywords_list: string
-          threshold: number
-          score: number
-          cooldown_ms: number
-        } | undefined
+        const migrate = this.db.transaction(() => {
+          // 读取现有配置
+          const config = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as {
+            id: number
+            enabled: number
+            language: string
+            keywords_list: string
+            threshold: number
+            score: number
+            cooldown_ms: number
+          } | undefined
 
-        // 创建新表
-        this.db.exec(`
-          CREATE TABLE IF NOT EXISTS wake_word_config_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            enabled INTEGER DEFAULT 1,
-            language TEXT DEFAULT 'zh',
-            keyword_zh TEXT DEFAULT '你好小智',
-            keyword_en TEXT DEFAULT NULL,
-            threshold REAL DEFAULT 0.2,
-            score REAL DEFAULT 1.8,
-            cooldown_ms INTEGER DEFAULT 1500,
-            created_at INTEGER DEFAULT (strftime('%s', 'now')),
-            updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-          )
-        `)
+          // 创建新表
+          this.db.exec(`
+            CREATE TABLE IF NOT EXISTS wake_word_config_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              enabled INTEGER DEFAULT 1,
+              language TEXT DEFAULT 'zh',
+              keyword_zh TEXT DEFAULT '你好小智',
+              keyword_en TEXT DEFAULT NULL,
+              threshold REAL DEFAULT 0.2,
+              score REAL DEFAULT 1.8,
+              cooldown_ms INTEGER DEFAULT 1500,
+              created_at INTEGER DEFAULT (strftime('%s', 'now')),
+              updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+            )
+          `)
 
-        // 如果有旧数据，迁移到新表
-        if (config) {
-          const keywordZh = config.language === 'zh' ? config.keywords_list : '你好小智'
-          const keywordEn = config.language === 'en' ? config.keywords_list : null
+          // 如果有旧数据，迁移到新表
+          if (config) {
+            const keywordZh = config.language === 'zh' ? config.keywords_list : '你好小智'
+            const keywordEn = config.language === 'en' ? config.keywords_list : null
 
-          this.db.prepare(`
-            INSERT INTO wake_word_config_new (enabled, language, keyword_zh, keyword_en, threshold, score, cooldown_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            config.enabled,
-            config.language,
-            keywordZh,
-            keywordEn,
-            config.threshold,
-            config.score,
-            config.cooldown_ms,
-          )
+            this.db.prepare(`
+              INSERT INTO wake_word_config_new (enabled, language, keyword_zh, keyword_en, threshold, score, cooldown_ms)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              config.enabled,
+              config.language,
+              keywordZh,
+              keywordEn,
+              config.threshold,
+              config.score,
+              config.cooldown_ms,
+            )
 
-          this.logger.info(`已迁移唤醒词配置: language=${config.language}, keyword=${config.keywords_list}`)
-        }
+            this.logger.info(`已迁移唤醒词配置: language=${config.language}, keyword=${config.keywords_list}`)
+          }
 
-        // 删除旧表，重命名新表
-        this.db.exec('DROP TABLE wake_word_config')
-        this.db.exec('ALTER TABLE wake_word_config_new RENAME TO wake_word_config')
+          // 删除旧表，重命名新表
+          this.db.exec('DROP TABLE wake_word_config')
+          this.db.exec('ALTER TABLE wake_word_config_new RENAME TO wake_word_config')
+        })
 
+        migrate()
         this.logger.info('唤醒词配置迁移完成')
       }
       // 如果缺少新字段，添加它们
@@ -550,14 +554,17 @@ export class DatabaseManager {
     enableNoiseReduction: boolean
     enableEchoCancellation: boolean
     conversationMode: 'realtime' | 'auto'
-    inputSampleRate: number
-    outputSampleRate: number
+    inputSampleRate: ValidSampleRate
+    outputSampleRate: ValidSampleRate
     channels: number
-    maxInputChannels: number
-    maxOutputChannels: number
     frameDuration: number
   } {
+    const VALID_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000]
+    const isValidRate = (rate: number): rate is ValidSampleRate => VALID_RATES.includes(rate)
+
     const config = this.getOrCreateAudioConfig()
+    const inputRate = config.input_sample_rate
+    const outputRate = config.output_sample_rate
 
     return {
       inputDeviceName: config.input_device_name || undefined,
@@ -565,11 +572,9 @@ export class DatabaseManager {
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
       enableEchoCancellation: Boolean(config.enable_echo_cancellation),
       conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',
-      inputSampleRate: config.input_sample_rate || 16000,
-      outputSampleRate: config.output_sample_rate || 24000,
+      inputSampleRate: isValidRate(inputRate) ? inputRate : 16000,
+      outputSampleRate: isValidRate(outputRate) ? outputRate : 24000,
       channels: config.channels || 1,
-      maxInputChannels: config.max_input_channels || 2,
-      maxOutputChannels: config.max_output_channels || 2,
       frameDuration: config.frame_duration || 20,
     }
   }

@@ -47,18 +47,11 @@ function validate(): string | null {
  */
 async function loadConfig() {
   try {
-    const result = await window.api.systemGetConfig()
-    if (result?.success && result.data) {
-      console.log('从数据库加载配置:', result.data)
-      const config = result.data as SystemConfig
-      persisted.value = cloneDeep(config)
-      Object.assign(form, cloneDeep(config))
-      console.log('配置加载成功')
-    }
-    else if (result?.error) {
-      console.error('加载配置失败:', result.error)
-      message.error(`加载配置失败: ${result.error}`)
-    }
+    const config = await window.api.systemGetConfig()
+    console.log('从数据库加载配置:', config)
+    persisted.value = cloneDeep(config)
+    Object.assign(form, cloneDeep(config))
+    console.log('配置加载成功')
   }
   catch (error) {
     console.error('加载配置异常:', error)
@@ -77,18 +70,12 @@ async function handleSave() {
     throw new Error(err)
 
   try {
-    const result = await window.api.systemUpdateConfig(toRaw(form))
-
-    if (result?.success) {
-      persisted.value = cloneDeep(toRaw(form))
-      // eslint-disable-next-line vue/custom-event-name-casing
-      emit('dirty-change', false)
-      console.log('系统设置已保存', form)
-      message.success('系统设置已保存')
-    }
-    else {
-      throw new Error(result?.error || '保存失败')
-    }
+    await window.api.systemUpdateConfig(toRaw(form))
+    persisted.value = cloneDeep(toRaw(form))
+    // eslint-disable-next-line vue/custom-event-name-casing
+    emit('dirty-change', false)
+    console.log('系统设置已保存', form)
+    message.success('系统设置已保存')
   }
   catch (error) {
     console.error('保存配置失败:', error)

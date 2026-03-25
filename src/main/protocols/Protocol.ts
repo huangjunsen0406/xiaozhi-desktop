@@ -1,3 +1,4 @@
+import type { ListeningMode } from '@shared/types'
 /**
  * Protocol 抽象基类
  * 定义所有通信协议的通用接口
@@ -12,12 +13,6 @@ const logger = getLogger('Protocol')
 export enum AbortReason {
   WAKE_WORD_DETECTED = 'wake_word_detected',
   USER_INTERRUPTED = 'user_interrupted',
-}
-
-export enum ListeningMode {
-  REALTIME = 'realtime',
-  AUTO_STOP = 'auto',
-  MANUAL = 'manual',
 }
 
 export interface AudioParams {
@@ -160,6 +155,9 @@ export abstract class Protocol {
 
     if (reason === AbortReason.WAKE_WORD_DETECTED) {
       message.reason = 'wake_word_detected'
+    }
+    else if (reason === AbortReason.USER_INTERRUPTED) {
+      message.reason = 'user_interrupted'
     }
 
     return await this.sendText(JSON.stringify(message))

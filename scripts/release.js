@@ -33,7 +33,8 @@ rl.question('\n请输入选项 (1-5): ', (answer) => {
       // 对于 prepatch/preminor/premajor/prerelease，添加 --preid=beta
       if (type.startsWith('pre')) {
         execSync(`pnpm version ${type} --preid=beta -m "chore: release v%s"`, { stdio: 'inherit' })
-      } else {
+      }
+      else {
         execSync(`pnpm version ${type} -m "chore: release v%s"`, { stdio: 'inherit' })
       }
 

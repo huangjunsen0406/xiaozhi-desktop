@@ -8,6 +8,7 @@ export class AudioPlayback {
   private audioContext: AudioContext | null = null
   private nextStartTime = 0 // 下一帧开始时间(用于无缝播放)
   private deviceId: string | undefined = undefined
+  private removeOpusDecodedListener: (() => void) | null = null
 
   // 配置（从数据库动态加载）
   private sampleRate = 24000
@@ -61,7 +62,12 @@ export class AudioPlayback {
       }
 
       // 监听主进程发送的解码后音频
-      window.api.audioOnOpusDecoded((pcmBuffer: Buffer) => {
+      if (this.removeOpusDecodedListener) {
+        this.removeOpusDecodedListener()
+        this.removeOpusDecodedListener = null
+      }
+
+      this.removeOpusDecodedListener = window.api.audioOnOpusDecoded((pcmBuffer: Buffer) => {
         this.playPCM(pcmBuffer)
       })
 
@@ -238,11 +244,26 @@ export class AudioPlayback {
   stop(): void {
     console.log('停止音频播放...')
 
+    // 关闭当前 AudioContext 以立即取消所有已调度的音频
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      this.audioContext.close().catch(() => {})
+      // 创建新的 AudioContext 以备后续播放
+      this.audioContext = new AudioContext({ sampleRate: this.sampleRate })
+      // 恢复输出设备设置
+      if (this.deviceId && this.deviceId !== 'default' && 'setSinkId' in this.audioContext) {
+        // @ts-expect-error setSinkId 是实验性 API
+        this.audioContext.setSinkId(this.deviceId).catch(() => {})
+      }
+    }
+
     // 重置播放时间
     this.nextStartTime = 0
 
     // 移除监听器
-    window.api.audioRemoveOpusDecodedListener()
+    if (this.removeOpusDecodedListener) {
+      this.removeOpusDecodedListener()
+      this.removeOpusDecodedListener = null
+    }
 
     console.log('音频播放已停止')
   }

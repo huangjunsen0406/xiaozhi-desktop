@@ -1,4 +1,5 @@
 import type { IpcContext } from '../types/ipc'
+import { DeviceStateValue, ListeningModeValue } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getLogger } from '../utils/logger'
 import { registerShortcutIpcChannels } from './shortcutIpc'
@@ -76,10 +77,10 @@ export function registerAppIpc(context: IpcContext): void {
     catch (error) {
       logger.error('获取状态快照失败:', error)
       return {
-        device_state: 'idle',
-        listening_mode: 'manual',
-        keep_listening: false,
-        audio_opened: false,
+        deviceState: DeviceStateValue.IDLE,
+        listeningMode: ListeningModeValue.MANUAL,
+        keepListening: false,
+        channelOpen: false,
       }
     }
   })

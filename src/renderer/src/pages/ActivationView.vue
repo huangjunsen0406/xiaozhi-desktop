@@ -100,11 +100,7 @@ async function copyCode() {
 async function jump() {
   try {
     // 从配置中获取授权 URL
-    const result = await window.api.systemGetConfig()
-    if (!result.success || !result.data) {
-      throw new Error('获取配置失败')
-    }
-    const config = result.data
+    const config = await window.api.systemGetConfig()
     const authUrl = config.authorization_url || 'https://xiaozhi.me/'
     window.api.openExternal(authUrl)
   }

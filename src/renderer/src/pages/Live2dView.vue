@@ -19,6 +19,8 @@ let app: PIXI.Application | null = null
 let model: Live2DModel | null = null
 let isDragging = false
 let currentModelId = '' // 当前加载的模型ID
+let removeAudioVolumeListener: (() => void) | null = null
+let removeModelChangedListener: (() => void) | null = null
 
 const status = ref({
   canvas: false,
@@ -139,9 +141,15 @@ onUnmounted(() => {
     cancelAnimationFrame(lipSyncAnimationId)
     lipSyncAnimationId = null
   }
-  window.api?.live2dRemoveAudioVolumeListener()
+  if (removeAudioVolumeListener) {
+    removeAudioVolumeListener()
+    removeAudioVolumeListener = null
+  }
   // 移除模型切换监听
-  window.api?.modelRemoveChangedListener?.()
+  if (removeModelChangedListener) {
+    removeModelChangedListener()
+    removeModelChangedListener = null
+  }
 })
 
 onMounted(async () => {
@@ -186,7 +194,7 @@ onMounted(async () => {
     console.log('口型同步已启动')
 
     // 监听模型切换事件
-    window.api?.modelOnChanged?.(handleModelChange)
+    removeModelChangedListener = window.api?.modelOnChanged?.(handleModelChange) ?? null
     console.log('[Live2D] 模型切换监听已注册')
   }
   catch (error) {
@@ -276,10 +284,10 @@ function handleMouseMove(e: MouseEvent): void {
  */
 function setupLipSync(): void {
   // 监听音频音量数据
-  window.api?.live2dOnAudioVolume((volume: number) => {
+  removeAudioVolumeListener = window.api?.live2dOnAudioVolume?.((volume: number) => {
     // 更新目标嘴巴开合度
     targetMouthValue = volume
-  })
+  }) ?? null
 
   // 启动平滑动画循环
   startLipSyncAnimation()

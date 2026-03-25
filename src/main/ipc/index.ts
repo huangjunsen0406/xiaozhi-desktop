@@ -5,7 +5,7 @@ import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
 import { getLive2dWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
-import { registerAnalyticsIpcChannels } from './analyticsIpc'
+
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
 import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
@@ -38,7 +38,7 @@ export function registerBasicIpcChannels(): void {
   registerThemeIpc()
   registerChatIpc()
   registerMusicIpc()
-  registerAnalyticsIpcChannels()
+
   registerModelIpc()
   registerClipboardIpcChannels()
 

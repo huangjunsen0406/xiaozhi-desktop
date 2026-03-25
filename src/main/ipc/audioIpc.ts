@@ -1,4 +1,4 @@
-import type { AudioConfig } from '../types/audio'
+import type { AudioConfig } from '@shared/types'
 import { OpusCodec } from '../audio/OpusCodec'
 import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -77,12 +77,6 @@ export function registerAudioIpc(): void {
       if ('channels' in config) {
         dbUpdates.channels = config.channels
       }
-      if ('maxInputChannels' in config) {
-        dbUpdates.max_input_channels = config.maxInputChannels
-      }
-      if ('maxOutputChannels' in config) {
-        dbUpdates.max_output_channels = config.maxOutputChannels
-      }
       if ('frameDuration' in config) {
         dbUpdates.frame_duration = config.frameDuration
       }
@@ -91,7 +85,7 @@ export function registerAudioIpc(): void {
       logger.info('音频配置已保存到数据库:', dbUpdates)
 
       // 重新加载 AudioConfig
-      const { AudioConfig: AudioConfigInstance } = await import('../constants/DeviceState')
+      const { AudioConfig: AudioConfigInstance } = await import('../audio/AudioConfig')
       AudioConfigInstance.reload()
 
       // 检查是否需要重建 OpusCodec（采样率或帧长度变化）
@@ -114,6 +108,8 @@ export function registerAudioIpc(): void {
         let notified = false
 
         windows.forEach((win) => {
+          if (win.isDestroyed())
+            return
           // 判断是否是后台音频窗口（通过 URL 判断）
           const url = win.webContents.getURL()
           if (url.includes('audio.html') || url.includes('#/audio')) {

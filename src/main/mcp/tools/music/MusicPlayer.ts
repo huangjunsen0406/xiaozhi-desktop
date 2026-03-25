@@ -608,6 +608,12 @@ export class MusicPlayer {
 
       const message = { command, args }
       logger.info('发送 IPC 消息到后台音频窗口:', message)
+
+      if (audioWindow.isDestroyed()) {
+        logger.warn('后台音频窗口已销毁，无法发送指令')
+        return false
+      }
+
       audioWindow.webContents.send('music:command', message)
 
       return true

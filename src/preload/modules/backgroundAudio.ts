@@ -1,33 +1,24 @@
-import type { BackgroundAudioStatus } from '@shared/types'
+import type { BackgroundAudioStateUpdate, BackgroundAudioStatus } from '@shared/types'
 /**
  * 后台音频窗口 API 模块
  */
 import { ipcRenderer } from 'electron'
 
-/**
- * 音频状态类型
- */
-export interface AudioState {
-  state?: string
-  capturing: boolean
-  playing?: boolean
-  initialized?: boolean
-  error?: string
-}
-
-export type { BackgroundAudioStatus }
+export type { BackgroundAudioStateUpdate, BackgroundAudioStatus }
 
 export const backgroundAudioApi = {
   // 监听音频命令
-  onAudioCommand: (callback: (command: string, data?: unknown) => void): void => {
-    ipcRenderer.on('audio:command', (_, command, data) => callback(command, data))
+  onAudioCommand: (callback: (command: string, data?: unknown) => void): () => void => {
+    const handler = (_: Electron.IpcRendererEvent, command: string, data?: unknown) => callback(command, data)
+    ipcRenderer.on('audio:command', handler)
+    return () => ipcRenderer.off('audio:command', handler)
   },
 
   // 发送音频状态（旧版兼容）
-  sendAudioState: (state: AudioState): void => ipcRenderer.send('audio:state', state),
+  sendAudioState: (state: BackgroundAudioStateUpdate): void => ipcRenderer.send('audio:state', state),
 
   // 更新音频状态（新版）
-  audioUpdateState: (state: AudioState): void => ipcRenderer.send('audio:state', state),
+  audioUpdateState: (state: BackgroundAudioStateUpdate): void => ipcRenderer.send('audio:state', state),
 
   // 获取后台音频状态（仅主窗口可用）
   getStatus: (): Promise<BackgroundAudioStatus> => ipcRenderer.invoke('background-audio:get-status'),

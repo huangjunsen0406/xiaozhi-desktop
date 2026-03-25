@@ -57,7 +57,9 @@ export function broadcastThemeChange(theme: 'light' | 'dark' | 'auto'): void {
   const windows = BrowserWindow.getAllWindows()
 
   for (const win of windows) {
-    win.webContents.send('theme:set', theme)
+    if (!win.isDestroyed()) {
+      win.webContents.send('theme:set', theme)
+    }
   }
 
   logger.info(`已广播主题变更: ${theme}`)

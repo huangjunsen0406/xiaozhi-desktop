@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, analyticsApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -45,16 +45,9 @@ const api = {
   activationCancel: activationApi.cancel,
   activationCheckStatus: activationApi.checkStatus,
 
-  // 埋点 API
-  analyticsTrack: analyticsApi.track,
-  analyticsGetConfig: analyticsApi.getConfig,
-  analyticsUpdateConfig: analyticsApi.updateConfig,
-  analyticsFlush: analyticsApi.flush,
-
   // 音频 API
   audioSendPCM: audioApi.sendPCM,
   audioOnOpusDecoded: audioApi.onOpusDecoded,
-  audioRemoveOpusDecodedListener: audioApi.removeOpusDecodedListener,
   audioGetConfig: audioApi.getConfig,
   audioUpdateConfig: audioApi.updateConfig,
   audioGetDefaultDeviceId: audioApi.getDefaultDeviceId,
@@ -70,9 +63,7 @@ const api = {
   appSendText: appApi.sendText,
   appGetState: appApi.getState,
   appOnStateChanged: appApi.onStateChanged,
-  appRemoveStateChangedListener: appApi.removeStateChangedListener,
   appOnServerMessage: appApi.onServerMessage,
-  appRemoveServerMessageListener: appApi.removeServerMessageListener,
 
   // 系统配置 API
   systemGetConfig: systemApi.getConfig,
@@ -96,7 +87,6 @@ const api = {
   emotionGetCustomPath: emotionApi.getCustomPath,
   emotionReset: emotionApi.reset,
   emotionOnChanged: emotionApi.onEmotionChanged,
-  emotionRemoveChangedListener: emotionApi.removeEmotionChangedListener,
 
   // 摄像头 API
   cameraOnCaptureRequest: cameraApi.onCaptureRequest,
@@ -120,13 +110,9 @@ const api = {
   chatDeleteSession: chatApi.deleteSession,
   chatClearMessages: chatApi.clearMessages,
   chatOnImageCaptured: chatApi.onImageCaptured,
-  chatRemoveImageCapturedListener: chatApi.removeImageCapturedListener,
   chatOnMessageAdded: chatApi.onMessageAdded,
-  chatRemoveMessageAddedListener: chatApi.removeMessageAddedListener,
   chatOnMessagesBatchAdded: chatApi.onMessagesBatchAdded,
-  chatRemoveMessagesBatchAddedListener: chatApi.removeMessagesBatchAddedListener,
   chatOnSessionCreated: chatApi.onSessionCreated,
-  chatRemoveSessionCreatedListener: chatApi.removeSessionCreatedListener,
 
   // 快捷键 API
   shortcutGetAll: shortcutApi.getAll,
@@ -140,7 +126,6 @@ const api = {
 
   // Live2D API
   live2dOnAudioVolume: live2dApi.onAudioVolume,
-  live2dRemoveAudioVolumeListener: live2dApi.removeAudioVolumeListener,
 
   // 模型管理 API
   modelGetList: modelApi.getList,
@@ -152,7 +137,6 @@ const api = {
   modelOpenFolder: modelApi.openFolder,
   modelGetFolderPath: modelApi.getFolderPath,
   modelOnChanged: modelApi.onChanged,
-  modelRemoveChangedListener: modelApi.removeChangedListener,
 
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,

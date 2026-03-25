@@ -11,6 +11,11 @@ import Components from 'unplugin-vue-components/vite'
 
 export default defineConfig({
   main: {
+    resolve: {
+      alias: {
+        '@shared': resolve('src/shared'),
+      },
+    },
     plugins: [
       externalizeDepsPlugin(),
       // 启用字节码保护(仅在生产构建时生效)
@@ -66,6 +71,11 @@ export default defineConfig({
     },
   },
   preload: {
+    resolve: {
+      alias: {
+        '@shared': resolve('src/shared'),
+      },
+    },
     plugins: [
       externalizeDepsPlugin({
         // 关键：这行把依赖从 external 名单里排除，转而 bundle 进去
@@ -83,6 +93,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
+        '@shared': resolve('src/shared'),
       },
     },
     build: {

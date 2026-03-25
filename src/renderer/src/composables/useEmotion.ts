@@ -138,7 +138,7 @@ export function useEmotion(config: EmotionConfig = {}) {
   setEmotion(defaultEmotion)
 
   // 监听表情变更事件（从设置页面广播）
-  window.api.emotionOnChanged((emotionType: string) => {
+  const removeEmotionListener = window.api.emotionOnChanged((emotionType: string) => {
     console.log(`[useEmotion] 收到表情变更事件: ${emotionType}`)
     // 如果当前显示的就是变更的表情，强制刷新
     if (state.current === emotionType) {
@@ -148,7 +148,7 @@ export function useEmotion(config: EmotionConfig = {}) {
 
   // 清理监听器
   onUnmounted(() => {
-    window.api.emotionRemoveChangedListener()
+    removeEmotionListener()
   })
 
   return {

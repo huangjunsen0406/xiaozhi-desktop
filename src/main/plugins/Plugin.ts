@@ -1,5 +1,5 @@
+import type { DeviceState } from '@shared/types'
 import type { Buffer } from 'node:buffer'
-import type { DeviceState } from '../constants/DeviceState'
 import type { Protocol } from '../protocols/Protocol'
 import type { Application } from '../services/Application'
 import type { JsonMessage } from '../types/protocol'

@@ -46,9 +46,9 @@ export class VLCamera extends BaseCamera {
       logger.info('开始捕获图像...')
 
       const win = BrowserWindow.getFocusedWindow()
-      if (!win) {
-        logger.error('未找到焦点窗口')
-        return { success: false, message: '未找到焦点窗口' }
+      if (!win || win.isDestroyed()) {
+        logger.error('未找到可用的焦点窗口')
+        return { success: false, message: '未找到可用的焦点窗口' }
       }
 
       win.webContents.send('camera:request-capture')

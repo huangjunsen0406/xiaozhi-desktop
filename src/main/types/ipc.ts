@@ -3,7 +3,7 @@ import type {
   ActivationInitResult,
   ActivationResult,
   ActivationStatus,
-  AppStateSnapshotRaw,
+  AppStateSnapshot,
   DeviceInfo,
   IpcResult,
 } from '@shared/types'
@@ -18,7 +18,7 @@ export type {
   ActivationInitResult,
   ActivationResult,
   ActivationStatus,
-  AppStateSnapshotRaw as AppStateSnapshot,
+  AppStateSnapshot,
   DeviceInfo,
   IpcResult,
 }

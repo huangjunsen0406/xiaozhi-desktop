@@ -1,21 +1,10 @@
 /**
  * Camera Config API - 摄像头配置相关功能
  */
+import type { CameraConfig } from '@shared/types'
 import { ipcRenderer } from 'electron'
 
-export interface CameraConfig {
-  enabled: boolean
-  deviceId: string
-  deviceLabel: string
-  useLocalVision: boolean
-  vlApiKey: string
-  vlUrl: string
-  vlModel: string
-  captureWidth: number
-  captureHeight: number
-  jpegQuality: number
-  maxDimension: number
-}
+export type { CameraConfig }
 
 export const cameraConfigApi = {
   /**

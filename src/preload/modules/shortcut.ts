@@ -1,4 +1,5 @@
 import { ipcRenderer } from 'electron'
+import { assertIpcSuccess } from '../utils/ipc'
 
 export const shortcutApi = {
   /**
@@ -9,8 +10,10 @@ export const shortcutApi = {
   /**
    * 更新快捷键
    */
-  update: (action: string, accelerator: string | null) =>
-    ipcRenderer.invoke('shortcut:update', action, accelerator),
+  update: async (action: string, accelerator: string | null): Promise<void> => {
+    const result = await ipcRenderer.invoke('shortcut:update', action, accelerator) as { success: boolean, error?: string }
+    assertIpcSuccess(result, '更新快捷键失败')
+  },
 
   /**
    * 检测快捷键冲突
@@ -21,5 +24,8 @@ export const shortcutApi = {
   /**
    * 重置为默认快捷键
    */
-  reset: () => ipcRenderer.invoke('shortcut:reset'),
+  reset: async (): Promise<void> => {
+    const result = await ipcRenderer.invoke('shortcut:reset') as { success: boolean, error?: string }
+    assertIpcSuccess(result, '重置快捷键失败')
+  },
 }
