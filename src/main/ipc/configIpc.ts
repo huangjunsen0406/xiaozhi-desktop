@@ -1,5 +1,8 @@
 import type { MqttInfo } from '../services/configManagerDB'
+import axios from 'axios'
 import { ipcMain } from 'electron'
+import { getActivationService } from '../services/ActivationService'
+import { getApplication } from '../services/Application'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
 
@@ -169,7 +172,6 @@ export function registerConfigIpc(): void {
       if (otaUrlChanged) {
         logger.info('OTA URL 已修改，触发刷新配置')
         try {
-          const { getActivationService } = await import('../services/ActivationService')
           const activationService = getActivationService()
 
           // 重新获取 OTA 配置
@@ -207,7 +209,6 @@ export function registerConfigIpc(): void {
               }
 
               logger.info(`请求 OTA 配置: ${otaUrl}`)
-              const axios = (await import('axios')).default
               const response = await axios.post(otaUrl, payload, {
                 headers,
                 timeout: 10000,
@@ -238,7 +239,6 @@ export function registerConfigIpc(): void {
 
                 // 刷新协议配置，让新的 WebSocket/MQTT 配置生效
                 try {
-                  const { getApplication } = await import('../services/Application')
                   const application = getApplication()
                   application.reloadProtocolConfig()
                   logger.info('协议配置已刷新')

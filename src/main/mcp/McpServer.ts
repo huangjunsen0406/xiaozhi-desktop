@@ -8,6 +8,7 @@ import type {
 } from './types'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
+import { setMcpContext } from './McpContext'
 import { getCameraInstance } from './tools/camera'
 import { SystemToolsManager } from './tools/SystemToolsManager'
 import { PropertyList, PropertyType } from './types'
@@ -96,6 +97,9 @@ export class McpServer {
     logger.info('添加通用工具...')
 
     try {
+      // 注入 McpContext，供 SystemToolsManager / TimerService 使用（打破循环依赖）
+      setMcpContext(this)
+
       // 备份原有工具列表
       const originalTools = [...this.tools]
       this.tools = []

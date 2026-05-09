@@ -37,20 +37,6 @@ export interface AbortJsonMessage extends JsonMessage {
   reason?: string
 }
 
-export interface IotJsonMessage extends JsonMessage {
-  type: 'iot'
-  update?: boolean
-  descriptors?: IotDescriptor[]
-  states?: Record<string, unknown>
-}
-
-export interface IotDescriptor {
-  name: string
-  description?: string
-  properties?: Record<string, unknown>
-  methods?: Record<string, unknown>
-}
-
 export interface McpJsonMessage extends JsonMessage {
   type: 'mcp'
   payload: McpPayload
@@ -91,7 +77,6 @@ export type ProtocolJsonMessage
     | TtsJsonMessage
     | ListenJsonMessage
     | AbortJsonMessage
-    | IotJsonMessage
     | McpJsonMessage
     | SttJsonMessage
     | LlmJsonMessage
@@ -116,10 +101,6 @@ export function isMcpMessage(msg: JsonMessage): msg is McpJsonMessage {
 
 export function isAlertMessage(msg: JsonMessage): msg is AlertJsonMessage {
   return msg.type === 'alert'
-}
-
-export function isIotMessage(msg: JsonMessage): msg is IotJsonMessage {
-  return msg.type === 'iot'
 }
 
 export type { ActivationData, MqttInfo, NetworkConfig }

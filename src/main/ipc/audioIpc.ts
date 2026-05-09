@@ -1,4 +1,6 @@
 import type { AudioConfig } from '@shared/types'
+import { BrowserWindow } from 'electron'
+import { AudioConfig as AudioConfigInstance } from '../audio/AudioConfig'
 import { OpusCodec } from '../audio/OpusCodec'
 import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -85,7 +87,6 @@ export function registerAudioIpc(): void {
       logger.info('音频配置已保存到数据库:', dbUpdates)
 
       // 重新加载 AudioConfig
-      const { AudioConfig: AudioConfigInstance } = await import('../audio/AudioConfig')
       AudioConfigInstance.reload()
 
       // 检查是否需要重建 OpusCodec（采样率或帧长度变化）
@@ -103,7 +104,6 @@ export function registerAudioIpc(): void {
         }
 
         // 通知后台音频窗口更新配置
-        const { BrowserWindow } = await import('electron')
         const windows = BrowserWindow.getAllWindows()
         let notified = false
 

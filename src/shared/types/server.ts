@@ -1,5 +1,5 @@
 export interface ServerMessage {
-  type: 'llm' | 'tts' | 'stt' | 'mcp' | 'iot' | 'alert' | 'listen' | 'abort' | string
+  type: 'llm' | 'tts' | 'stt' | 'mcp' | 'alert' | 'listen' | 'abort' | string
   state?: 'start' | 'stop' | 'sentence_start' | 'sentence_end' | 'detect'
   text?: string
   emotion?: string

@@ -1,15 +1,15 @@
-import type OpenAI from 'openai'
 import type { ChatPlugin } from '../../plugins/ChatPlugin'
 import type { PropertyList, PropertyType } from '../types'
 import { Buffer } from 'node:buffer'
 import * as os from 'node:os'
 import { app, BrowserWindow } from 'electron'
+import OpenAI from 'openai'
 import { getApplication } from '../../services/Application'
 import { DatabaseManager } from '../../services/database'
 import { getLogger } from '../../utils/logger'
 import { SystemVolumeController } from '../../utils/SystemVolumeController'
-// 移除 McpServer 的静态导入以避免循环依赖
-// import { McpServer } from '../McpServer'
+// 通过 McpContext 访问 McpServer 功能（避免循环依赖）
+import { getMcpContext } from '../McpContext'
 import { AppLauncher } from './app/AppLauncher'
 import { AppScanner } from './app/AppScanner'
 import { ProcessManager } from './app/ProcessManager'
@@ -695,10 +695,9 @@ Examples:
       const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(imageBase64, 'camera')
 
-      // 从 MCP Server 获取 vision 配置（与截图相同的逻辑）
-      const { McpServer } = await import('../McpServer')
-      const mcpServer = McpServer.getInstance()
-      const visionConfig = mcpServer.getVisionConfig()
+      // 从 McpContext 获取 vision 配置（与截图相同的逻辑）
+      const mcpContext = getMcpContext()
+      const visionConfig = mcpContext.getVisionConfig()
 
       // 构建分析请求（与截图相同的优先级）
       const useLocalVision = cameraConfig.useLocalVision
@@ -772,10 +771,9 @@ Examples:
       const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(result.base64, 'screenshot')
 
-      // 从 MCP Server 获取 vision 配置（动态导入避免循环依赖）
-      const { McpServer } = await import('../McpServer')
-      const mcpServer = McpServer.getInstance()
-      const visionConfig = mcpServer.getVisionConfig()
+      // 从 McpContext 获取 vision 配置
+      const mcpContext = getMcpContext()
+      const visionConfig = mcpContext.getVisionConfig()
 
       // 从数据库获取摄像头配置（复用 VL 配置）
       const db = DatabaseManager.getInstance()
@@ -832,9 +830,6 @@ Examples:
   ): Promise<string> {
     try {
       logger.info('使用本地 VL API 分析截图')
-
-      // 动态导入 OpenAI 客户端
-      const { default: OpenAI } = await import('openai')
 
       // 创建客户端
       const client = new OpenAI({
@@ -1119,10 +1114,9 @@ Examples:
 
       logger.info(`设置主题为: ${theme}`)
 
-      // 通过 McpServer 回调广播主题更改（动态导入避免循环依赖）
-      const { McpServer } = await import('../McpServer')
-      const mcpServer = McpServer.getInstance()
-      mcpServer.broadcastTheme(theme as 'light' | 'dark' | 'auto')
+      // 通过 McpContext 广播主题更改
+      const mcpContext = getMcpContext()
+      mcpContext.broadcastTheme(theme as 'light' | 'dark' | 'auto')
 
       logger.info(`主题设置成功: ${theme}`)
       return JSON.stringify({

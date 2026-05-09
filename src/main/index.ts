@@ -2,7 +2,7 @@ import type { IpcContext } from './types/ipc'
 import { join } from 'node:path'
 import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, session } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
@@ -125,7 +125,6 @@ app.whenReady().then(async () => {
 
     try {
       // 方案1: 对特定域名设置 direct 连接（不使用代理）
-      const { session } = await import('electron')
       await session.defaultSession.setProxy({
         mode: 'direct', // 直连，不使用代理
       })

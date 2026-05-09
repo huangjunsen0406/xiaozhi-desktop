@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { AudioConfig } from '@shared/types'
 import { NForm, NFormItem, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
 import { onMounted, ref, watch } from 'vue'
 import { useDevices } from '../../composables/useDevices'
@@ -39,7 +40,6 @@ const sampleRateOptions = [
   { label: '8000 Hz', value: 8000 },
   { label: '16000 Hz', value: 16000 },
   { label: '24000 Hz', value: 24000 },
-  { label: '44100 Hz', value: 44100 },
   { label: '48000 Hz', value: 48000 },
 ]
 
@@ -141,24 +141,12 @@ async function handleSave(): Promise<void> {
     // 记录保存前的配置（用于判断是否需要重新初始化）
     const previousConfig = await window.api.audioGetConfig()
 
-    const config: {
-      enableNoiseReduction: boolean
-      enableEchoCancellation: boolean
-      conversationMode: 'auto' | 'realtime'
-      inputDeviceName?: string
-      outputDeviceName?: string
-      inputSampleRate: number
-      outputSampleRate: number
-      channels: number
-      maxInputChannels: number
-      maxOutputChannels: number
-      frameDuration: number
-    } = {
+    const config: Partial<AudioConfig> = {
       enableNoiseReduction: enableNoiseReduction.value,
       enableEchoCancellation: enableEchoCancellation.value,
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',
-      inputSampleRate: inputSampleRate.value,
-      outputSampleRate: outputSampleRate.value,
+      inputSampleRate: inputSampleRate.value as AudioConfig['inputSampleRate'],
+      outputSampleRate: outputSampleRate.value as AudioConfig['outputSampleRate'],
       channels: channels.value,
       maxInputChannels: maxInputChannels.value,
       maxOutputChannels: maxOutputChannels.value,

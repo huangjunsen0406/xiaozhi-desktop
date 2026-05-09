@@ -2,6 +2,7 @@ import type { MqttInfo } from '@shared/types'
 import { v4 as uuidv4 } from 'uuid'
 import { getLogger } from '../utils/logger'
 import { DatabaseManager } from './database'
+import { DeviceFingerprintManager } from './deviceFingerprintDB'
 
 export type { MqttInfo }
 
@@ -44,7 +45,6 @@ export class ConfigManager {
   }
 
   async initializeDeviceIdAsync(): Promise<void> {
-    const { DeviceFingerprintManager } = await import('./deviceFingerprintDB')
     const deviceFingerprint = await DeviceFingerprintManager.getInstanceAsync()
     const macAddress = deviceFingerprint.getMacAddressFromEfuse()
 

@@ -85,7 +85,7 @@ export class McpPlugin extends Plugin {
 
       this.mcpServer.setThemeBroadcastCallback(themeBroadcastCallback)
 
-      // 注册通用工具（包含 system, calendar, timer, music, iot 等）
+      // 注册通用工具（包含 system, calendar, timer, music 等）
       await this.mcpServer.addCommonTools()
 
       logger.info('✓ 初始化完成')

@@ -4,7 +4,7 @@ import type { ListeningMode } from '@shared/types'
  * 定义所有通信协议的通用接口
  */
 import type { Buffer } from 'node:buffer'
-import type { IotDescriptor, JsonMessage, McpPayload } from '../types/protocol'
+import type { JsonMessage, McpPayload } from '../types/protocol'
 
 import { getLogger } from '../utils/logger'
 
@@ -202,88 +202,6 @@ export abstract class Protocol {
     }
 
     return await this.sendText(JSON.stringify(message))
-  }
-
-  /**
-   * 发送 IoT 设备描述信息
-   */
-  async sendIotDescriptors(descriptors: IotDescriptor[] | string): Promise<boolean> {
-    try {
-      // 解析描述符数据
-      let descriptorsData: IotDescriptor[]
-      if (typeof descriptors === 'string') {
-        descriptorsData = JSON.parse(descriptors)
-      }
-      else {
-        descriptorsData = descriptors
-      }
-
-      // 检查是否为数组
-      if (!Array.isArray(descriptorsData)) {
-        logger.error('IoT descriptors 应该是数组')
-        return false
-      }
-
-      // 为每个描述符发送单独的消息
-      for (let i = 0; i < descriptorsData.length; i++) {
-        const descriptor = descriptorsData[i]
-        if (!descriptor) {
-          logger.error(`索引 ${i} 的 IoT descriptor 无效`)
-          continue
-        }
-
-        const message = {
-          session_id: this.sessionId,
-          type: 'iot',
-          update: true,
-          descriptors: [descriptor],
-        }
-
-        try {
-          const success = await this.sendText(JSON.stringify(message))
-          if (!success) {
-            logger.error(`发送索引 ${i} 的 IoT descriptor 失败`)
-          }
-        }
-        catch (error) {
-          logger.error(`发送索引 ${i} 的 IoT descriptor 异常:`, error)
-        }
-      }
-
-      return true
-    }
-    catch (error) {
-      logger.error('解析 IoT descriptors 失败', error)
-      return false
-    }
-  }
-
-  /**
-   * 发送 IoT 设备状态信息
-   */
-  async sendIotStates(states: Record<string, unknown> | string): Promise<boolean> {
-    try {
-      let statesData: Record<string, unknown>
-      if (typeof states === 'string') {
-        statesData = JSON.parse(states)
-      }
-      else {
-        statesData = states
-      }
-
-      const message = {
-        session_id: this.sessionId,
-        type: 'iot',
-        update: true,
-        states: statesData,
-      }
-
-      return await this.sendText(JSON.stringify(message))
-    }
-    catch (error) {
-      logger.error('发送 IoT states 失败', error)
-      return false
-    }
   }
 
   /**

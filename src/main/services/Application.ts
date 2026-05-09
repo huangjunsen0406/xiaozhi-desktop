@@ -6,7 +6,6 @@ import { DeviceStateValue, ListeningModeValue } from '@shared/types'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { ChatPlugin } from '../plugins/ChatPlugin'
-// import { IoTPlugin } from '../plugins/IoTPlugin'
 import { Live2DPlugin } from '../plugins/Live2DPlugin'
 import { McpPlugin } from '../plugins/McpPlugin'
 import { PluginManager } from '../plugins/PluginManager'
@@ -117,7 +116,6 @@ export class Application {
       new Live2DPlugin(),
       new McpPlugin(),
       new ChatPlugin(),
-      // new IoTPlugin(),
       this.wakeWordPlugin,
       new UIPlugin(),
     )

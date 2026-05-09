@@ -10,7 +10,9 @@ import type {
   StartCountdownResult,
   TimerInfo,
 } from './types'
+import { getApplication } from '../../../services/Application'
 import { getLogger } from '../../../utils/logger'
+import { getMcpContext } from '../../McpContext'
 
 const logger = getLogger('TimerService')
 
@@ -263,12 +265,11 @@ export class TimerService {
       // 解析 MCP 工具调用命令
       const commandObj = JSON.parse(task.command) as MCPCommand
 
-      // 获取 MCP Server 并执行工具
-      const { McpServer } = await import('../../McpServer')
-      const mcpServer = McpServer.getInstance()
+      // 获取 McpContext 并执行工具
+      const mcpContext = getMcpContext()
 
       // 查找工具
-      const tool = mcpServer.findTool(commandObj.name)
+      const tool = mcpContext.findTool(commandObj.name)
 
       if (!tool) {
         throw new Error(`MCP tool not found: ${commandObj.name}`)
@@ -299,7 +300,6 @@ export class TimerService {
   ): Promise<void> {
     try {
       // 获取 Application 实例并发送 TTS
-      const { getApplication } = await import('../../../services/Application')
       const app = getApplication()
 
       let message = ''
