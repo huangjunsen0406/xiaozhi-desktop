@@ -26,11 +26,10 @@ extraResources:
     to: live2d-models
 
 asarUnpack:
-  # ASAR 解包: 需要从文件系统直接访问的资源
-  # 注意: .node 文件会被 electron-builder 自动识别并排除在 asar 之外,无需显式配置
-  - resources/**
+  # ASAR 解包: 原生 .node 模块需要在文件系统中直接访问
+  # 注意: resources/ 不需要 unpack，唤醒词模型已通过 extraResources 处理，图标可在 asar 内正常访问
   - node_modules/sherpa-onnx-*/**/*
-  # sharp 和 @img 不需要解包,可以在 asar 中正常工作
+  # sharp 和 @img 不需要解包，可以在 asar 中正常工作
 
 win:
   executableName: xiaozhi-desktop
@@ -48,9 +47,8 @@ win:
     - target: nsis
       arch:
         - x64
-        - arm64
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

@@ -44,6 +44,12 @@ jobs:
         with:
           version: 9
 
+      - name: Override supported architectures (only install current platform native deps)
+        shell: bash
+        run: |
+          echo "supportedArchitectures.os=current" >> .npmrc
+          echo "supportedArchitectures.cpu=current" >> .npmrc
+
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
