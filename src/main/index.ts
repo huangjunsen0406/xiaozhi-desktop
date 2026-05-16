@@ -12,7 +12,7 @@ import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
 import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
-import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentModeWindow, onDisplayModeChange, setIsQuitting } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentDisplayMode, getCurrentModeWindow, onDisplayModeChange, setIsQuitting, toggleToChat, toggleToLive2d, toggleToMini, toggleToPets } from './windows/windowManager'
 
 const logger = getLogger('Index')
 const APP_DISPLAY_NAME = '小智'
@@ -191,8 +191,26 @@ app.whenReady().then(async () => {
   const ipcContext: IpcContext = { container }
   registerAppIpcChannels(ipcContext)
 
-  // 先显示主窗口，让用户看到界面
-  ensureMainWindow()
+  // 根据上次保存的显示模式恢复对应窗口
+  const savedMode = getCurrentDisplayMode()
+  switch (savedMode) {
+    case 'mini':
+      ensureMainWindow() // mini 模式需要主窗口先创建
+      toggleToMini()
+      break
+    case 'chat':
+      toggleToChat()
+      break
+    case 'live2d':
+      toggleToLive2d()
+      break
+    case 'pets':
+      toggleToPets()
+      break
+    default:
+      ensureMainWindow()
+      break
+  }
 
   // 异步检查激活状态
   activationService.checkActivationStatus().then((result) => {

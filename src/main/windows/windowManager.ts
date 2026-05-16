@@ -1,5 +1,8 @@
 import type { BrowserWindow } from 'electron'
+import fs from 'node:fs'
+import path from 'node:path'
 import process from 'node:process'
+import { app } from 'electron'
 import { hide as hideHover } from '../hover/controller'
 import { getLogger } from '../utils/logger'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
@@ -21,7 +24,41 @@ const windowRefs = {
 
 // 显示模式状态管理
 type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
-let currentDisplayMode: DisplayMode = 'main'
+
+// 显示模式持久化文件路径
+const DISPLAY_MODE_FILE = path.join(app.getPath('userData'), 'display-mode.json')
+
+/**
+ * 保存显示模式到磁盘
+ */
+function saveDisplayMode(mode: DisplayMode): void {
+  try {
+    fs.writeFileSync(DISPLAY_MODE_FILE, JSON.stringify({ mode }), 'utf-8')
+  }
+  catch (error) {
+    logger.warn('保存显示模式失败', error)
+  }
+}
+
+/**
+ * 从磁盘加载显示模式
+ */
+function loadDisplayMode(): DisplayMode {
+  try {
+    const data = JSON.parse(fs.readFileSync(DISPLAY_MODE_FILE, 'utf-8'))
+    const mode = data?.mode
+    // 校验是否为合法值
+    if (mode === 'main' || mode === 'mini' || mode === 'chat' || mode === 'live2d' || mode === 'pets') {
+      return mode
+    }
+    return 'main'
+  }
+  catch {
+    return 'main'
+  }
+}
+
+let currentDisplayMode: DisplayMode = loadDisplayMode()
 let onDisplayModeChanged: ((mode: DisplayMode) => void) | null = null
 
 // 应用退出标志（用于区分关闭窗口和退出应用）
@@ -35,11 +72,12 @@ export function getCurrentDisplayMode(): DisplayMode {
 }
 
 /**
- * 设置显示模式（内部使用，更新状态并触发回调）
+ * 设置显示模式（内部使用，更新状态并触发回调，同时持久化到磁盘）
  */
 function setDisplayMode(mode: DisplayMode): void {
   if (currentDisplayMode !== mode) {
     currentDisplayMode = mode
+    saveDisplayMode(mode)
     logger.info(`显示模式已切换: ${mode}`)
 
     // 触发回调更新菜单

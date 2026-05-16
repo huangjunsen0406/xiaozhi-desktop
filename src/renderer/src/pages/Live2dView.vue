@@ -168,10 +168,10 @@ function handleStateChanged(state: AppStateSnapshot): void {
     hideBubble()
   }
   else if (deviceState === 'connecting') {
-    showBubble('🔗 连接中...')
+    showBubble('连接中...')
   }
   else if (deviceState === 'listening') {
-    showBubble('🎤 聆听中...')
+    showBubble('聆听中...')
   }
   // speaking 状态下等服务器消息内容填充
 }
@@ -459,8 +459,12 @@ function startLipSyncAnimation(): void {
 
 /* 气泡 */
 .bubble {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   max-width: 180px;
-  margin-top: 8px;
   z-index: 10;
   pointer-events: none;
 }
