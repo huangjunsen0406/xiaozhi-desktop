@@ -142,6 +142,21 @@ export interface DbSessionStats {
 }
 
 /**
+ * 音乐配置表类型
+ */
+export interface DbMusicConfig {
+  id: number
+  search_url: string
+  url_api: string
+  url_api_key: string
+  lyrics_url: string
+  default_source: string
+  default_quality: string
+  created_at: number
+  updated_at: number
+}
+
+/**
  * 快捷键配置表类型
  */
 export interface DbShortcutConfig {

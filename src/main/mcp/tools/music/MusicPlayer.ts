@@ -1,6 +1,7 @@
 /**
  * 音乐播放器服务
  * 管理音乐播放状态，通过 IPC 与渲染进程通信
+ * 使用酷我搜索 + 落雪音乐直链 API
  */
 
 import type {
@@ -20,11 +21,31 @@ import type {
   SetVolumeResult,
   StopMusicResult,
 } from './types'
+import { DatabaseManager } from '../../../services/database'
 import { getLogger } from '../../../utils/logger'
-
 import { ensureBackgroundAudioWindow } from '../../../windows/windowManager'
 
 const logger = getLogger('MusicPlayer')
+
+/** 音乐配置接口 */
+interface MusicConfig {
+  searchUrl: string
+  urlApi: string
+  urlApiKey: string
+  lyricsUrl: string
+  defaultSource: string
+  defaultQuality: string
+}
+
+/** 默认音乐配置 */
+const DEFAULT_MUSIC_CONFIG: MusicConfig = {
+  searchUrl: 'http://search.kuwo.cn/r.s',
+  urlApi: 'https://lxmusicapi.onrender.com',
+  urlApiKey: 'share-v3',
+  lyricsUrl: 'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
+  defaultSource: 'kw',
+  defaultQuality: '320k',
+}
 
 /**
  * 音乐播放器服务（单例）
@@ -42,9 +63,6 @@ export class MusicPlayer {
   private playbackRate = 1.0
   private error: string | undefined
 
-  // 音乐 API 配置
-  private readonly MUSIC_API_BASE = 'https://music-dl.sayqz.com/api/'
-
   private constructor() {
     logger.info('音乐播放器初始化')
   }
@@ -60,15 +78,27 @@ export class MusicPlayer {
   }
 
   /**
-   * 从 URL 中提取平台信息
+   * 获取音乐配置（从数据库读取，带默认值）
    */
-  private extractPlatformFromUrl(url: string): string | undefined {
+  private getMusicConfig(): MusicConfig {
     try {
-      const urlObj = new URL(url)
-      return urlObj.searchParams.get('source') || undefined
+      const db = DatabaseManager.getInstance()
+      const dbConfig = db.getMusicConfig()
+      if (!dbConfig) {
+        return { ...DEFAULT_MUSIC_CONFIG }
+      }
+      return {
+        searchUrl: dbConfig.search_url || DEFAULT_MUSIC_CONFIG.searchUrl,
+        urlApi: dbConfig.url_api || DEFAULT_MUSIC_CONFIG.urlApi,
+        urlApiKey: dbConfig.url_api_key || DEFAULT_MUSIC_CONFIG.urlApiKey,
+        lyricsUrl: dbConfig.lyrics_url || DEFAULT_MUSIC_CONFIG.lyricsUrl,
+        defaultSource: dbConfig.default_source || DEFAULT_MUSIC_CONFIG.defaultSource,
+        defaultQuality: dbConfig.default_quality || DEFAULT_MUSIC_CONFIG.defaultQuality,
+      }
     }
-    catch {
-      return undefined
+    catch (error) {
+      logger.warn('读取音乐配置失败，使用默认值', error)
+      return { ...DEFAULT_MUSIC_CONFIG }
     }
   }
 
@@ -97,7 +127,7 @@ export class MusicPlayer {
         name: metadata?.name,
         artist: metadata?.artist,
         album: metadata?.album,
-        platform: this.extractPlatformFromUrl(filePath),
+        platform: this.getMusicConfig().defaultSource,
       }
 
       // 发送播放指令到渲染进程
@@ -110,8 +140,6 @@ export class MusicPlayer {
       })
 
       if (success) {
-        // 不在这里设置状态,等待渲染进程的状态更新
-        // this.currentState = 'playing' // <- 移除:状态由渲染进程更新
         logger.info(`播放指令已发送`)
         return {
           success: true,
@@ -158,8 +186,6 @@ export class MusicPlayer {
       const success = await this.sendCommand('pause')
 
       if (success) {
-        // 不在这里设置状态,等待渲染进程的状态更新
-        // this.currentState = 'paused' // <- 移除:状态由渲染进程更新
         return {
           success: true,
           message: '暂停指令已发送',
@@ -199,8 +225,6 @@ export class MusicPlayer {
       const success = await this.sendCommand('resume')
 
       if (success) {
-        // 不在这里设置状态,等待渲染进程的状态更新
-        // this.currentState = 'playing' // <- 移除:状态由渲染进程更新
         return {
           success: true,
           message: '恢复播放指令已发送',
@@ -239,9 +263,6 @@ export class MusicPlayer {
       const success = await this.sendCommand('stop')
 
       if (success) {
-        // 不在这里设置状态,等待渲染进程的状态更新
-        // this.currentState = 'stopped' // <- 移除:状态由渲染进程更新
-        // this.currentTime = 0 // <- 由渲染进程更新
         return {
           success: true,
           message: '停止播放指令已发送',
@@ -328,8 +349,6 @@ export class MusicPlayer {
       const success = await this.sendCommand('seek', { position })
 
       if (success) {
-        // 不在这里设置位置,等待渲染进程的状态更新
-        // this.currentTime = position // <- 移除:由渲染进程更新
         return {
           success: true,
           message: `跳转指令已发送到 ${position.toFixed(1)} 秒`,
@@ -475,53 +494,102 @@ export class MusicPlayer {
   }
 
   /**
-   * 搜索音乐
+   * 搜索音乐（酷我搜索 API）
    */
-  async search(keyword: string, platform: MusicPlatform = 'kuwo', limit = 20): Promise<SearchMusicResult> {
+  async search(keyword: string, _platform: MusicPlatform = 'kuwo', limit = 20): Promise<SearchMusicResult> {
     try {
-      logger.info(`搜索音乐: ${keyword}, 平台: ${platform}`)
+      logger.info(`搜索音乐: ${keyword}`)
 
-      const params = new URLSearchParams({
-        type: 'search',
-        source: platform,
-        keyword,
-        limit: String(limit),
-      })
+      const config = this.getMusicConfig()
+      const keywordEncoded = encodeURIComponent(keyword)
 
-      const url = `${this.MUSIC_API_BASE}?${params.toString()}`
-      logger.info(`请求 URL: ${url}`)
+      const searchUrl = `${config.searchUrl}?client=kt&all=${keywordEncoded}&pn=0&rn=${limit}`
+        + `&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1`
+        + `&show_copyright_off=1&newver=1&ft=music&cluster=0`
+        + `&strategy=2012&encoding=utf8&rformat=json&vermerge=1`
+        + `&mobi=1&issubtitle=1`
 
-      const response = await fetch(url)
+      logger.info(`请求 URL: ${searchUrl}`)
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Connection': 'keep-alive',
+      }
+
+      // 搜索超时重试，最多 2 次
+      let response: Response | null = null
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 10000)
+
+          response = await fetch(searchUrl, {
+            headers,
+            signal: controller.signal,
+          })
+
+          clearTimeout(timeoutId)
+          break
+        }
+        catch (err) {
+          if (attempt < 2) {
+            logger.warn(`搜索超时，重试 (${attempt + 1}/2)`)
+            continue
+          }
+          throw new Error(`搜索超时，已重试 2 次: ${err instanceof Error ? err.message : '未知错误'}`)
+        }
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(`HTTP ${response?.status}: ${response?.statusText}`)
       }
 
       const data = await response.json() as {
-        code: number
-        message: string
-        data?: {
-          keyword: string
-          total: number
-          results: MusicSearchResult[]
-        }
+        abslist?: Array<{
+          MUSICRID: string
+          SONGNAME: string
+          ARTIST: string
+          ALBUM: string
+          DURATION: string
+        }>
       }
 
-      if (data.code !== 200 || !data.data) {
+      const abslist = data.abslist || []
+      if (abslist.length === 0) {
         return {
-          success: false,
-          message: data.message || '搜索失败',
+          success: true,
+          message: `未找到与 "${keyword}" 相关的歌曲`,
+          keyword,
+          total: 0,
+          results: [],
         }
       }
 
-      logger.info(`搜索到 ${data.data.total} 首歌曲`)
+      // 映射为兼容的 MusicSearchResult 格式
+      const results: MusicSearchResult[] = abslist.map((item) => {
+        const songId = item.MUSICRID ? item.MUSICRID.replace('MUSIC_', '') : ''
+        return {
+          id: songId,
+          name: item.SONGNAME || '',
+          artist: item.ARTIST || '',
+          album: item.ALBUM || '',
+          url: '', // URL 需要通过 resolvePlayUrl 解析
+          pic: '',
+          lrc: '',
+          platform: 'kuwo' as MusicPlatform,
+        }
+      })
+
+      logger.info(`搜索到 ${results.length} 首歌曲`)
 
       return {
         success: true,
-        message: `找到 ${data.data.total} 首歌曲`,
-        keyword: data.data.keyword,
-        total: data.data.total,
-        results: data.data.results,
+        message: `找到 ${results.length} 首歌曲`,
+        keyword,
+        total: results.length,
+        results,
       }
     }
     catch (error) {
@@ -534,37 +602,161 @@ export class MusicPlayer {
   }
 
   /**
-   * 获取歌词
+   * 解析实际播放 URL（落雪音乐直链 API）
    */
-  async getLyrics(songId: string, platform: MusicPlatform = 'kuwo'): Promise<GetLyricsResult> {
+  async resolvePlayUrl(songId: string): Promise<string | null> {
     try {
-      logger.info(`获取歌词: ID=${songId}, 平台=${platform}`)
+      const config = this.getMusicConfig()
+      const apiUrl = `${config.urlApi}/url/${config.defaultSource}/${songId}/${config.defaultQuality}`
 
-      const params = new URLSearchParams({
-        type: 'lrc',
-        source: platform,
-        id: songId,
+      logger.info(`解析直链: ${apiUrl}`)
+
+      const headers = {
+        'X-Request-Key': config.urlApiKey,
+        'User-Agent': 'lx-music-request',
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+      const response = await fetch(apiUrl, {
+        headers,
+        signal: controller.signal,
       })
 
-      const url = `${this.MUSIC_API_BASE}?${params.toString()}`
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        logger.error(`直链 API 返回错误: HTTP ${response.status}`)
+        return null
+      }
+
+      const data = await response.json() as Record<string, unknown>
+
+      // 尝试多种响应格式
+      let realUrl: string | null = null
+      if (typeof data === 'object' && data !== null) {
+        if (typeof data.url === 'string') {
+          realUrl = data.url
+        }
+        else if (data.data) {
+          if (typeof data.data === 'object' && data.data !== null) {
+            const inner = data.data as Record<string, unknown>
+            if (typeof inner.url === 'string') {
+              realUrl = inner.url
+            }
+          }
+          else if (typeof data.data === 'string') {
+            realUrl = data.data
+          }
+        }
+      }
+
+      if (!realUrl) {
+        logger.error(`未能从直链 API 提取播放 URL: ${JSON.stringify(data)}`)
+        return null
+      }
+
+      logger.info(`解析到播放地址: ${realUrl.substring(0, 80)}...`)
+      return realUrl
+    }
+    catch (error) {
+      logger.error('解析播放 URL 失败', error)
+      return null
+    }
+  }
+
+  /**
+   * 获取歌词（酷我歌词 API）
+   */
+  async getLyrics(songId: string, _platform: MusicPlatform = 'kuwo'): Promise<GetLyricsResult> {
+    try {
+      logger.info(`获取歌词: ID=${songId}`)
+
+      const config = this.getMusicConfig()
+      const url = `${config.lyricsUrl}?musicId=${songId}`
       logger.info(`请求 URL: ${url}`)
 
-      const response = await fetch(url)
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*',
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+
+      const response = await fetch(url, {
+        headers,
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const lyrics = await response.text()
+      const data = await response.json() as {
+        status?: number
+        data?: {
+          lrclist?: Array<{
+            time: string
+            lineLyric: string
+          }>
+        }
+      }
 
-      if (!lyrics || lyrics.trim().length === 0) {
+      if (data.status !== 200) {
+        return {
+          success: false,
+          message: '该歌曲暂无歌词',
+        }
+      }
+
+      const lrclist = data.data?.lrclist
+      if (!lrclist || lrclist.length === 0) {
         return {
           success: false,
           message: '未找到歌词',
         }
       }
 
-      logger.info(`歌词获取成功`)
+      // 转换为 LRC 格式字符串
+      const lrcLines: string[] = []
+      for (const item of lrclist) {
+        const text = item.lineLyric?.trim()
+        if (!text || !item.time) {
+          continue
+        }
+
+        let timeSec: number
+        try {
+          timeSec = Number.parseFloat(item.time)
+        }
+        catch {
+          continue
+        }
+
+        if (Number.isNaN(timeSec)) {
+          continue
+        }
+
+        // 转换秒数为 [mm:ss.xx] 格式
+        const minutes = Math.floor(timeSec / 60)
+        const seconds = timeSec - minutes * 60
+        const timeTag = `[${String(minutes).padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`
+        lrcLines.push(`${timeTag} ${text}`)
+      }
+
+      if (lrcLines.length === 0) {
+        return {
+          success: false,
+          message: '未找到歌词',
+        }
+      }
+
+      const lyrics = lrcLines.join('\n')
+      logger.info(`歌词获取成功，共 ${lrcLines.length} 行`)
 
       return {
         success: true,

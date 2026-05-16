@@ -7,6 +7,7 @@ import type {
   DbChatMessage,
   DbChatSession,
   DbDeviceInfo,
+  DbMusicConfig,
   DbNetworkConfig,
   DbSessionStats,
   DbShortcutConfig,
@@ -184,6 +185,20 @@ export class DatabaseManager {
         is_global INTEGER DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
+      )
+    `)
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS music_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        search_url TEXT DEFAULT 'http://search.kuwo.cn/r.s',
+        url_api TEXT DEFAULT 'https://lxmusicapi.onrender.com',
+        url_api_key TEXT DEFAULT 'share-v3',
+        lyrics_url TEXT DEFAULT 'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
+        default_source TEXT DEFAULT 'kw',
+        default_quality TEXT DEFAULT '320k',
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
     `)
 
@@ -760,6 +775,53 @@ export class DatabaseManager {
       jpegQuality: config.jpeg_quality || 80,
       maxDimension: config.max_dimension || 320,
     }
+  }
+
+  getOrCreateMusicConfig(): DbMusicConfig {
+    const existing = this.db.prepare('SELECT * FROM music_config ORDER BY id DESC LIMIT 1').get()
+
+    if (existing) {
+      return existing as DbMusicConfig
+    }
+
+    const result = this.db.prepare(`
+      INSERT INTO music_config (search_url, url_api, url_api_key, lyrics_url, default_source, default_quality)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      'http://search.kuwo.cn/r.s',
+      'https://lxmusicapi.onrender.com',
+      'share-v3',
+      'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
+      'kw',
+      '320k',
+    )
+
+    return this.db.prepare('SELECT * FROM music_config WHERE id = ?').get(result.lastInsertRowid) as DbMusicConfig
+  }
+
+  getMusicConfig(): DbMusicConfig | undefined {
+    return this.db.prepare('SELECT * FROM music_config ORDER BY id DESC LIMIT 1').get() as DbMusicConfig | undefined
+  }
+
+  updateMusicConfig(updates: Partial<Omit<DbMusicConfig, 'id' | 'created_at' | 'updated_at'>>): void {
+    let config = this.getMusicConfig()
+    if (!config) {
+      config = this.getOrCreateMusicConfig()
+    }
+
+    const fields = Object.keys(updates).filter(k => updates[k as keyof typeof updates] !== undefined)
+    if (fields.length === 0) {
+      return
+    }
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ')
+    const values = fields.map(f => updates[f as keyof typeof updates])
+
+    this.db.prepare(`
+      UPDATE music_config
+      SET ${setClause}, updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `).run(...values, config.id)
   }
 
   createChatSession(data: {

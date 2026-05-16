@@ -161,20 +161,22 @@ Examples:
       },
     ])
 
-    const description = `Play music from a URL or local file path.
+    const description = `Play music from a song ID (from search results) or a direct URL/local file path.
 Supports:
-- Online music URLs (from search results)
+- Song ID from search results (will resolve actual play URL via API)
+- Direct audio URLs (http/https)
 - Local audio files (MP3, FLAC, WAV, OGG, AAC, M4A)
 
 Use this tool when:
 1. User asks to play a song after searching
-2. User provides a music URL
+2. User provides a music URL or song ID
 3. User wants to play local audio files
 4. User specifies a starting position
 
 Parameters:
-- file_path: Music URL or local file path (required)
-  - URL format: https://music-dl.sayqz.com/api/?source=kuwo&id=828701&type=url
+- file_path: Song ID from search results, direct URL, or local file path (required)
+  - Song ID format: "828701" (numeric ID from search results)
+  - URL format: https://example.com/audio.mp3
   - Local format: /path/to/song.mp3
 - start_position: Starting position in seconds (optional, default: 0)
 - song_name: Song name from search results (optional, for better user feedback)
@@ -182,20 +184,20 @@ Parameters:
 - album: Album name from search results (optional, for better user feedback)
 
 Examples:
-- "播放第一首" -> file_path="<url>", song_name="菊花台", artist="周杰伦", album="依然范特西"
-- "Play the song" -> file_path="https://music-dl.sayqz.com/...", start_position=0
-- "从30秒开始播放" -> file_path="<url>", start_position=30
+- "播放第一首" -> file_path="828701", song_name="菊花台", artist="周杰伦", album="依然范特西"
+- "Play the first result" -> file_path="<id from search>", song_name="...", artist="..."
+- "从30秒开始播放" -> file_path="<id>", start_position=30
 
 Workflow:
 1. First use self.music.search to find songs
-2. Extract song info (name, artist, album) from search results
-3. Call self.music.play with url AND song metadata
+2. Extract the song id, name, artist, album from search results
+3. Call self.music.play with the song id as file_path AND song metadata
 4. Optionally use self.music.get_lyrics to show lyrics
 
 Returns:
 - success: Whether playback started successfully
 - message: Status message
-- file: The URL/path being played
+- file: The actual URL being played
 - startPosition: The starting position
 - songInfo: Song metadata (name, artist, album, duration, platform) if provided`
 
@@ -204,11 +206,24 @@ Returns:
       description,
       props,
       async (args: Record<string, unknown>): Promise<string> => {
-        const filePath = args.file_path as string
+        let filePath = args.file_path as string
         const startPosition = (args.start_position as number) || 0
         const songName = (args.song_name as string) || ''
         const artist = (args.artist as string) || ''
         const album = (args.album as string) || ''
+
+        // 如果 filePath 是纯数字（歌曲 ID），先解析直链
+        if (/^\d+$/.test(filePath)) {
+          logger.info(`检测到歌曲 ID: ${filePath}，开始解析播放 URL`)
+          const resolvedUrl = await this.musicPlayer.resolvePlayUrl(filePath)
+          if (!resolvedUrl) {
+            return JSON.stringify({
+              success: false,
+              message: `无法解析歌曲 ID ${filePath} 的播放地址，直链 API 可能不可用`,
+            }, null, 2)
+          }
+          filePath = resolvedUrl
+        }
 
         const result = await this.musicPlayer.play(filePath, startPosition, {
           name: songName,
