@@ -77,15 +77,16 @@ export function registerChatIpc(): void {
     try {
       const messages = db.getChatMessages(sessionId, limit, offset)
 
-      // 将 Buffer 转换为 Uint8Array，以便正确传输到渲染进程
+      // 将 DB 记录转换为 IPC 传输格式：Buffer -> Uint8Array, source_type -> sourceType
       const processedMessages = messages.map((msg: DbChatMessage) => {
-        if (msg.image_data && Buffer.isBuffer(msg.image_data)) {
-          return {
-            ...msg,
-            image_data: new Uint8Array(msg.image_data),
-          }
+        const { source_type, image_data, ...rest } = msg
+        return {
+          ...rest,
+          sourceType: source_type,
+          image_data: image_data && Buffer.isBuffer(image_data)
+            ? new Uint8Array(image_data)
+            : image_data,
         }
-        return msg
       })
 
       return { success: true, data: processedMessages }
@@ -107,7 +108,7 @@ export function registerChatIpc(): void {
     role: 'user' | 'assistant'
     content: string
     emotion?: string
-    source_type: string
+    sourceType: string
     image_data?: Buffer | Uint8Array
     timestamp?: number
   }) => {
@@ -120,9 +121,15 @@ export function registerChatIpc(): void {
           : Buffer.from(data.image_data)
       }
 
+      // Translate sourceType -> source_type for DB layer
       const message = db.addChatMessage({
-        ...data,
+        session_id: data.session_id,
+        role: data.role,
+        content: data.content,
+        emotion: data.emotion,
+        source_type: data.sourceType,
         image_data: imageData,
+        timestamp: data.timestamp,
       })
       return { success: true, data: message }
     }

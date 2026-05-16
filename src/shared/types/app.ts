@@ -14,6 +14,3 @@ export interface AppStateSnapshot {
   keepListening: boolean
   channelOpen: boolean
 }
-
-// 兼容旧命名
-export type AppStateSnapshotRaw = AppStateSnapshot

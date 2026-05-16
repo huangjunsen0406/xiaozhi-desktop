@@ -48,10 +48,4 @@ export interface BackgroundAudioStatus {
   error?: string
 }
 
-export interface BackgroundAudioStateUpdate {
-  state?: string
-  capturing?: boolean
-  playing?: boolean
-  initialized?: boolean
-  error?: string
-}
+export type BackgroundAudioStateUpdate = Partial<BackgroundAudioStatus> & { state?: string }

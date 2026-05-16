@@ -1,10 +1,12 @@
+export type SourceType = 'text' | 'voice' | 'tts' | 'image'
+
 export interface ChatMessage {
   id?: number
   session_id: string
   role: 'user' | 'assistant'
   content: string
   emotion?: string | null
-  source_type: string
+  sourceType: SourceType
   image_data?: Uint8Array | null
   timestamp: number
   isStreaming?: boolean
@@ -24,7 +26,7 @@ export interface AddMessageParams {
   session_id: string
   role: 'user' | 'assistant'
   content: string
-  source_type?: 'text' | 'voice' | 'tts' | 'image'
+  sourceType?: SourceType
   emotion?: string
   image_data?: Uint8Array
   timestamp: number

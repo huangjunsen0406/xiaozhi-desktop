@@ -118,13 +118,13 @@ export function registerActivationIpc(): void {
    */
   ipcMain.handle('activation:check-status', () => {
     try {
-      const isActivated = activationService.isActivated()
-      logger.info('检查激活状态', isActivated)
-      return { isActivated }
+      const activated = activationService.isActivated()
+      logger.info('检查激活状态', activated)
+      return { activated }
     }
     catch (error) {
       logger.error('检查激活状态失败', error)
-      return { isActivated: false }
+      return { activated: false }
     }
   })
 

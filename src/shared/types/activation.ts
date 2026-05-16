@@ -17,7 +17,6 @@ export interface ActivationResult {
 
 export interface ActivationStatus {
   activated: boolean
-  isActivated?: boolean
   message?: string
 }
 

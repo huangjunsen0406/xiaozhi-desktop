@@ -1,4 +1,5 @@
 import type { ShortcutConfig } from '@shared/types'
+import type { DbShortcutConfig } from '../types/database'
 import type { Application } from './Application'
 import type { DatabaseManager } from './database'
 import { globalShortcut } from 'electron'
@@ -12,6 +13,21 @@ import {
   toggleToMain,
   toggleToMini,
 } from '../windows/windowManager'
+
+/**
+ * Convert DB shortcut record (number fields) to shared ShortcutConfig (boolean fields)
+ */
+function dbToShortcutConfig(row: DbShortcutConfig): ShortcutConfig {
+  return {
+    id: row.id,
+    action: row.action,
+    name: row.name,
+    category: row.category,
+    accelerator: row.accelerator,
+    enabled: Boolean(row.enabled),
+    isGlobal: Boolean(row.is_global),
+  }
+}
 
 export class ShortcutManager {
   private db: DatabaseManager
@@ -32,7 +48,8 @@ export class ShortcutManager {
   }
 
   async loadShortcuts(): Promise<ShortcutConfig[]> {
-    const shortcuts = this.db.getShortcuts() as ShortcutConfig[]
+    const dbShortcuts = this.db.getShortcuts()
+    const shortcuts = dbShortcuts.map(dbToShortcutConfig)
     this.shortcuts.clear()
     shortcuts.forEach(s => this.shortcuts.set(s.action, s))
     return shortcuts
@@ -42,7 +59,7 @@ export class ShortcutManager {
     await this.loadShortcuts()
 
     for (const [action, config] of this.shortcuts) {
-      if (config.enabled && config.is_global && config.accelerator) {
+      if (config.enabled && config.isGlobal && config.accelerator) {
         this.registerShortcut(action, config.accelerator)
       }
     }

@@ -9,8 +9,8 @@ interface ShortcutConfig {
   name: string
   category: string
   accelerator: string | null
-  enabled: number
-  is_global: number
+  enabled: boolean
+  isGlobal: boolean
 }
 
 const message = useMessage()

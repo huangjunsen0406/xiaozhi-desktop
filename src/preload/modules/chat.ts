@@ -72,7 +72,7 @@ export const chatApi = {
     role: 'user' | 'assistant'
     content: string
     emotion?: string
-    source_type: string
+    sourceType: string
     image_data?: Uint8Array
     timestamp?: number
   }): Promise<ChatMessage> => {
