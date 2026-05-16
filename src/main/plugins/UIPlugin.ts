@@ -1,7 +1,9 @@
-import type { DeviceState } from '@shared/types'
+import type { PluginCommands, PluginContext, StateChangeData } from '../core'
 import type { JsonMessage } from '../types/protocol'
+import type { AudioPlugin } from './AudioPlugin'
 import { ListeningModeValue } from '@shared/types'
 import { webContents } from 'electron'
+import { Events } from '../core'
 import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
 
@@ -21,6 +23,8 @@ export class UIPlugin extends Plugin {
   readonly name = 'UIPlugin'
   readonly priority = 60 // UI 插件在其他插件之后初始化
 
+  static readonly dependencies: string[] = ['AudioPlugin']
+
   readonly metadata = {
     name: 'UIPlugin',
     version: '1.0.0',
@@ -29,33 +33,43 @@ export class UIPlugin extends Plugin {
   }
 
   /**
-   * 处理收到的 JSON 消息
+   * 插件初始化
    */
-  async onIncomingJson(message: JsonMessage): Promise<void> {
-    // 广播服务器消息到所有渲染进程（排除后台音频窗口）
-    this.broadcastToRenderer('server:message', message)
-  }
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    await super.setup(ctx, cmd)
 
-  /**
-   * 设备状态变化回调
-   * 广播状态变化到所有渲染进程窗口
-   */
-  async onDeviceStateChanged(state: DeviceState): Promise<void> {
-    this.broadcastState(state)
+    // 订阅 JSON 消息事件
+    ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
+      const message = data as JsonMessage
+      this.broadcastToRenderer('server:message', message)
+    })
+
+    // 订阅设备状态变化事件
+    ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, (data) => {
+      const { newState } = data as StateChangeData
+      this.broadcastState(newState)
+    })
   }
 
   /**
    * 广播设备状态到渲染进程
    * @param state - 当前设备状态
    */
-  broadcastState(state: DeviceState): void {
+  broadcastState(state: string): void {
     // 获取完整的状态快照(包含 listeningMode)
-    const snapshot = this.app?.getStateSnapshot() || {
-      deviceState: state,
-      listeningMode: ListeningModeValue.MANUAL,
-      keepListening: false,
-      channelOpen: false,
-    }
+    const snapshot = this.ctx
+      ? {
+          deviceState: this.ctx.getDeviceState(),
+          listeningMode: this.ctx.getListeningMode(),
+          keepListening: false, // 由 StateManager 管理
+          channelOpen: this.ctx.isAudioChannelOpened(),
+        }
+      : {
+          deviceState: state,
+          listeningMode: ListeningModeValue.MANUAL,
+          keepListening: false,
+          channelOpen: false,
+        }
 
     this.broadcastToRenderer('app:state-changed', snapshot)
     logger.info(`已广播状态变化: ${state}`)
@@ -144,8 +158,14 @@ export class UIPlugin extends Plugin {
    * @param data - 要发送的数据
    */
   private broadcastToRenderer(channel: string, data: unknown): void {
-    const audioPlugin = this.app?.getAudioPlugin()
-    const backgroundAudioWindow = audioPlugin?.getBackgroundAudioWindow()
+    let backgroundAudioWindow: Electron.BrowserWindow | null = null
+    try {
+      const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
+      backgroundAudioWindow = audioPlugin.getBackgroundAudioWindow()
+    }
+    catch {
+      // AudioPlugin 依赖不可用，忽略
+    }
 
     // 获取所有 webContents
     const allWebContents = webContents.getAllWebContents()

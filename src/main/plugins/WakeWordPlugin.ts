@@ -1,6 +1,8 @@
-import type { Application } from '../services/Application'
+import type { PluginCommands, PluginContext } from '../core'
+import type { AudioPlugin } from './AudioPlugin'
 import path from 'node:path'
 import process from 'node:process'
+import { Events } from '../core'
 import { AbortReason } from '../protocols/Protocol'
 import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -17,6 +19,8 @@ const logger = getLogger('WakeWordPlugin')
 export class WakeWordPlugin extends Plugin {
   readonly name = 'WakeWordPlugin'
   readonly priority = 35 // 在 AudioPlugin(10) 之后启动
+
+  static readonly dependencies: string[] = ['AudioPlugin']
 
   readonly metadata = {
     name: 'WakeWordPlugin',
@@ -41,8 +45,8 @@ export class WakeWordPlugin extends Plugin {
   /**
    * 插件初始化
    */
-  async setup(app: Application): Promise<void> {
-    await super.setup(app)
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    await super.setup(ctx, cmd)
 
     logger.info('开始设置...')
 
@@ -83,14 +87,14 @@ export class WakeWordPlugin extends Plugin {
       })
 
       if (this.detector.isEnabled()) {
-        logger.info('✓ 设置完成')
+        logger.info('设置完成')
       }
       else {
-        logger.warn('✗ 检测器未启用（可能模型文件缺失）')
+        logger.warn('检测器未启用（可能模型文件缺失）')
       }
     }
     catch (error) {
-      logger.error('✗ 设置失败', error)
+      logger.error('设置失败', error)
       this.detector = null
     }
   }
@@ -130,10 +134,10 @@ export class WakeWordPlugin extends Plugin {
         this.detector.setCooldown(config.cooldownMs)
       }
 
-      logger.info('✓ 配置重新加载完成')
+      logger.info('配置重新加载完成')
     }
     catch (error) {
-      logger.error('✗ 配置重新加载失败', error)
+      logger.error('配置重新加载失败', error)
     }
   }
 
@@ -148,15 +152,10 @@ export class WakeWordPlugin extends Plugin {
       return
     }
 
-    // 订阅 AudioPlugin 的音频流
-    const audioPlugin = this.app?.getAudioPlugin()
-    if (!audioPlugin) {
-      logger.error('未找到 AudioPlugin，无法启动')
-      return
-    }
-
+    // 通过声明式依赖获取 AudioPlugin
+    const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
     audioPlugin.addAudioListener(this.detector)
-    logger.info('✓ 已订阅音频流')
+    logger.info('已订阅音频流')
 
     logger.info('音频系统将自动启动，开始监听唤醒词')
   }
@@ -165,64 +164,97 @@ export class WakeWordPlugin extends Plugin {
    * 唤醒词检测回调
    *
    * 行为规则：
-   * 1. 说话中（SPEAKING）→ 打断 → 进入自动对话
-   * 2. 空闲（IDLE）且断开连接 → 连接 → 进入自动对话
-   * 3. 手动监听（LISTENING + manual）→ 停止手动 → 进入自动对话
-   * 4. 监听中（LISTENING + auto/realtime）→ 忽略（避免重复启动）
+   * 1. 说话中（SPEAKING）-> 打断 -> 进入自动对话
+   * 2. 空闲（IDLE）且断开连接 -> 连接 -> 进入自动对话
+   * 3. 手动监听（LISTENING + manual）-> 停止手动 -> 进入自动对话
+   * 4. 监听中（LISTENING + auto/realtime）-> 忽略（避免重复启动）
    */
   private async onWakeWordDetected(keyword: string): Promise<void> {
-    logger.info(`🎤 唤醒词触发: "${keyword}"`)
+    logger.info(`唤醒词触发: "${keyword}"`)
 
-    if (!this.app) {
-      logger.error('Application 未初始化')
+    if (!this.ctx || !this.cmd) {
+      logger.error('上下文未初始化')
       return
     }
 
     try {
       // 获取当前状态
-      const snapshot = this.app.getStateSnapshot()
-      const { deviceState, listeningMode, keepListening } = snapshot
+      const deviceState = this.ctx.getDeviceState()
+      const listeningMode = this.ctx.getListeningMode()
 
-      logger.info(`当前状态: deviceState=${deviceState}, listeningMode=${listeningMode}, keepListening=${keepListening}`)
+      logger.info(`当前状态: deviceState=${deviceState}, listeningMode=${listeningMode}`)
 
       // 情况3: 手动监听中，先停止手动模式
       if (deviceState === 'listening' && listeningMode === 'manual') {
         logger.info('检测到手动模式激活，停止手动模式')
-        await this.app.stopListeningManual()
-        // 等待状态稳定
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await this.cmd.stopListening()
+        // 使用事件驱动等待状态变更而非固定延迟
+        await this.waitForStateChange()
       }
 
       // 情况1: 说话中，打断语音输出（包括半双工和全双工）
       if (deviceState === 'speaking') {
         logger.info('当前正在说话，打断输出')
-        await this.app.abortSpeaking(AbortReason.USER_INTERRUPTED)
+        await this.cmd.abortSpeaking(AbortReason.USER_INTERRUPTED)
 
         // 清空音频播放队列
-        const audioPlugin = this.app.getAudioPlugin()
-        const backgroundWindow = audioPlugin?.getBackgroundAudioWindow()
+        const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
+        const backgroundWindow = audioPlugin.getBackgroundAudioWindow()
         if (backgroundWindow && !backgroundWindow.isDestroyed()) {
           backgroundWindow.webContents.send('audio:command', 'clearQueue')
         }
 
-        // 等待音频完全停止
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // 使用事件驱动等待状态变更
+        await this.waitForStateChange()
       }
 
+      // 重新获取状态（可能已变化）
+      const currentState = this.ctx.getDeviceState()
+      const currentMode = this.ctx.getListeningMode()
+
       // 情况4: 已经在监听中（自动对话模式），忽略唤醒词（避免重复启动）
-      if (deviceState === 'listening' && keepListening && (listeningMode === 'realtime' || listeningMode === 'auto')) {
+      if (currentState === 'listening' && (currentMode === 'realtime' || currentMode === 'auto')) {
         logger.info('已在自动监听中，忽略唤醒词')
         return
       }
 
-      // 情况2 & 通用: 启动自动对话（会自动连接协议）
+      // 情况2 & 通用: 发送唤醒词检测消息并启动自动对话
       logger.info('启动自动对话')
-      await this.app.sendWakeWordDetected('唤醒')
-      await this.app.startAutoConversation()
+      await this.cmd.sendText('唤醒')
+      await this.cmd.startListening('auto')
     }
     catch (error) {
       logger.error('处理唤醒词失败', error)
     }
+  }
+
+  /**
+   * 等待设备状态变更
+   * 使用 EventBus 监听状态变更事件，带超时保护
+   */
+  private waitForStateChange(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (!this.ctx) {
+        resolve()
+        return
+      }
+
+      let resolved = false
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          resolve()
+        }
+      }, 500) // 500ms 超时保护
+
+      this.ctx.eventBus.once(Events.DEVICE_STATE_CHANGED, () => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          resolve()
+        }
+      })
+    })
   }
 
   /**
@@ -236,15 +268,18 @@ export class WakeWordPlugin extends Plugin {
     }
 
     if (this.detector) {
-      const audioPlugin = this.app?.getAudioPlugin()
-      if (audioPlugin) {
+      try {
+        const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
         audioPlugin.removeAudioListener(this.detector)
         logger.info('已取消订阅音频流')
+      }
+      catch {
+        // 依赖可能已关闭，忽略
       }
     }
 
     await super.stop()
-    logger.info('✓ 已停止')
+    logger.info('已停止')
   }
 
   /**
@@ -258,9 +293,12 @@ export class WakeWordPlugin extends Plugin {
     }
 
     if (this.detector) {
-      const audioPlugin = this.app?.getAudioPlugin()
-      if (audioPlugin) {
+      try {
+        const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
         audioPlugin.removeAudioListener(this.detector)
+      }
+      catch {
+        // 依赖可能已关闭，忽略
       }
 
       this.detector.shutdown()
@@ -268,6 +306,6 @@ export class WakeWordPlugin extends Plugin {
     }
 
     await super.shutdown()
-    logger.info('✓ 已关闭')
+    logger.info('已关闭')
   }
 }

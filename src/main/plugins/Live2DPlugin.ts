@@ -1,6 +1,7 @@
 import type { Buffer } from 'node:buffer'
-import type { Application } from '../services/Application'
+import type { PluginCommands, PluginContext } from '../core'
 import { BrowserWindow } from 'electron'
+import { Events } from '../core'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -12,14 +13,15 @@ const logger = getLogger('Live2DPlugin')
  * 负责 Live2D 口型同步
  *
  * 职责：
- * - 接收服务端返回的 Opus 音频数据
- * - 解码 Opus → PCM
+ * - 订阅 AUDIO_DECODED 事件接收已解码的 PCM 数据
  * - 计算音频音量 (RMS)
  * - 发送音量数据到 Live2D 窗口，控制口型同步
  */
 export class Live2DPlugin extends Plugin {
   readonly name = 'Live2DPlugin'
   readonly priority = 15 // 在 AudioPlugin (10) 之后，MCP (20) 之前
+
+  static readonly dependencies: string[] = ['AudioPlugin']
 
   readonly metadata = {
     name: 'Live2DPlugin',
@@ -31,12 +33,21 @@ export class Live2DPlugin extends Plugin {
   private live2dWindow: BrowserWindow | null = null
   private lastVolume = 0 // 上一帧音量，用于平滑
 
+  /** 事件处理器引用（用于移除） */
+  private audioDecodedHandler: ((data?: unknown) => void) | null = null
+
   /**
    * 插件初始化
    */
-  async setup(app: Application): Promise<void> {
-    await super.setup(app)
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    await super.setup(ctx, cmd)
     logger.info('初始化...')
+
+    // 订阅解码后的音频事件
+    this.audioDecodedHandler = (data?: unknown) => {
+      this.onDecodedAudio(data as Buffer)
+    }
+    ctx.eventBus.on(Events.AUDIO_DECODED, this.audioDecodedHandler)
   }
 
   /**
@@ -99,7 +110,7 @@ export class Live2DPlugin extends Plugin {
    */
   private calculateVolume(pcmBuffer: Buffer): number {
     try {
-      // Buffer → Int16Array
+      // Buffer -> Int16Array
       const int16Array = new Int16Array(
         pcmBuffer.buffer,
         pcmBuffer.byteOffset,
@@ -146,5 +157,20 @@ export class Live2DPlugin extends Plugin {
     await super.stop()
     this.live2dWindow = null
     logger.info('已停止')
+  }
+
+  /**
+   * 插件关闭
+   */
+  async shutdown(): Promise<void> {
+    // 移除事件监听
+    if (this.audioDecodedHandler && this.ctx) {
+      this.ctx.eventBus.off(Events.AUDIO_DECODED, this.audioDecodedHandler)
+      this.audioDecodedHandler = null
+    }
+
+    this.live2dWindow = null
+    await super.shutdown()
+    logger.info('已关闭')
   }
 }

@@ -1,8 +1,4 @@
-import type { DeviceState } from '@shared/types'
-import type { Buffer } from 'node:buffer'
-import type { Protocol } from '../protocols/Protocol'
-import type { Application } from '../services/Application'
-import type { JsonMessage } from '../types/protocol'
+import type { PluginCommands, PluginContext } from '../core'
 import type { Logger } from '../utils/logger'
 import { getLogger } from '../utils/logger'
 
@@ -16,7 +12,7 @@ export enum PluginState {
   INITIALIZED = 'initialized',
   /** 运行中 */
   RUNNING = 'running',
-  /** 已停止 */
+  /** 已��止 */
   STOPPED = 'stopped',
   /** 已关闭 */
   SHUTDOWN = 'shutdown',
@@ -36,13 +32,16 @@ export interface PluginMetadata {
   description?: string
   /** 插件作者 */
   author?: string
-  /** 插件依赖 */
-  dependencies?: string[]
 }
 
 /**
  * 插件基类
  * 所有插件必须继承此类并实现相关生命周期方法
+ *
+ * 生命周期: register -> topologicalSort -> setup -> start -> (running) -> stop -> shutdown
+ *
+ * 插件通过 PluginContext（只读）和 PluginCommands（操作）与核心交互，
+ * 不再直接持有 Application 引用。
  */
 export abstract class Plugin {
   /**
@@ -55,6 +54,12 @@ export abstract class Plugin {
    * 默认为 50
    */
   readonly priority: number = 50
+
+  /**
+   * 声明式依赖
+   * 子类覆盖此静态属性声明自己依赖的插件名称列表
+   */
+  static readonly dependencies: string[] = []
 
   /**
    * 插件元数据（可选）
@@ -72,9 +77,19 @@ export abstract class Plugin {
   private _enabled: boolean = true
 
   /**
-   * 应用实例引用
+   * 插件上下文（只读状态查询）
    */
-  protected app: Application | null = null
+  protected ctx: PluginContext | null = null
+
+  /**
+   * 插件命令（操作接口）
+   */
+  protected cmd: PluginCommands | null = null
+
+  /**
+   * 依赖存储
+   */
+  private deps = new Map<string, Plugin>()
 
   /**
    * Logger 实例（懒加载）
@@ -92,7 +107,7 @@ export abstract class Plugin {
   }
 
   /**
-   * 获取插件状态
+   * ���取插件状态
    */
   get state(): PluginState {
     return this._state
@@ -125,7 +140,7 @@ export abstract class Plugin {
   }
 
   /**
-   * 禁用插件
+   * ���用插件
    */
   disable(): void {
     if (this._enabled) {
@@ -135,11 +150,32 @@ export abstract class Plugin {
   }
 
   /**
-   * 插件初始化（在应用启动时调用一次）
-   * @param _app - 应用实例
+   * 注入依赖（由 PluginManager 调用）
    */
-  async setup(_app: Application): Promise<void> {
-    this.app = _app
+  injectDependency(name: string, plugin: Plugin): void {
+    this.deps.set(name, plugin)
+  }
+
+  /**
+   * 类型安全的依赖访问
+   * @param name 依赖的插件名称
+   */
+  protected getDep<T extends Plugin>(name: string): T {
+    const dep = this.deps.get(name)
+    if (!dep) {
+      throw new Error(`依赖 ${name} 未注入到 ${this.name}`)
+    }
+    return dep as T
+  }
+
+  /**
+   * 插件初始化（在应用启动时调用一次）
+   * @param ctx - 插件上下文（只读状态查询）
+   * @param cmd - 插件命令（操作接口）
+   */
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    this.ctx = ctx
+    this.cmd = cmd
     this.setState(PluginState.INITIALIZED)
   }
 
@@ -148,68 +184,6 @@ export abstract class Plugin {
    */
   async start(): Promise<void> {
     this.setState(PluginState.RUNNING)
-  }
-
-  /**
-   * 协议连接成功回调
-   * @param _protocol - 协议实例
-   */
-  async onProtocolConnected(_protocol: Protocol): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 协议断开连接回调
-   * @param _reason - 断开原因
-   */
-  async onProtocolDisconnected(_reason: string): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 音频通道打开回调
-   */
-  async onAudioChannelOpened(): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 音频通道关闭回调
-   */
-  async onAudioChannelClosed(): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 接收到 JSON 消息回调
-   * @param _message - JSON 消息数据
-   */
-  async onIncomingJson(_message: JsonMessage): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 接收到音频数据回调
-   * @param _data - 音频二进制数据
-   */
-  async onIncomingAudio(_data: Buffer): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 设备状态变化回调
-   * @param _state - 新的设备状态
-   */
-  async onDeviceStateChanged(_state: DeviceState): Promise<void> {
-    // 子类可选实现
-  }
-
-  /**
-   * 网络错误回调
-   * @param _error - 错误信息
-   */
-  async onNetworkError(_error: string): Promise<void> {
-    // 子类可选实现
   }
 
   /**
@@ -223,7 +197,9 @@ export abstract class Plugin {
    * 插件关闭（清理资源）
    */
   async shutdown(): Promise<void> {
-    this.app = null
+    this.ctx = null
+    this.cmd = null
+    this.deps.clear()
     this.setState(PluginState.SHUTDOWN)
   }
 

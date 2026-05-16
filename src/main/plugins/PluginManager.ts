@@ -1,8 +1,4 @@
-import type { DeviceState } from '@shared/types'
-import type { Buffer } from 'node:buffer'
-import type { Protocol } from '../protocols/Protocol'
-import type { Application } from '../services/Application'
-import type { JsonMessage } from '../types/protocol'
+import type { PluginCommands, PluginContext } from '../core'
 import type { Plugin } from './Plugin'
 import { getLogger } from '../utils/logger'
 import { PluginState } from './Plugin'
@@ -20,40 +16,24 @@ interface PluginExecutionResult {
 }
 
 /**
- * 广播选项
- */
-interface BroadcastOptions {
-  /** 是否并发执行（默认 true） */
-  concurrent?: boolean
-  /** 超时时间（毫秒，0 表示无超时，默认 5000） */
-  timeout?: number
-  /** 是否只通知启用的插件（默认 true） */
-  enabledOnly?: boolean
-}
-
-/**
  * 插件管理器
- * 负责插件的注册、生命周期管理和事件广播
+ * 负责插件的注册、拓扑排序、生命周期管理和事件广播
  *
  * 特性:
+ * - 拓扑排序：根据声明式依赖确定初始化顺序
+ * - 循环依赖检测：注册阶段发现并报错
  * - 错误隔离：一个插件失败不影响其他插件
- * - 并发广播：支持并行通知提升性能
- * - 状态管理：跟踪插件启用/禁用状态
- * - 性能监控：记录插件执行时间
+ * - 逆序关闭：后初始化的先关闭
  */
 export class PluginManager {
   private plugins: Plugin[] = []
   private pluginsByName: Map<string, Plugin> = new Map()
 
-  // 默认广播选项
-  private defaultBroadcastOptions: Required<BroadcastOptions> = {
-    concurrent: true,
-    timeout: 100000,
-    enabledOnly: true,
-  }
+  /** 排序后的插件顺序（setup/start 按此顺序执行） */
+  private sortedPlugins: Plugin[] = []
 
   /**
-   * 注册插件（自动按 priority 排序）
+   * 注册插件
    * @param plugins - 要注册的插件列表
    */
   register(...plugins: Plugin[]): void {
@@ -67,10 +47,6 @@ export class PluginManager {
       this.pluginsByName.set(plugin.name, plugin)
       logger.info(`注册插件: ${plugin.name} (优先级: ${plugin.priority})`)
     }
-
-    // 按优先级排序
-    this.plugins.sort((a, b) => a.priority - b.priority)
-    logger.info(`插件执行顺序: ${this.plugins.map(p => p.name).join(' -> ')}`)
   }
 
   /**
@@ -145,23 +121,127 @@ export class PluginManager {
   }
 
   /**
-   * 初始化所有插件
-   * @param app - 应用实例
+   * 拓扑排序（Kahn 算法）
+   *
+   * 根据插件声明的 dependencies 进行排序，保证依赖先于被依赖者初始化。
+   * 同级别按 priority 排序。
+   * 检测循环依赖并抛出错误。
    */
-  async setupAll(app: Application): Promise<PluginExecutionResult[]> {
+  private topologicalSort(): Plugin[] {
+    // 构建入度表和邻接表
+    const inDegree = new Map<string, number>()
+    const adjacency = new Map<string, string[]>()
+
+    // 初始化
+    for (const plugin of this.plugins) {
+      inDegree.set(plugin.name, 0)
+      adjacency.set(plugin.name, [])
+    }
+
+    // 构建图：依赖 -> 被依赖者（依赖方有入边）
+    for (const plugin of this.plugins) {
+      const PluginClass = plugin.constructor as typeof import('./Plugin').Plugin
+      const deps = PluginClass.dependencies || []
+
+      for (const depName of deps) {
+        if (!this.pluginsByName.has(depName)) {
+          logger.warn(`插件 ${plugin.name} ���赖 ${depName}，但该依赖未注册`)
+          continue
+        }
+        // depName -> plugin.name（depName 必须先初始化）
+        const adj = adjacency.get(depName)
+        if (adj) {
+          adj.push(plugin.name)
+        }
+        inDegree.set(plugin.name, (inDegree.get(plugin.name) || 0) + 1)
+      }
+    }
+
+    // Kahn 算法
+    // 使用优先级排序的队列，同级按 priority 小的优先
+    const queue: Plugin[] = []
+    for (const plugin of this.plugins) {
+      if (inDegree.get(plugin.name) === 0) {
+        queue.push(plugin)
+      }
+    }
+    // 按 priority 排序队列
+    queue.sort((a, b) => a.priority - b.priority)
+
+    const sorted: Plugin[] = []
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      sorted.push(current)
+
+      const neighbors = adjacency.get(current.name) || []
+      const newReady: Plugin[] = []
+
+      for (const neighborName of neighbors) {
+        const degree = (inDegree.get(neighborName) || 0) - 1
+        inDegree.set(neighborName, degree)
+        if (degree === 0) {
+          const plugin = this.pluginsByName.get(neighborName)
+          if (plugin) {
+            newReady.push(plugin)
+          }
+        }
+      }
+
+      // 新就绪的按 priority 排序后加入队列
+      newReady.sort((a, b) => a.priority - b.priority)
+      queue.push(...newReady)
+    }
+
+    // 检测循环依赖
+    if (sorted.length !== this.plugins.length) {
+      const remaining = this.plugins
+        .filter(p => !sorted.includes(p))
+        .map(p => p.name)
+      throw new Error(`检测到循环依赖，涉及插件: ${remaining.join(', ')}`)
+    }
+
+    return sorted
+  }
+
+  /**
+   * 初始化所有插件
+   *
+   * 执行拓扑排序，注入依赖，然后按序初始化。
+   *
+   * @param ctx - 插件上下文
+   * @param cmd - ���件命令
+   */
+  async setupAll(ctx: PluginContext, cmd: PluginCommands): Promise<PluginExecutionResult[]> {
     logger.info('开始初始化所有插件...')
+
+    // 执行拓扑排序
+    this.sortedPlugins = this.topologicalSort()
+    logger.info(`插件初始化顺序: ${this.sortedPlugins.map(p => p.name).join(' -> ')}`)
+
     const results: PluginExecutionResult[] = []
 
-    for (const plugin of this.plugins) {
+    for (const plugin of this.sortedPlugins) {
       const startTime = Date.now()
       try {
-        await plugin.setup(app)
+        // 注入依赖
+        const PluginClass = plugin.constructor as typeof import('./Plugin').Plugin
+        const deps = PluginClass.dependencies || []
+        for (const depName of deps) {
+          const dep = this.pluginsByName.get(depName)
+          if (dep) {
+            plugin.injectDependency(depName, dep)
+          }
+        }
+
+        // 调用 setup
+        await plugin.setup(ctx, cmd)
         results.push({
           pluginName: plugin.name,
           success: true,
           duration: Date.now() - startTime,
         })
-        logger.info(`✓ ${plugin.name} 初始化完成 (${Date.now() - startTime}ms)`)
+        logger.info(`${plugin.name} 初始化完成 (${Date.now() - startTime}ms)`)
       }
       catch (error) {
         results.push({
@@ -170,8 +250,7 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        logger.error(`✗ ${plugin.name} 初始化失败:`, error)
-        // 标记插件为错误状态但继续初始化其他插件
+        logger.error(`${plugin.name} 初始化失败:`, error)
       }
     }
 
@@ -187,7 +266,10 @@ export class PluginManager {
     logger.info('开始启动所有插件...')
     const results: PluginExecutionResult[] = []
 
-    for (const plugin of this.plugins) {
+    // 按拓扑顺序启动
+    const startOrder = this.sortedPlugins.length > 0 ? this.sortedPlugins : this.plugins
+
+    for (const plugin of startOrder) {
       if (!plugin.enabled) {
         logger.info(`跳过禁用的插件: ${plugin.name}`)
         continue
@@ -206,7 +288,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        logger.info(`✓ ${plugin.name} 启动完成 (${Date.now() - startTime}ms)`)
+        logger.info(`${plugin.name} 启动完成 (${Date.now() - startTime}ms)`)
       }
       catch (error) {
         results.push({
@@ -215,158 +297,11 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        logger.error(`✗ ${plugin.name} 启动失败:`, error)
+        logger.error(`${plugin.name} 启动失败:`, error)
       }
     }
 
     return results
-  }
-
-  /**
-   * 并发广播：执行所有插件的回调
-   * @param methodName - 方法名称
-   * @param args - 方法参数
-   * @param options - 广播选项
-   */
-  private async broadcast(
-    methodName: string,
-    args: unknown[] = [],
-    options: BroadcastOptions = {},
-  ): Promise<PluginExecutionResult[]> {
-    const opts = { ...this.defaultBroadcastOptions, ...options }
-    const targetPlugins = opts.enabledOnly ? this.getEnabledPlugins() : this.plugins
-
-    if (targetPlugins.length === 0) {
-      return []
-    }
-
-    const executePlugin = async (plugin: Plugin): Promise<PluginExecutionResult> => {
-      const startTime = Date.now()
-      try {
-        const method = (plugin as unknown as Record<string, (...args: unknown[]) => Promise<void>>)[methodName]
-        if (typeof method === 'function') {
-          const promise = method.apply(plugin, args)
-
-          // 应用超时
-          if (opts.timeout > 0) {
-            let timeoutId: ReturnType<typeof setTimeout> | null = null
-            await Promise.race([
-              promise.finally(() => {
-                if (timeoutId)
-                  clearTimeout(timeoutId)
-              }),
-              new Promise((_, reject) => {
-                timeoutId = setTimeout(() => reject(new Error(`执行超时 (${opts.timeout}ms)`)), opts.timeout)
-              }),
-            ])
-          }
-          else {
-            await promise
-          }
-        }
-
-        return {
-          pluginName: plugin.name,
-          success: true,
-          duration: Date.now() - startTime,
-        }
-      }
-      catch (error) {
-        logger.error(`插件 ${plugin.name} 执行 ${methodName} 失败:`, error)
-        return {
-          pluginName: plugin.name,
-          success: false,
-          error: error instanceof Error ? error : new Error(String(error)),
-          duration: Date.now() - startTime,
-        }
-      }
-    }
-
-    let results: PluginExecutionResult[]
-
-    if (opts.concurrent) {
-      // 并发执行
-      const promises = targetPlugins.map(executePlugin)
-      results = await Promise.all(promises)
-    }
-    else {
-      // 顺序执行
-      results = []
-      for (const plugin of targetPlugins) {
-        const result = await executePlugin(plugin)
-        results.push(result)
-      }
-    }
-
-    // 统计失败数量
-    const failedCount = results.filter(r => !r.success).length
-    if (failedCount > 0) {
-      logger.warn(`${methodName}: ${failedCount}/${results.length} 插件执行失败`)
-    }
-
-    return results
-  }
-
-  /**
-   * 通知所有插件：协议已连接
-   * @param protocol - 协议实例
-   */
-  async notifyProtocolConnected(protocol: Protocol): Promise<void> {
-    await this.broadcast('onProtocolConnected', [protocol])
-  }
-
-  /**
-   * 通知所有插件：协议已断开
-   * @param reason - 断开原因
-   */
-  async notifyProtocolDisconnected(reason: string): Promise<void> {
-    await this.broadcast('onProtocolDisconnected', [reason])
-  }
-
-  /**
-   * 通知所有插件：音频通道已打开
-   */
-  async notifyAudioChannelOpened(): Promise<void> {
-    await this.broadcast('onAudioChannelOpened', [])
-  }
-
-  /**
-   * 通知所有插件：音频通道已关闭
-   */
-  async notifyAudioChannelClosed(): Promise<void> {
-    await this.broadcast('onAudioChannelClosed', [])
-  }
-
-  /**
-   * 通知所有插件：收到 JSON 消息
-   * @param message - JSON 消息
-   */
-  async notifyIncomingJson(message: JsonMessage): Promise<void> {
-    await this.broadcast('onIncomingJson', [message])
-  }
-
-  /**
-   * 通知所有插件：收到音频数据
-   * @param data - 音频二进制数据
-   */
-  async notifyIncomingAudio(data: Buffer): Promise<void> {
-    await this.broadcast('onIncomingAudio', [data])
-  }
-
-  /**
-   * 通知所有插件：设备状态变化
-   * @param state - 新的设备状态
-   */
-  async notifyDeviceStateChanged(state: DeviceState): Promise<void> {
-    await this.broadcast('onDeviceStateChanged', [state])
-  }
-
-  /**
-   * 通知所有插件：网络错误
-   * @param error - 错误信息
-   */
-  async notifyNetworkError(error: string): Promise<void> {
-    await this.broadcast('onNetworkError', [error])
   }
 
   /**
@@ -376,10 +311,12 @@ export class PluginManager {
     logger.info('开始停止所有插件...')
     const results: PluginExecutionResult[] = []
 
-    // 逆序停止（后注册的先停止）
-    for (let i = this.plugins.length - 1; i >= 0; i--) {
-      const plugin = this.plugins[i]
+    // 按拓扑顺序的逆序停止
+    const stopOrder = this.sortedPlugins.length > 0
+      ? [...this.sortedPlugins].reverse()
+      : [...this.plugins].reverse()
 
+    for (const plugin of stopOrder) {
       if (plugin.state !== PluginState.RUNNING) {
         continue
       }
@@ -392,7 +329,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        logger.info(`✓ ${plugin.name} 已停止`)
+        logger.info(`${plugin.name} 已停止`)
       }
       catch (error) {
         results.push({
@@ -401,7 +338,7 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        logger.error(`✗ ${plugin.name} 停止失败:`, error)
+        logger.error(`${plugin.name} 停止失败:`, error)
       }
     }
 
@@ -415,9 +352,12 @@ export class PluginManager {
     logger.info('开始关闭所有插件...')
     const results: PluginExecutionResult[] = []
 
-    // 逆序关闭
-    for (let i = this.plugins.length - 1; i >= 0; i--) {
-      const plugin = this.plugins[i]
+    // 按拓扑顺序的逆序关闭
+    const shutdownOrder = this.sortedPlugins.length > 0
+      ? [...this.sortedPlugins].reverse()
+      : [...this.plugins].reverse()
+
+    for (const plugin of shutdownOrder) {
       const startTime = Date.now()
 
       try {
@@ -427,7 +367,7 @@ export class PluginManager {
           success: true,
           duration: Date.now() - startTime,
         })
-        logger.info(`✓ ${plugin.name} 已关闭`)
+        logger.info(`${plugin.name} 已关闭`)
       }
       catch (error) {
         results.push({
@@ -436,7 +376,7 @@ export class PluginManager {
           error: error instanceof Error ? error : new Error(String(error)),
           duration: Date.now() - startTime,
         })
-        logger.error(`✗ ${plugin.name} 关闭失败:`, error)
+        logger.error(`${plugin.name} 关闭失败:`, error)
       }
     }
 
@@ -445,7 +385,7 @@ export class PluginManager {
   }
 
   /**
-   * 获取插件系统状态
+   * 获取插件系统状��
    */
   getStatus(): {
     totalPlugins: number
@@ -463,27 +403,6 @@ export class PluginManager {
       enabledPlugins: this.getEnabledPlugins().length,
       runningPlugins: this.plugins.filter(p => p.state === PluginState.RUNNING).length,
       plugins: this.plugins.map(p => p.getInfo()),
-    }
-  }
-
-  /**
-   * 检查插件依赖
-   * @param plugin - 插件实例
-   * @returns 是否满足依赖
-   */
-  checkDependencies(plugin: Plugin): { satisfied: boolean, missing: string[] } {
-    const dependencies = plugin.metadata?.dependencies || []
-    const missing: string[] = []
-
-    for (const dep of dependencies) {
-      if (!this.pluginsByName.has(dep)) {
-        missing.push(dep)
-      }
-    }
-
-    return {
-      satisfied: missing.length === 0,
-      missing,
     }
   }
 }

@@ -1,7 +1,8 @@
-import type { Application } from '../services/Application'
+import type { PluginCommands, PluginContext } from '../core'
 import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Buffer } from 'node:buffer'
+import { Events } from '../core'
 import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
 
@@ -23,6 +24,8 @@ export class ChatPlugin extends Plugin {
   readonly name = 'ChatPlugin'
   readonly priority = 30 // 在 MCP (20) 之后，UI (60) 之前
 
+  static readonly dependencies: string[] = ['UIPlugin']
+
   readonly metadata = {
     name: 'ChatPlugin',
     version: '1.0.0',
@@ -42,9 +45,17 @@ export class ChatPlugin extends Plugin {
   /**
    * 插件初始化
    */
-  async setup(app: Application): Promise<void> {
-    await super.setup(app)
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    await super.setup(ctx, cmd)
     logger.info('初始化...')
+
+    // 订阅 JSON 消息事件
+    ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
+      const message = data as JsonMessage
+      this.onIncomingJson(message).catch((error) => {
+        logger.error('处理 JSON 消息失败', error)
+      })
+    })
   }
 
   /**
@@ -99,7 +110,7 @@ export class ChatPlugin extends Plugin {
 
   /**
    * 格式化会话标题
-   * chat_20250125 → "2025年01月25日"
+   * chat_20250125 -> "2025年01月25日"
    */
   private formatSessionTitle(sessionId: string): string {
     const dateStr = sessionId.replace('chat_', '')
@@ -118,7 +129,7 @@ export class ChatPlugin extends Plugin {
     const todaySessionId = this.getTodaySessionId()
 
     if (todaySessionId !== this.currentSessionId) {
-      logger.info(`检测到日期变化，切换会话: ${this.currentSessionId} → ${todaySessionId}`)
+      logger.info(`检测到日期变化，切换会话: ${this.currentSessionId} -> ${todaySessionId}`)
 
       // 检查会话是否已存在
       const db = DatabaseManager.getInstance()
@@ -146,13 +157,18 @@ export class ChatPlugin extends Plugin {
    * 获取 UIPlugin 实例
    */
   private getUIPlugin(): UIPlugin | undefined {
-    return this.app?.getPluginManager().getPlugin<UIPlugin>('UIPlugin')
+    try {
+      return this.getDep<UIPlugin>('UIPlugin')
+    }
+    catch {
+      return undefined
+    }
   }
 
   /**
    * 处理收到的 JSON 消息
    */
-  async onIncomingJson(message: JsonMessage): Promise<void> {
+  private async onIncomingJson(message: JsonMessage): Promise<void> {
     const msgType = message.type
 
     // 处理 STT 消息

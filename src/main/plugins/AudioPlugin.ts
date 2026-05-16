@@ -1,10 +1,10 @@
-import type { DeviceState } from '@shared/types'
+import type { AudioListener, DeviceState } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
+import type { PluginCommands, PluginContext } from '../core'
 import type { Protocol } from '../protocols/Protocol'
-import type { Application } from '../services/Application'
-import type { AudioListener } from '@shared/types'
 import { ipcMain } from 'electron'
+import { Events } from '../core'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
 import { getLogger } from '../utils/logger'
 
@@ -19,14 +19,16 @@ const logger = getLogger('AudioPlugin')
  * 职责：
  * - 初始化 OpusCodec
  * - 监听渲染进程的 PCM 数据（IPC）
- * - 编码 PCM → Opus，发送到协议层
+ * - 编码 PCM -> Opus，发送到协议层
  * - 接收协议层的 Opus 数据
- * - 解码 Opus → PCM，发送到渲染进程（IPC）
+ * - 解码 Opus -> PCM，发送到渲染进程（IPC）
  * - 控制后台音频窗口采集
  */
 export class AudioPlugin extends Plugin {
   readonly name = 'AudioPlugin'
   readonly priority = 10 // 优先级最高
+
+  static readonly dependencies: string[] = []
 
   readonly metadata = {
     name: 'AudioPlugin',
@@ -57,16 +59,15 @@ export class AudioPlugin extends Plugin {
   /**
    * 插件初始化
    */
-  async setup(app: Application): Promise<void> {
-    // 调用父类 setup
-    await super.setup(app)
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    await super.setup(ctx, cmd)
 
     logger.info('初始化...')
 
     try {
       // 初始化 OpusCodec
       initOpusCodec()
-      logger.info('✓ OpusCodec 已初始化')
+      logger.info('OpusCodec 已初始化')
 
       // 监听来自后台音频窗口的 PCM 数据（保存引用以便精确移除）
       this.pcmHandler = (_event, pcmData: Int16Array) => {
@@ -74,10 +75,28 @@ export class AudioPlugin extends Plugin {
       }
       ipcMain.on('audio:pcm', this.pcmHandler)
 
-      logger.info('✓ 初始化完成')
+      // 订阅协议连接事件
+      ctx.eventBus.on(Events.PROTOCOL_CONNECTED, (data) => {
+        const protocol = data as Protocol
+        this.protocol = protocol
+        logger.info('协议已连接')
+      })
+
+      // 订阅音频接收事件
+      ctx.eventBus.on(Events.INCOMING_AUDIO, (data) => {
+        this.handleOpusFromNetwork(data as Buffer)
+      })
+
+      // 订阅设备状态变更事件
+      ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, (data) => {
+        const { newState } = data as { newState: DeviceState }
+        this.onDeviceStateChanged(newState)
+      })
+
+      logger.info('初始化完成')
     }
     catch (error) {
-      logger.error('✗ 初始化失败', error)
+      logger.error('初始化失败', error)
       throw error
     }
   }
@@ -86,33 +105,15 @@ export class AudioPlugin extends Plugin {
    * 插件启动
    */
   async start(): Promise<void> {
-    // 调用父类 start
     await super.start()
-
-    logger.info('✓ 启动完成')
+    logger.info('启动完成')
   }
 
   /**
-   * 协议连接成功回调
-   */
-  async onProtocolConnected(protocol: Protocol): Promise<void> {
-    logger.info('协议已连接')
-    this.protocol = protocol
-  }
-
-  /**
-   * 接收到音频数据回调
-   */
-  async onIncomingAudio(data: Buffer): Promise<void> {
-    // 解码并发送到渲染进程播放
-    this.handleOpusFromNetwork(data)
-  }
-
-  /**
-   * 设备状态变化回调
+   * 设备状态变化处理
    * 在进入监听状态时检查并切换音频设备
    */
-  async onDeviceStateChanged(state: DeviceState): Promise<void> {
+  private onDeviceStateChanged(state: DeviceState): void {
     logger.info(`设备状态变化: ${state}`)
 
     // 根据状态控制后台音频窗口
@@ -216,8 +217,8 @@ export class AudioPlugin extends Plugin {
   private handlePCMFromRenderer(pcmData: Int16Array): void {
     try {
       // 1. 发送到服务器（仅在应该采集时）
-      if (this.app?.shouldCaptureAudio()) {
-        // 背压控制：检查是否应该丢弃帧
+      if (this.ctx?.shouldCaptureAudio()) {
+        // 背压控制：检查是否应该丢弃��
         if (this.shouldDropFrame()) {
           // 丢弃帧，finally 会统一通知监听器（唤醒词检测等）
           return
@@ -229,7 +230,7 @@ export class AudioPlugin extends Plugin {
           return
         }
 
-        // 编码 PCM → Opus
+        // 编码 PCM -> Opus
         const opusFrame = opusCodec.encode(pcmData)
 
         // 发送到 WebSocket 服务器
@@ -260,10 +261,10 @@ export class AudioPlugin extends Plugin {
         return
       }
 
-      // 解码 Opus → PCM (只解码一次!)
+      // 解码 Opus -> PCM (只解码一次!)
       const pcmBuffer = opusCodec.decode(opusFrame)
 
-      // 1. 发送到后台音频窗口播放
+      // 1. 发送到后台音频窗口播���
       if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
         this.backgroundAudioWindow.webContents.send('audio:opus-decoded', pcmBuffer)
       }
@@ -271,14 +272,12 @@ export class AudioPlugin extends Plugin {
         logger.warn('后台音频窗口不存在，无法播放音频')
       }
 
-      // 2. 通知 Live2DPlugin (通过 PluginManager 广播)
-      // 使用 setImmediate 异步执行,避免阻塞音频播放
+      // 2. 通过 EventBus 广播解码后的音频（Live2D 等订阅者接收）
       setImmediate(() => {
-        if (this.app) {
-          const live2dPlugin = this.app.getPluginManager().getPlugin('Live2DPlugin')
-          if (live2dPlugin && 'onDecodedAudio' in live2dPlugin) {
-            ;(live2dPlugin as any).onDecodedAudio(pcmBuffer)
-          }
+        if (this.ctx) {
+          this.ctx.eventBus.emit(Events.AUDIO_DECODED, pcmBuffer).catch((error) => {
+            logger.error('广播解码音频失败', error)
+          })
         }
       })
     }
@@ -291,10 +290,8 @@ export class AudioPlugin extends Plugin {
    * 插件停止
    */
   async stop(): Promise<void> {
-    // 调用父类 stop
     await super.stop()
-
-    logger.info('✓ 已停止')
+    logger.info('已停止')
   }
 
   /**
@@ -326,6 +323,6 @@ export class AudioPlugin extends Plugin {
     // 调用父类 shutdown
     await super.shutdown()
 
-    logger.info('✓ 已关闭')
+    logger.info('已关闭')
   }
 }

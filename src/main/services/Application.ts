@@ -1,8 +1,10 @@
 import type { AppStateSnapshot, DeviceState, ListeningMode } from '@shared/types'
 import type { Buffer } from 'node:buffer'
+import type { ProtocolDelegate } from '../core'
 import type { Protocol } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
 import { DeviceStateValue, ListeningModeValue } from '@shared/types'
+import { Events, ServiceContainer } from '../core'
 import { getAudioConfig } from '../ipc/audioIpc'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { ChatPlugin } from '../plugins/ChatPlugin'
@@ -12,40 +14,43 @@ import { PluginManager } from '../plugins/PluginManager'
 import { UIPlugin } from '../plugins/UIPlugin'
 import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import { MqttProtocol } from '../protocols/MqttProtocol'
-
 import { AbortReason } from '../protocols/Protocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
-import { isAlertMessage, isTtsMessage } from '../types/protocol'
+import { isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { DatabaseManager } from './database'
 import { ShortcutManager } from './ShortcutManager'
 
+/**
+ * Application 编排层
+ *
+ * 职责：
+ * - 协议初始化和连接编排
+ * - 插件启动编排
+ * - 对外暴露公共 API（供 IPC 和 index.ts 使用）
+ *
+ * 业务逻辑委托给核心模块：
+ * - 状态管理 -> StateManager
+ * - 任务追踪 -> TaskManager
+ * - 资源释放 -> ResourcePool
+ * - 事件广播 -> EventBus
+ */
 export class Application {
   private static instance: Application | null = null
-  private logger = getLogger('Application') // 移到类内部
+  private logger = getLogger('Application')
 
-  private running: boolean = false
+  private container: ServiceContainer
   private protocol: Protocol | null = null
-  private deviceState: DeviceState = DeviceStateValue.IDLE
-  private listeningMode: ListeningMode = ListeningModeValue.MANUAL
-  private keepListening: boolean = false
-  private aborted: boolean = false
-
   private plugins = new PluginManager()
   private audioPlugin: AudioPlugin | null = null
   private wakeWordPlugin: WakeWordPlugin | null = null
-
   private shortcutManager: ShortcutManager | null = null
-
   private connectLock: Promise<boolean> | null = null
-  private stateChangeLock: Promise<void> | null = null
-  private isShuttingDown: boolean = false
-
-  private activeTasks: Map<string, Promise<unknown>> = new Map()
-  private taskIdCounter: number = 0
+  private running: boolean = false
 
   private constructor() {
     this.logger.info('初始化应用实例')
+    this.container = new ServiceContainer()
   }
 
   static getInstance(): Application {
@@ -55,62 +60,19 @@ export class Application {
     return Application.instance
   }
 
-  spawn<T>(promise: Promise<T>, name: string): Promise<T> {
-    if (this.isShuttingDown || !this.running) {
-      return Promise.resolve(undefined as T)
-    }
-
-    const taskId = `${name}:${++this.taskIdCounter}`
-    const trackedPromise = promise
-      .catch((error) => {
-        this.logger.error(`任务 ${taskId} 异常:`, error)
-        throw error
-      })
-      .finally(() => {
-        this.activeTasks.delete(taskId)
-      })
-
-    this.activeTasks.set(taskId, trackedPromise)
-    return trackedPromise as Promise<T>
-  }
-
-  private async waitForTasks(timeout: number = 5000): Promise<void> {
-    if (this.activeTasks.size === 0) {
-      return
-    }
-
-    this.logger.info(`等待 ${this.activeTasks.size} 个任务完成...`)
-
-    const taskNames = Array.from(this.activeTasks.keys())
-    this.logger.info(`活跃任务: ${taskNames.join(', ')}`)
-
-    const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        if (this.activeTasks.size > 0) {
-          this.logger.warn(`等待任务超时，${this.activeTasks.size} 个任务未完成`)
-        }
-        resolve()
-      }, timeout)
-    })
-
-    await Promise.race([
-      Promise.allSettled(this.activeTasks.values()),
-      timeoutPromise,
-    ])
-
-    this.activeTasks.clear()
-  }
-
+  /**
+   * 初始化应用
+   */
   async initialize(protocolType: 'websocket' | 'mqtt' = 'mqtt'): Promise<void> {
     this.logger.info(`初始化，协议类型: ${protocolType}`)
 
-    this.setProtocol(protocolType)
-
+    // 初始化协议
+    this.protocol = protocolType === 'mqtt' ? new MqttProtocol() : new WebSocketProtocol()
     this.setupProtocolCallbacks()
 
+    // 注册插件
     this.audioPlugin = new AudioPlugin()
     this.wakeWordPlugin = new WakeWordPlugin()
-
     this.plugins.register(
       this.audioPlugin,
       new Live2DPlugin(),
@@ -120,96 +82,178 @@ export class Application {
       new UIPlugin(),
     )
 
-    await this.plugins.setupAll(this)
+    // 创建协议委托
+    const delegate = this.createProtocolDelegate()
 
+    // 初始化插件（拓扑排序 + 依赖注入）
+    const ctx = this.container.createPluginContext(delegate)
+    const cmd = this.container.createPluginCommands(delegate)
+    await this.plugins.setupAll(ctx, cmd)
+
+    // 初始化快捷键
     const db = DatabaseManager.getInstance()
     this.shortcutManager = new ShortcutManager(db, this)
     await this.shortcutManager.registerAll()
 
+    // 注册资源到资源池（逆序释放）
+    this.container.resourcePool.register('shortcutManager', () => {
+      this.shortcutManager?.destroy()
+      this.shortcutManager = null
+    })
+    this.container.resourcePool.register('plugins', async () => {
+      await this.plugins.stopAll()
+      await this.plugins.shutdownAll()
+    })
+    this.container.resourcePool.register('protocol', async () => {
+      if (this.protocol) {
+        await this.protocol.closeAudioChannel()
+        this.protocol = null
+      }
+    })
+    this.container.resourcePool.register('tasks', async () => {
+      await this.container.taskManager.cancelAll(3000)
+    })
+    this.container.resourcePool.register('eventBus', () => {
+      this.container.eventBus.clear()
+    })
+
     this.logger.info('初始化完成')
   }
 
+  /**
+   * 启动应用
+   */
   async start(): Promise<void> {
     this.logger.info('启动应用')
     this.running = true
-
     await this.plugins.startAll()
-
-    await this.plugins.notifyDeviceStateChanged(this.deviceState)
-
+    // 广播初始状态
+    await this.container.stateManager.setDeviceState(this.container.stateManager.getDeviceState())
     this.logger.info('应用启动完成')
   }
 
-  private setProtocol(protocolType: 'websocket' | 'mqtt'): void {
-    this.logger.info(`设置协议: ${protocolType}`)
-    if (protocolType === 'mqtt') {
-      this.protocol = new MqttProtocol()
-    }
-    else {
-      this.protocol = new WebSocketProtocol()
-    }
-  }
-
-  private setupProtocolCallbacks(): void {
-    if (!this.protocol) {
+  /**
+   * 关闭应用
+   */
+  async shutdown(): Promise<void> {
+    if (!this.running) {
       return
     }
+    this.running = false
+    this.logger.info('正在关闭应用...')
+    await this.container.shutdown()
+    this.audioPlugin = null
+    this.wakeWordPlugin = null
+    this.logger.info('应用关闭完成')
+  }
+
+  // ========== 协议编排 ==========
+
+  private setupProtocolCallbacks(): void {
+    if (!this.protocol)
+      return
 
     this.protocol.onNetworkError((error) => {
-      this.handleNetworkError(error)
+      this.logger.error('网络错误:', error)
+      this.container.stateManager.setKeepListening(false)
+      this.container.stateManager.setDeviceState(DeviceStateValue.IDLE).catch((err) => {
+        this.logger.error('重置设备状态失败:', err)
+      })
+      this.container.eventBus.emit(Events.NETWORK_ERROR, error).catch(() => {})
     })
 
     this.protocol.onIncomingJson((data) => {
-      this.spawn(
+      this.container.taskManager.spawn(
         this.handleIncomingJson(data),
         'handle:json',
       ).catch(() => {})
     })
 
     this.protocol.onIncomingAudio((data) => {
-      this.handleIncomingAudio(data)
+      this.container.eventBus.emit(Events.INCOMING_AUDIO, data).catch(() => {})
     })
 
     this.protocol.onAudioChannelOpened(async () => {
-      await this.handleAudioChannelOpened()
+      this.logger.info('音频通道已打开')
+      await this.container.eventBus.emit(Events.AUDIO_CHANNEL_OPENED)
+      await this.container.stateManager.setDeviceState(DeviceStateValue.LISTENING)
     })
 
     this.protocol.onAudioChannelClosed(async () => {
-      await this.handleAudioChannelClosed()
+      this.logger.info('音频通道已关闭')
+      await this.container.eventBus.emit(Events.AUDIO_CHANNEL_CLOSED)
+      await this.container.stateManager.setDeviceState(DeviceStateValue.IDLE)
     })
+  }
+
+  /**
+   * 处理接收到的 JSON 消息（状态管理 + 事件广播）
+   */
+  private async handleIncomingJson(jsonData: JsonMessage): Promise<void> {
+    try {
+      this.logger.info(`收到 JSON 消息: type=${jsonData.type}`, jsonData)
+
+      // 处理 TTS 消息的状态转换
+      if (isTtsMessage(jsonData)) {
+        const { state } = jsonData
+        const sm = this.container.stateManager
+
+        if (state === 'start') {
+          if (sm.isKeepListening() && sm.getListeningMode() === ListeningModeValue.REALTIME) {
+            await sm.setDeviceState(DeviceStateValue.LISTENING)
+          }
+          else {
+            await sm.setDeviceState(DeviceStateValue.SPEAKING)
+          }
+        }
+        else if (state === 'stop') {
+          if (sm.isKeepListening()) {
+            await this.restartListening()
+          }
+          else if (!sm.isListening()) {
+            await sm.setDeviceState(DeviceStateValue.IDLE)
+          }
+        }
+      }
+
+      // 广播给插件
+      await this.container.eventBus.emit(Events.INCOMING_JSON, jsonData)
+    }
+    catch (error) {
+      this.logger.error('处理 JSON 消息失败:', error)
+    }
+  }
+
+  private async restartListening(): Promise<void> {
+    const sm = this.container.stateManager
+    const needSendStartListening = sm.getListeningMode() !== ListeningModeValue.REALTIME
+    await sm.setDeviceState(DeviceStateValue.LISTENING)
+    if (needSendStartListening) {
+      await this.protocol?.sendStartListening(sm.getListeningMode())
+    }
   }
 
   /**
    * 连接协议
    */
   async connectProtocol(): Promise<boolean> {
-    if (!this.protocol) {
-      this.logger.error('协议未初始化')
+    if (!this.protocol)
       return false
-    }
-
-    // 已经打开
-    if (this.protocol.isAudioChannelOpened()) {
+    if (this.protocol.isAudioChannelOpened())
       return true
-    }
 
-    // 使用锁避免并发连接（原子性检查和赋值）
     if (!this.connectLock) {
       this.connectLock = (async () => {
         try {
-          // 再次检查（可能在等待锁期间已连接）
-          if (this.protocol!.isAudioChannelOpened()) {
+          if (this.protocol?.isAudioChannelOpened())
             return true
-          }
-
-          const opened = await this.protocol!.openAudioChannel()
+          const opened = await this.protocol?.openAudioChannel()
           if (!opened) {
             this.logger.error('协议连接失败')
             return false
           }
-
           this.logger.info('协议连接已建立')
-          await this.plugins.notifyProtocolConnected(this.protocol!)
+          await this.container.eventBus.emit(Events.PROTOCOL_CONNECTED, this.protocol)
           return true
         }
         catch (error) {
@@ -225,519 +269,157 @@ export class Application {
     return await this.connectLock
   }
 
-  /**
-   * 开始手动监听（按住说话）
-   */
+  // ========== 公共 API（兼容 IPC / index.ts） ==========
+
   async startListeningManual(): Promise<void> {
-    try {
-      const ok = await this.connectProtocol()
-      if (!ok) {
-        return
-      }
-
-      this.listeningMode = ListeningModeValue.MANUAL
-      this.keepListening = false
-
-      // 如果正在说话，先发送打断
-      if (this.deviceState === DeviceStateValue.SPEAKING) {
-        this.logger.info('说话中发送打断')
-        await this.protocol!.sendAbortSpeaking(AbortReason.USER_INTERRUPTED)
-        await this.setDeviceState(DeviceStateValue.IDLE)
-      }
-
-      await this.protocol!.sendStartListening(ListeningModeValue.MANUAL)
-      await this.setDeviceState(DeviceStateValue.LISTENING)
+    const sm = this.container.stateManager
+    const ok = await this.connectProtocol()
+    if (!ok)
+      return
+    sm.setListeningMode(ListeningModeValue.MANUAL)
+    sm.setKeepListening(false)
+    if (sm.isSpeaking()) {
+      await this.protocol?.sendAbortSpeaking(AbortReason.USER_INTERRUPTED)
+      await sm.setDeviceState(DeviceStateValue.IDLE)
     }
-    catch (error) {
-      this.logger.error('开始手动监听失败:', error)
-    }
+    await this.protocol?.sendStartListening(ListeningModeValue.MANUAL)
+    await sm.setDeviceState(DeviceStateValue.LISTENING)
   }
 
-  /**
-   * 停止手动监听
-   */
   async stopListeningManual(): Promise<void> {
-    try {
-      if (!this.protocol) {
-        return
-      }
-
-      await this.protocol.sendStopListening()
-      await this.setDeviceState(DeviceStateValue.IDLE)
-    }
-    catch (error) {
-      this.logger.error('停止手动监听失败:', error)
-    }
+    if (!this.protocol)
+      return
+    await this.protocol.sendStopListening()
+    await this.container.stateManager.setDeviceState(DeviceStateValue.IDLE)
   }
 
-  /**
-   * 开始自动对话
-   * 根据用户配置选择监听模式：
-   * - conversationMode = 'realtime' -> REALTIME 模式（实时对话，全双工）
-   * - conversationMode = 'auto' -> AUTO 模式（回合制对话）
-   */
   async startAutoConversation(): Promise<void> {
-    try {
-      // 读取用户配置的对话模式
-      const audioConfig = getAudioConfig()
-      const conversationMode = audioConfig.conversationMode || 'auto'
+    const sm = this.container.stateManager
+    const audioConfig = getAudioConfig()
+    const conversationMode = audioConfig.conversationMode || 'auto'
+    const mode: ListeningMode = conversationMode === 'realtime'
+      ? ListeningModeValue.REALTIME
+      : ListeningModeValue.AUTO
 
-      // 根据配置选择监听模式
-      const mode = conversationMode === 'realtime'
-        ? ListeningModeValue.REALTIME // 实时对话（全双工，可随时打断）
-        : ListeningModeValue.AUTO // 回合制对话（半双工）
+    sm.setListeningMode(mode)
+    sm.setKeepListening(true)
+    await sm.setDeviceState(DeviceStateValue.CONNECTING)
 
-      this.logger.info(`启动自动对话，模式: ${conversationMode} (${mode})`)
-
-      // 先设置监听模式和持续监听标志，确保 isAutoMode 正确
-      this.listeningMode = mode
-      this.keepListening = true
-
-      // 立即切换到连接中状态，提供即时的 UI 反馈
-      await this.setDeviceState(DeviceStateValue.CONNECTING)
-
-      const ok = await this.connectProtocol()
-      if (!ok) {
-        // 连接失败，恢复到空闲状态
-        this.keepListening = false
-        await this.setDeviceState(DeviceStateValue.IDLE)
-        return
-      }
-
-      await this.protocol!.sendStartListening(mode)
-      await this.setDeviceState(DeviceStateValue.LISTENING)
+    const ok = await this.connectProtocol()
+    if (!ok) {
+      sm.setKeepListening(false)
+      await sm.setDeviceState(DeviceStateValue.IDLE)
+      return
     }
-    catch (error) {
-      this.logger.error('开始自动对话失败:', error)
-      // 出错时恢复到空闲状态
-      this.keepListening = false
-      await this.setDeviceState(DeviceStateValue.IDLE)
-    }
+    await this.protocol?.sendStartListening(mode)
+    await sm.setDeviceState(DeviceStateValue.LISTENING)
   }
 
-  /**
-   * 停止自动对话（断开连接）
-   */
   async stopAutoConversation(): Promise<void> {
-    try {
-      this.logger.info('停止自动对话')
-      this.keepListening = false
-
-      // 如果正在说话，发送打断
-      if (this.deviceState === DeviceStateValue.SPEAKING) {
-        await this.protocol?.sendAbortSpeaking(AbortReason.USER_INTERRUPTED)
-      }
-
-      // 停止监听
-      await this.protocol?.sendStopListening()
-
-      // 关闭音频通道
-      if (this.protocol) {
-        await this.protocol.closeAudioChannel()
-      }
-
-      await this.setDeviceState(DeviceStateValue.IDLE)
+    const sm = this.container.stateManager
+    sm.setKeepListening(false)
+    if (sm.isSpeaking()) {
+      await this.protocol?.sendAbortSpeaking(AbortReason.USER_INTERRUPTED)
     }
-    catch (error) {
-      this.logger.error('停止自动对话失败:', error)
+    await this.protocol?.sendStopListening()
+    if (this.protocol) {
+      await this.protocol.closeAudioChannel()
     }
+    await sm.setDeviceState(DeviceStateValue.IDLE)
   }
 
-  /**
-   * 设置设备状态
-   */
-  private async setDeviceState(state: DeviceState): Promise<void> {
-    // 等待之前的状态变更完成
-    if (this.stateChangeLock) {
-      await this.stateChangeLock
-    }
-
-    // 再次检查（可能在等待期间已变更）
-    if (this.deviceState === state) {
-      return
-    }
-
-    this.stateChangeLock = (async () => {
-      try {
-        this.logger.info(`设备状态变更: ${this.deviceState} -> ${state}`)
-        this.deviceState = state
-
-        // 如果进入监听状态，立即重置中止标志（在广播之前）
-        if (state === DeviceStateValue.LISTENING) {
-          this.aborted = false
-        }
-
-        // 广播状态变化
-        await this.plugins.notifyDeviceStateChanged(state)
-      }
-      catch (error) {
-        this.logger.error('广播状态变化失败:', error)
-      }
-      finally {
-        this.stateChangeLock = null
-      }
-    })()
-
-    await this.stateChangeLock
-  }
-
-  /**
-   * 中止语音输出
-   */
   async abortSpeaking(reason: AbortReason): Promise<void> {
-    if (this.aborted) {
-      this.logger.info('已经中止，忽略重复的中止请求')
+    const sm = this.container.stateManager
+    if (sm.isAborted())
       return
-    }
-
-    this.logger.info(`中止语音输出，原因: ${reason}`)
-    this.aborted = true
+    sm.setAborted(true)
     await this.protocol?.sendAbortSpeaking(reason)
-    await this.setDeviceState(DeviceStateValue.IDLE)
+    await sm.setDeviceState(DeviceStateValue.IDLE)
   }
 
-  /**
-   * 发送文本消息
-   * 如果正在说话中，先中止语音输出
-   * 然后发送文本作为唤醒词检测消息
-   * 不保存到数据库，等待服务器返回 STT 消息后统一保存
-   */
   async sendText(text: string): Promise<void> {
-    try {
-      this.logger.info(`发送文本消息: ${text}`)
-
-      // 如果正在说话，先中止
-      if (this.deviceState === DeviceStateValue.SPEAKING) {
-        this.logger.info('说话中，先中止语音输出')
-        await this.abortSpeaking(AbortReason.USER_INTERRUPTED)
-      }
-
-      // 确保协议已连接
-      const ok = await this.connectProtocol()
-      if (!ok) {
-        this.logger.error('协议未连接，无法发送文本')
-        return
-      }
-
-      // 发送唤醒词检测消息（服务端会将文本作为用户输入处理）
-      // 服务器会返回 STT 消息，由 ChatPlugin 统一保存
-      await this.protocol!.sendWakeWordDetected(text)
-      this.logger.info('文本消息已发送，等待服务器返回 STT')
+    const sm = this.container.stateManager
+    if (sm.isSpeaking()) {
+      await this.abortSpeaking(AbortReason.USER_INTERRUPTED)
     }
-    catch (error) {
-      this.logger.error('发送文本消息失败:', error)
-    }
-  }
-
-  /**
-   * 处理网络错误
-   */
-  private handleNetworkError(error: string): void {
-    this.logger.error('网络错误:', error)
-    this.keepListening = false
-    // 重置设备状态到空闲，避免 UI 卡在 LISTENING/SPEAKING
-    this.setDeviceState(DeviceStateValue.IDLE).catch((err) => {
-      this.logger.error('重置设备状态失败:', err)
-    })
-    // 通知插件
-    this.plugins.notifyNetworkError(error).catch((err) => {
-      this.logger.error('通知插件网络错误失败:', err)
-    })
-  }
-
-  /**
-   * 处理接收到的 JSON 消息
-   * 只负责状态管理，消息存储由 ChatPlugin 处理
-   */
-  private async handleIncomingJson(jsonData: JsonMessage): Promise<void> {
-    try {
-      const msgType = jsonData.type
-      this.logger.info(`收到 JSON 消息: type=${msgType}`, jsonData)
-
-      if (msgType === 'error') {
-        this.logger.error('收到错误消息', jsonData)
-      }
-
-      // 处理 Alert 消息（错误/警告）
-      if (isAlertMessage(jsonData)) {
-        const message = jsonData.message || '未知错误'
-        const code = jsonData.code
-        this.logger.warn(`收到服务端警告: ${message}${code ? ` (code: ${code})` : ''}`)
-        this.logger.warn('完整 alert 消息:', JSON.stringify(jsonData, null, 2))
-      }
-
-      // 处理 TTS 消息
-      if (isTtsMessage(jsonData)) {
-        const { state } = jsonData
-
-        if (state === 'start') {
-          // TTS 开始：根据是否持续监听决定状态
-          if (this.keepListening && this.listeningMode === ListeningModeValue.REALTIME) {
-            await this.setDeviceState(DeviceStateValue.LISTENING)
-          }
-          else {
-            await this.setDeviceState(DeviceStateValue.SPEAKING)
-          }
-        }
-        else if (state === 'stop') {
-          // TTS 结束
-          if (this.keepListening) {
-            // 继续对话：重启监听
-            await this.restartListening()
-          }
-          else if (this.deviceState !== DeviceStateValue.LISTENING) {
-            // 如果当前不是监听状态，才设置为空闲
-            // 避免打断后手动启动的监听被 TTS stop 关闭
-            await this.setDeviceState(DeviceStateValue.IDLE)
-          }
-        }
-      }
-
-      // 转发给插件（使用 spawn 追踪）
-      this.spawn(
-        this.plugins.notifyIncomingJson(jsonData),
-        'notify:plugin:json',
-      ).catch(() => {
-        // spawn 内部已记录错误
-      })
-    }
-    catch (error) {
-      this.logger.error('处理 JSON 消息失败:', error)
-    }
-  }
-
-  /**
-   * 处理接收到的音频数据
-   */
-  private handleIncomingAudio(data: Buffer): void {
-    // 音频数据是高频事件，不追踪（避免性能开销）
-    // 直接转发给插件
-    this.plugins.notifyIncomingAudio(data).catch((error) => {
-      this.logger.error('通知插件音频数据失败:', error)
-    })
-  }
-
-  /**
-   * 处理音频通道打开
-   */
-  private async handleAudioChannelOpened(): Promise<void> {
-    this.logger.info('音频通道已打开')
-    await this.plugins.notifyAudioChannelOpened()
-    await this.setDeviceState(DeviceStateValue.LISTENING)
-  }
-
-  /**
-   * 处理音频通道关闭
-   */
-  private async handleAudioChannelClosed(): Promise<void> {
-    this.logger.info('音频通道已关闭')
-    await this.plugins.notifyAudioChannelClosed()
-    await this.setDeviceState(DeviceStateValue.IDLE)
-  }
-
-  /**
-   * 重启监听
-   */
-  private async restartListening(): Promise<void> {
-    try {
-      // REALTIME 模式下音频通道始终开启，服务端持续接收音频，无需重复发送 listen:start
-      const needSendStartListening = this.listeningMode !== ListeningModeValue.REALTIME
-
-      await this.setDeviceState(DeviceStateValue.LISTENING)
-
-      if (needSendStartListening) {
-        await this.protocol?.sendStartListening(this.listeningMode)
-      }
-    }
-    catch (error) {
-      this.logger.error('重启监听失败:', error)
-    }
-  }
-
-  /**
-   * 只读访问器：获取设备状态
-   */
-  getDeviceState(): DeviceState {
-    return this.deviceState
-  }
-
-  /**
-   * 只读访问器：获取协议实例
-   */
-  getProtocol(): Protocol | null {
-    return this.protocol
-  }
-
-  /**
-   * 重新加载协议配置
-   * 用于配置更新后刷新连接参数
-   */
-  reloadProtocolConfig(): void {
-    if (!this.protocol) {
-      this.logger.warn('协议未初始化，无法重新加载配置')
+    const ok = await this.connectProtocol()
+    if (!ok)
       return
-    }
-
-    this.logger.info('重新加载协议配置')
-
-    // 调用协议的 reloadConfig 方法
-    if ('reloadConfig' in this.protocol && typeof this.protocol.reloadConfig === 'function') {
-      this.protocol.reloadConfig()
-      this.logger.info('协议配置已刷新')
-    }
-    else {
-      this.logger.warn('当前协议不支持配置重新加载')
-    }
-  }
-
-  /**
-   * 只读访问器：音频通道是否打开
-   */
-  isAudioChannelOpened(): boolean {
-    return this.protocol?.isAudioChannelOpened() ?? false
-  }
-
-  /**
-   * 判断是否应该采集麦克风音频
-   * - LISTENING 状态：始终采集（未被中止时）
-   * - SPEAKING 状态：仅在实时模式下采集（全双工）
-   */
-  shouldCaptureAudio(): boolean {
-    if (this.deviceState === DeviceStateValue.LISTENING && !this.aborted) {
-      return true
-    }
-    return (
-      this.deviceState === DeviceStateValue.SPEAKING
-      && this.keepListening
-      && this.listeningMode === ListeningModeValue.REALTIME
-    )
-  }
-
-  /**
-   * 获取状态快照
-   */
-  getStateSnapshot(): AppStateSnapshot {
-    return {
-      deviceState: this.deviceState,
-      listeningMode: this.listeningMode,
-      keepListening: this.keepListening,
-      channelOpen: this.isAudioChannelOpened(),
-    }
-  }
-
-  /**
-   * 获取插件管理器
-   */
-  getPluginManager(): PluginManager {
-    return this.plugins
-  }
-
-  /**
-   * 获取 AudioPlugin 实例
-   */
-  getAudioPlugin(): AudioPlugin | null {
-    return this.audioPlugin
-  }
-
-  /**
-   * 获取 WakeWordPlugin 实例
-   */
-  getWakeWordPlugin(): WakeWordPlugin | null {
-    return this.wakeWordPlugin
-  }
-
-  /**
-   * 获取 ShortcutManager 实例
-   */
-  getShortcutManager(): ShortcutManager | null {
-    return this.shortcutManager
-  }
-
-  /**
-   * 打断说话（供快捷键使用）
-   */
-  async interruptSpeaking(): Promise<void> {
-    if (this.deviceState === DeviceStateValue.SPEAKING) {
-      await this.stopAutoConversation()
-      this.logger.info('已打断当前对话')
-    }
-    else {
-      this.logger.info('当前不在说话状态，无需打断')
-    }
-  }
-
-  /**
-   * 关闭应用
-   */
-  async shutdown(): Promise<void> {
-    if (!this.running || this.isShuttingDown) {
-      return
-    }
-
-    this.isShuttingDown = true
-    this.logger.info('正在关闭应用...')
-    this.running = false
-
-    try {
-      // 等待活跃任务完成（最多等待 3 秒）
-      await this.waitForTasks(3000)
-
-      // 等待状态变更完成
-      if (this.stateChangeLock) {
-        await this.stateChangeLock
-      }
-
-      // 等待连接操作完成
-      if (this.connectLock) {
-        await this.connectLock
-      }
-
-      // 关闭协议
-      if (this.protocol) {
-        try {
-          await this.protocol.closeAudioChannel()
-        }
-        catch (error) {
-          this.logger.error('关闭协议失败:', error)
-        }
-        this.protocol = null
-      }
-
-      // 停止并关闭所有插件
-      await this.plugins.stopAll()
-      await this.plugins.shutdownAll()
-
-      // 销毁快捷键管理器
-      this.shortcutManager?.destroy()
-      this.shortcutManager = null
-
-      // 清理插件引用
-      this.audioPlugin = null
-      this.wakeWordPlugin = null
-
-      // 重置状态
-      this.deviceState = DeviceStateValue.IDLE
-      this.keepListening = false
-      this.aborted = false
-
-      this.logger.info('应用关闭完成')
-    }
-    catch (error) {
-      this.logger.error('关闭应用时出错:', error)
-    }
-    finally {
-      this.isShuttingDown = false
-    }
+    await this.protocol?.sendWakeWordDetected(text)
   }
 
   async sendWakeWordDetected(text: string): Promise<void> {
     const ok = await this.connectProtocol()
-    if (!ok) {
-      this.logger.error('协议未连接，无法发送文本')
+    if (!ok)
       return
-    }
+    await this.protocol?.sendWakeWordDetected(text)
+  }
 
-    await this.protocol!.sendWakeWordDetected(text)
+  async interruptSpeaking(): Promise<void> {
+    if (this.container.stateManager.isSpeaking()) {
+      await this.stopAutoConversation()
+    }
+  }
+
+  // ========== 只读访问器 ==========
+
+  getDeviceState(): DeviceState { return this.container.stateManager.getDeviceState() }
+  getProtocol(): Protocol | null { return this.protocol }
+  isAudioChannelOpened(): boolean { return this.protocol?.isAudioChannelOpened() ?? false }
+  getPluginManager(): PluginManager { return this.plugins }
+  getAudioPlugin(): AudioPlugin | null { return this.audioPlugin }
+  getWakeWordPlugin(): WakeWordPlugin | null { return this.wakeWordPlugin }
+  getShortcutManager(): ShortcutManager | null { return this.shortcutManager }
+
+  shouldCaptureAudio(): boolean {
+    return this.container.stateManager.shouldCaptureAudio()
+  }
+
+  getStateSnapshot(): AppStateSnapshot {
+    return {
+      ...this.container.stateManager.getSnapshot(),
+      channelOpen: this.isAudioChannelOpened(),
+    }
+  }
+
+  reloadProtocolConfig(): void {
+    if (!this.protocol)
+      return
+    if ('reloadConfig' in this.protocol && typeof this.protocol.reloadConfig === 'function') {
+      this.protocol.reloadConfig()
+    }
+  }
+
+  // ========== 协议委托工厂 ==========
+
+  private createProtocolDelegate(): ProtocolDelegate {
+    return {
+      isAudioChannelOpened: () => this.protocol?.isAudioChannelOpened() ?? false,
+      sendAudio: async (data: Buffer) => {
+        if (this.protocol && this.protocol.isAudioChannelOpened()) {
+          await this.protocol.sendAudio(data)
+        }
+      },
+      sendText: async (text: string) => {
+        await this.sendText(text)
+      },
+      connectProtocol: () => this.connectProtocol(),
+      startListening: (mode: ListeningMode) => this.startListeningInternal(mode),
+      stopListening: () => this.stopListeningManual(),
+      abortSpeaking: (reason: string) => this.abortSpeaking(reason as AbortReason),
+    }
+  }
+
+  /**
+   * 内部监听启动（供 PluginCommands 使用）
+   */
+  private async startListeningInternal(mode: ListeningMode): Promise<void> {
+    if (mode === ListeningModeValue.MANUAL) {
+      await this.startListeningManual()
+    }
+    else {
+      await this.startAutoConversation()
+    }
   }
 }
 

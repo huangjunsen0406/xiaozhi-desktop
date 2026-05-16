@@ -1,6 +1,8 @@
-import type { Application } from '../services/Application'
+import type { PluginCommands, PluginContext } from '../core'
+import type { Protocol } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
+import { Events } from '../core'
 import { McpServer } from '../mcp/McpServer'
 import { getLogger } from '../utils/logger'
 
@@ -16,6 +18,8 @@ export class McpPlugin extends Plugin {
   readonly name = 'McpPlugin'
   readonly priority = 20 // 工具注册，需要较早初始化
 
+  static readonly dependencies: string[] = ['UIPlugin']
+
   readonly metadata = {
     name: 'McpPlugin',
     version: '1.0.0',
@@ -24,13 +28,13 @@ export class McpPlugin extends Plugin {
   }
 
   private mcpServer: McpServer | null = null
+  private protocol: Protocol | null = null
 
   /**
    * 插件初始化
    */
-  async setup(app: Application): Promise<void> {
-    // 调用父类 setup
-    await super.setup(app)
+  async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
+    await super.setup(ctx, cmd)
 
     logger.info('初始化...')
 
@@ -41,17 +45,15 @@ export class McpPlugin extends Plugin {
       // 设置发送回调：通过协议层发送 MCP 响应
       const sendCallback = async (message: string): Promise<void> => {
         try {
-          // 通过 app 的公共 API 获取 protocol
-          const protocol = this.app?.getProtocol()
-          if (!protocol) {
-            logger.error('Protocol not available')
+          if (!this.protocol) {
+            logger.error('协议不可用')
             return
           }
           // 调用协议层的 sendMcpMessage 方法
-          await protocol.sendMcpMessage(message)
+          await this.protocol.sendMcpMessage(message)
         }
         catch (error) {
-          logger.error('Failed to send MCP message', error)
+          logger.error('发送 MCP 消息失败', error)
         }
       }
 
@@ -59,13 +61,12 @@ export class McpPlugin extends Plugin {
 
       // 设置图片广播回调：通过 UIPlugin 广播图片到渲染进程
       const imageBroadcastCallback = (imageBase64: string, sourceType: 'screenshot' | 'camera'): void => {
-        const pluginManager = this.app?.getPluginManager()
-        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('UIPlugin')
-        if (uiPlugin) {
+        try {
+          const uiPlugin = this.getDep<UIPlugin>('UIPlugin')
           uiPlugin.broadcastImage(imageBase64, sourceType)
         }
-        else {
-          logger.warn('UIPlugin not found, cannot broadcast image')
+        catch {
+          logger.warn('UIPlugin 不可用，无法广播图片')
         }
       }
 
@@ -73,55 +74,58 @@ export class McpPlugin extends Plugin {
 
       // 设置主题广播回调：通过 UIPlugin 广播主题到渲染进程
       const themeBroadcastCallback = (theme: 'light' | 'dark' | 'auto'): void => {
-        const pluginManager = this.app?.getPluginManager()
-        const uiPlugin = pluginManager?.getPlugin<UIPlugin>('UIPlugin')
-        if (uiPlugin) {
+        try {
+          const uiPlugin = this.getDep<UIPlugin>('UIPlugin')
           uiPlugin.broadcastTheme(theme)
         }
-        else {
-          logger.warn('UIPlugin not found, cannot broadcast theme')
+        catch {
+          logger.warn('UIPlugin 不可用，无法广播主题')
         }
       }
 
       this.mcpServer.setThemeBroadcastCallback(themeBroadcastCallback)
 
+      // 订阅协议连接事件
+      ctx.eventBus.on(Events.PROTOCOL_CONNECTED, (data) => {
+        this.protocol = data as Protocol
+      })
+
+      // 订阅 JSON 消息事件
+      ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
+        const message = data as JsonMessage
+        if (message.type === 'mcp') {
+          this.handleMcpMessage(message).catch((error) => {
+            logger.error('处理 MCP 消息失败', error)
+          })
+        }
+      })
+
       // 注册通用工具（包含 system, calendar, timer, music 等）
       await this.mcpServer.addCommonTools()
 
-      logger.info('✓ 初始化完成')
+      logger.info('初始化完成')
     }
     catch (error) {
-      logger.error('✗ 初始化失败', error)
+      logger.error('初始化失败', error)
       throw error
     }
   }
 
   /**
-   * 接收到 JSON 消息回调
+   * 处理 MCP 消息
    */
-  async onIncomingJson(message: JsonMessage): Promise<void> {
-    try {
-      // 只处理 MCP 类型的消息
-      if (message.type !== 'mcp') {
-        return
-      }
-
-      const payload = message.payload
-      if (!payload) {
-        logger.warn('MCP message missing payload')
-        return
-      }
-
-      // 转发到 McpServer 处理
-      if (this.mcpServer) {
-        await this.mcpServer.parseMessage(payload as Record<string, unknown>)
-      }
-      else {
-        logger.error('McpServer not initialized')
-      }
+  private async handleMcpMessage(message: JsonMessage): Promise<void> {
+    const payload = message.payload
+    if (!payload) {
+      logger.warn('MCP 消息缺少 payload')
+      return
     }
-    catch (error) {
-      logger.error('Error handling incoming JSON', error)
+
+    if (this.mcpServer) {
+      await this.mcpServer.parseMessage(payload as Record<string, unknown>)
+    }
+    else {
+      logger.error('McpServer 未初始化')
     }
   }
 
@@ -137,9 +141,11 @@ export class McpPlugin extends Plugin {
       this.mcpServer = null
     }
 
+    this.protocol = null
+
     // 调用父类 shutdown
     await super.shutdown()
 
-    logger.info('✓ 已关闭')
+    logger.info('已关闭')
   }
 }
