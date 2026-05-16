@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import type { AppStateSnapshot, ServerMessage } from '@shared/types'
 import { onMounted, onUnmounted, ref } from 'vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
+const bubbleText = ref('')
 
 // 精灵图参数
 const COLS = 8 // 列数
@@ -23,6 +25,37 @@ let hoverAnimRow = 0 // 悬停时播放的动画行
 const ROW_FRAMES = [6, 8, 8, 4, 5, 8, 6, 6, 6]
 const HOVER_ROWS = [1, 2, 3, 4, 5, 6, 7, 8] // 悬停时可选的动画行
 let removeChangedListener: (() => void) | null = null
+let removeStateListener: (() => void) | null = null
+let removeMessageListener: (() => void) | null = null
+let bubbleTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * 显示气泡文字
+ */
+function showBubble(text: string, autoHideMs = 0): void {
+  if (bubbleTimer) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
+  }
+  bubbleText.value = text
+  if (autoHideMs > 0) {
+    bubbleTimer = setTimeout(() => {
+      bubbleText.value = ''
+      bubbleTimer = null
+    }, autoHideMs)
+  }
+}
+
+/**
+ * 隐藏气泡
+ */
+function hideBubble(): void {
+  if (bubbleTimer) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
+  }
+  bubbleText.value = ''
+}
 
 /**
  * 加载精灵图
@@ -188,13 +221,13 @@ function handleMouseDown(_e: MouseEvent): void {
   isDragging = true
   window.api?.dragStart()
 
-  const handleMouseMoveGlobal = () => {
+  const handleMouseMoveGlobal = (): void => {
     if (isDragging) {
       window.api?.dragMove()
     }
   }
 
-  const handleMouseUpGlobal = () => {
+  const handleMouseUpGlobal = (): void => {
     if (isDragging) {
       isDragging = false
       window.api?.dragEnd()
@@ -207,6 +240,35 @@ function handleMouseDown(_e: MouseEvent): void {
   window.addEventListener('mouseup', handleMouseUpGlobal)
 }
 
+/**
+ * 处理设备状态变更
+ */
+function handleStateChanged(state: AppStateSnapshot): void {
+  const deviceState = state.deviceState
+  if (deviceState === 'idle') {
+    hideBubble()
+  }
+  else if (deviceState === 'connecting') {
+    showBubble('连接中...')
+  }
+  else if (deviceState === 'listening') {
+    showBubble('在听呢...')
+  }
+  // speaking 状态下等服务器消息内容填充
+}
+
+/**
+ * 处理服务器消息（获取 AI 回复文字）
+ */
+function handleServerMessage(message: ServerMessage): void {
+  if (message.type === 'tts' && message.state === 'sentence_start' && message.text) {
+    showBubble(message.text, 5000)
+  }
+  else if (message.type === 'llm' && message.text) {
+    showBubble(message.text, 5000)
+  }
+}
+
 onMounted(() => {
   if (containerRef.value) {
     containerRef.value.addEventListener('mousedown', handleMouseDown)
@@ -215,6 +277,12 @@ onMounted(() => {
 
   // 监听宠物切换事件
   removeChangedListener = window.api?.petsOnChanged?.(handlePetChange) ?? null
+
+  // 监听设备状态变更
+  removeStateListener = window.api?.appOnStateChanged?.(handleStateChanged) ?? null
+
+  // 监听服务器消息
+  removeMessageListener = window.api?.appOnServerMessage?.(handleServerMessage) ?? null
 
   loadSpritesheet()
 })
@@ -229,11 +297,34 @@ onUnmounted(() => {
     removeChangedListener()
     removeChangedListener = null
   }
+  if (removeStateListener) {
+    removeStateListener()
+    removeStateListener = null
+  }
+  if (removeMessageListener) {
+    removeMessageListener()
+    removeMessageListener = null
+  }
+  if (bubbleTimer) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
+  }
 })
 </script>
 
 <template>
   <div ref="containerRef" class="pets-container">
+    <!-- 气泡区域 -->
+    <Transition name="bubble">
+      <div v-if="bubbleText" class="bubble">
+        <div class="bubble-content">
+          {{ bubbleText }}
+        </div>
+        <div class="bubble-arrow" />
+      </div>
+    </Transition>
+
+    <!-- 精灵 Canvas -->
     <canvas
       ref="canvasRef"
       :width="138"
@@ -250,14 +341,70 @@ onUnmounted(() => {
   width: 100vw;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   background: transparent;
   overflow: hidden;
-  cursor: move;
+  padding-bottom: 10px;
 }
 
 canvas {
   image-rendering: pixelated;
+  cursor: move;
+}
+
+/* 气泡 */
+.bubble {
+  max-width: 200px;
+  margin-bottom: 8px;
+}
+
+.bubble-content {
+  background: white;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+/* 深色模式 */
+:global(.dark) .bubble-content {
+  background: #2a2a2a;
+  color: #ddd;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* 小三角箭头 */
+.bubble-arrow {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid white;
+  margin: 0 auto;
+}
+
+:global(.dark) .bubble-arrow {
+  border-top-color: #2a2a2a;
+}
+
+/* 淡入淡出动画 */
+.bubble-enter-active,
+.bubble-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.bubble-enter-from,
+.bubble-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 </style>
