@@ -16,6 +16,7 @@ import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
 import { registerModelIpc } from './modelIpc'
 
+import { registerMusicConfigIpc } from './musicConfigIpc'
 import { registerMusicIpc } from './musicIpc'
 import { registerThemeIpc } from './themeIpc'
 
@@ -38,6 +39,7 @@ export function registerBasicIpcChannels(): void {
   registerThemeIpc()
   registerChatIpc()
   registerMusicIpc()
+  registerMusicConfigIpc()
 
   registerModelIpc()
   registerClipboardIpcChannels()

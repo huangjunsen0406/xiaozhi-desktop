@@ -194,6 +194,7 @@ export class DatabaseManager {
         search_url TEXT DEFAULT 'http://search.kuwo.cn/r.s',
         url_api TEXT DEFAULT 'https://lxmusicapi.onrender.com',
         url_api_key TEXT DEFAULT 'share-v3',
+        url_response_path TEXT DEFAULT 'data.url',
         lyrics_url TEXT DEFAULT 'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
         default_source TEXT DEFAULT 'kw',
         default_quality TEXT DEFAULT '320k',
@@ -207,6 +208,9 @@ export class DatabaseManager {
 
     // 数据库迁移：修复 network_config 的空默认值
     this.migrateNetworkConfigDefaults()
+
+    // 数据库迁移：添加 music_config.url_response_path 列
+    this.migrateMusicConfigUrlResponsePath()
 
     this.logger.info('数据库表初始化完成')
   }
@@ -361,6 +365,33 @@ export class DatabaseManager {
     }
     catch (error) {
       this.logger.error('迁移网络配置失败:', error)
+    }
+  }
+
+  /**
+   * 迁移音乐配置：添加 url_response_path 列
+   */
+  private migrateMusicConfigUrlResponsePath(): void {
+    try {
+      const tableInfo = this.db.prepare('PRAGMA table_info(music_config)').all() as Array<{
+        cid: number
+        name: string
+        type: string
+        notnull: number
+        dflt_value: string | null
+        pk: number
+      }>
+
+      const hasUrlResponsePath = tableInfo.some(col => col.name === 'url_response_path')
+
+      if (!hasUrlResponsePath && tableInfo.length > 0) {
+        this.logger.info('添加 music_config.url_response_path 列...')
+        this.db.exec(`ALTER TABLE music_config ADD COLUMN url_response_path TEXT DEFAULT 'data.url'`)
+        this.logger.info('music_config.url_response_path 列添加完成')
+      }
+    }
+    catch (error) {
+      this.logger.error('迁移 music_config url_response_path 失败:', error)
     }
   }
 
@@ -785,12 +816,13 @@ export class DatabaseManager {
     }
 
     const result = this.db.prepare(`
-      INSERT INTO music_config (search_url, url_api, url_api_key, lyrics_url, default_source, default_quality)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO music_config (search_url, url_api, url_api_key, url_response_path, lyrics_url, default_source, default_quality)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       'http://search.kuwo.cn/r.s',
       'https://lxmusicapi.onrender.com',
       'share-v3',
+      'data.url',
       'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
       'kw',
       '320k',

@@ -17,6 +17,7 @@ import IconCarbonFaceActivated from '~icons/carbon/face-activated'
 import IconCarbonHeadphones from '~icons/carbon/headphones'
 import IconCarbonKeyboard from '~icons/carbon/keyboard'
 import IconCarbonMicrophone from '~icons/carbon/microphone'
+import IconCarbonMusic from '~icons/carbon/music'
 import IconCarbonSettings from '~icons/carbon/settings'
 import IconCarbonUser from '~icons/carbon/user'
 import IconCarbonView from '~icons/carbon/view'
@@ -28,11 +29,12 @@ import CameraSettings from '../components/settings/CameraSettings.vue'
 import EmotionSettings from '../components/settings/EmotionSettings.vue'
 import HotkeySettings from '../components/settings/HotkeySettings.vue'
 import ModelSettings from '../components/settings/ModelSettings.vue'
+import MusicSettings from '../components/settings/MusicSettings.vue'
 import SystemSettings from '../components/settings/SystemSettings.vue'
 import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
 import TitleBar from '../components/TitleBar.vue'
 
-type Key = 'system' | 'appearance' | 'model' | 'emotion' | 'wake' | 'camera' | 'audio' | 'hotkey'
+type Key = 'system' | 'appearance' | 'model' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey'
 const selected = ref<Key>('system')
 const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
 const showTitleBar = window.electron.process.platform !== 'darwin'
@@ -44,6 +46,7 @@ const menuOptions = [
   { label: '表情', key: 'emotion', icon: withIcon(IconCarbonFaceActivated) },
   { label: '唤醒词', key: 'wake', icon: withIcon(IconCarbonMicrophone) },
   { label: '摄像头', key: 'camera', icon: withIcon(IconCarbonCamera) },
+  { label: '音乐', key: 'music', icon: withIcon(IconCarbonMusic) },
   { label: '音频设备', key: 'audio', icon: withIcon(IconCarbonHeadphones) },
   { label: '快捷键', key: 'hotkey', icon: withIcon(IconCarbonKeyboard) },
 ] satisfies { label: string, key: Key, icon: () => ReturnType<typeof h> }[]
@@ -62,6 +65,7 @@ const panelRefs = ref<Record<Key, PanelExposed | null>>({
   emotion: null,
   wake: null,
   camera: null,
+  music: null,
   audio: null,
   hotkey: null,
 })
@@ -84,7 +88,8 @@ const customButtonTextByKey: Record<Key, string | undefined> = {
   model: '刷新列表',
   emotion: undefined, // 表情设置没有自定义按钮
   wake: '测试',
-  camera: undefined, // 摄像头改为内嵌预览，不需要自定义按钮
+  camera: undefined, // 摄像头改为内嵌预��，不需要自定义按钮
+  music: undefined,
   audio: '刷新设备',
   hotkey: '重置所有',
 }
@@ -166,6 +171,7 @@ async function onCustomClick() {
                 <EmotionSettings v-show="selected === 'emotion'" :ref="setPanelRef('emotion')" />
                 <WakeWordSettings v-show="selected === 'wake'" :ref="setPanelRef('wake')" />
                 <CameraSettings v-show="selected === 'camera'" :ref="setPanelRef('camera')" />
+                <MusicSettings v-show="selected === 'music'" :ref="setPanelRef('music')" />
                 <AudioSettings v-show="selected === 'audio'" :ref="setPanelRef('audio')" />
                 <HotkeySettings v-show="selected === 'hotkey'" :ref="setPanelRef('hotkey')" />
               </n-scrollbar>

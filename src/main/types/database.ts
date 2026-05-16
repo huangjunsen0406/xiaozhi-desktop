@@ -149,6 +149,7 @@ export interface DbMusicConfig {
   search_url: string
   url_api: string
   url_api_key: string
+  url_response_path: string
   lyrics_url: string
   default_source: string
   default_quality: string

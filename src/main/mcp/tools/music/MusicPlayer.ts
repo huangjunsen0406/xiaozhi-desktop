@@ -32,6 +32,7 @@ interface MusicConfig {
   searchUrl: string
   urlApi: string
   urlApiKey: string
+  urlResponsePath: string
   lyricsUrl: string
   defaultSource: string
   defaultQuality: string
@@ -42,9 +43,17 @@ const DEFAULT_MUSIC_CONFIG: MusicConfig = {
   searchUrl: 'http://search.kuwo.cn/r.s',
   urlApi: 'https://lxmusicapi.onrender.com',
   urlApiKey: 'share-v3',
+  urlResponsePath: 'data.url',
   lyricsUrl: 'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
   defaultSource: 'kw',
   defaultQuality: '320k',
+}
+
+/**
+ * 按点分路径从对象中提取值
+ */
+function getByPath(obj: unknown, path: string): unknown {
+  return path.split('.').reduce((o: any, key) => o?.[key], obj)
 }
 
 /**
@@ -91,6 +100,7 @@ export class MusicPlayer {
         searchUrl: dbConfig.search_url || DEFAULT_MUSIC_CONFIG.searchUrl,
         urlApi: dbConfig.url_api || DEFAULT_MUSIC_CONFIG.urlApi,
         urlApiKey: dbConfig.url_api_key || DEFAULT_MUSIC_CONFIG.urlApiKey,
+        urlResponsePath: dbConfig.url_response_path || DEFAULT_MUSIC_CONFIG.urlResponsePath,
         lyricsUrl: dbConfig.lyrics_url || DEFAULT_MUSIC_CONFIG.lyricsUrl,
         defaultSource: dbConfig.default_source || DEFAULT_MUSIC_CONFIG.defaultSource,
         defaultQuality: dbConfig.default_quality || DEFAULT_MUSIC_CONFIG.defaultQuality,
@@ -633,21 +643,29 @@ export class MusicPlayer {
 
       const data = await response.json() as Record<string, unknown>
 
-      // 尝试多种响应格式
+      // 使用配置的路径提取 URL
+      const extractedUrl = getByPath(data, config.urlResponsePath || 'data.url')
       let realUrl: string | null = null
-      if (typeof data === 'object' && data !== null) {
-        if (typeof data.url === 'string') {
-          realUrl = data.url
-        }
-        else if (data.data) {
-          if (typeof data.data === 'object' && data.data !== null) {
-            const inner = data.data as Record<string, unknown>
-            if (typeof inner.url === 'string') {
-              realUrl = inner.url
-            }
+
+      if (typeof extractedUrl === 'string' && extractedUrl.startsWith('http')) {
+        realUrl = extractedUrl
+      }
+      else {
+        // fallback: 尝试常见路径
+        if (typeof data === 'object' && data !== null) {
+          if (typeof data.url === 'string') {
+            realUrl = data.url
           }
-          else if (typeof data.data === 'string') {
-            realUrl = data.data
+          else if (data.data) {
+            if (typeof data.data === 'object' && data.data !== null) {
+              const inner = data.data as Record<string, unknown>
+              if (typeof inner.url === 'string') {
+                realUrl = inner.url
+              }
+            }
+            else if (typeof data.data === 'string') {
+              realUrl = data.data
+            }
           }
         }
       }

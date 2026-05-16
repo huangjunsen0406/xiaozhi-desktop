@@ -12,6 +12,7 @@ import type {
   ChatSession,
   DeviceInfo,
   ModelInfo,
+  MusicConfig,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -38,6 +39,7 @@ export type {
   ChatSession,
   DeviceInfo,
   ModelInfo,
+  MusicConfig,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -152,6 +154,8 @@ export interface RendererApi {
   // Music APIs
   musicOnCommand: (callback: (message: { command: string, args?: Record<string, unknown> }) => void) => () => void
   musicStatusUpdate: (status: Record<string, unknown>) => void
+  musicGetConfig: () => Promise<MusicConfig>
+  musicUpdateConfig: (config: Partial<MusicConfig>) => Promise<void>
 
   // Live2D APIs
   live2dOnAudioVolume: (callback: (volume: number) => void) => () => void

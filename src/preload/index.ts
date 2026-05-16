@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, musicConfigApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -123,6 +123,8 @@ const api = {
   // 音乐 API
   musicOnCommand: musicApi.onCommand,
   musicStatusUpdate: musicApi.statusUpdate,
+  musicGetConfig: musicConfigApi.getConfig,
+  musicUpdateConfig: musicConfigApi.updateConfig,
 
   // Live2D API
   live2dOnAudioVolume: live2dApi.onAudioVolume,
