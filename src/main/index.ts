@@ -17,6 +17,8 @@ import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow
 const logger = getLogger('Index')
 const APP_DISPLAY_NAME = '小智'
 
+let isQuittingFlag = false
+
 app.setName(APP_DISPLAY_NAME)
 
 app.commandLine.appendSwitch(
@@ -74,6 +76,9 @@ app.on('ready', () => {
 // 在 app ready 之前注册自定义协议 scheme
 registerModelProtocolScheme()
 
+// 初始化日志系统（在单实例锁检查前，确保 logger 可用）
+initLogger()
+
 // 单实例锁定：防止多开
 const gotTheLock = app.requestSingleInstanceLock()
 
@@ -111,8 +116,6 @@ else {
 }
 
 app.whenReady().then(async () => {
-  // 初始化日志系统
-  initLogger()
   logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
 
   // 检查并处理企业版代理问题
@@ -239,6 +242,9 @@ app.on('window-all-closed', () => {
 
 // 应用退出前清理所有资源
 app.on('before-quit', async (event) => {
+  if (isQuittingFlag)
+    return
+  isQuittingFlag = true
   event.preventDefault()
   setIsQuitting(true) // 设置退出标志，允许窗口关闭
   logger.info('应用正在退出...')
@@ -256,6 +262,16 @@ app.on('before-quit', async (event) => {
   }
   catch (error) {
     logger.error('清理后台音频系统失败', error)
+  }
+
+  // 关闭 Application（数据库、插件等）
+  try {
+    const application = getApplication()
+    await application.shutdown()
+    logger.info('Application 已关闭')
+  }
+  catch (error) {
+    logger.error('Application 关闭失败', error)
   }
 
   await shutdownLogger()
