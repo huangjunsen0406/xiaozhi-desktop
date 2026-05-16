@@ -45,7 +45,7 @@ export class ConfigManager {
   }
 
   async initializeDeviceIdAsync(): Promise<void> {
-    const deviceFingerprint = await DeviceFingerprintManager.getInstanceAsync()
+    const deviceFingerprint = DeviceFingerprintManager.getInstance()
     const macAddress = deviceFingerprint.getMacAddressFromEfuse()
 
     if (macAddress && macAddress !== this.getDeviceId()) {

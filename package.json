@@ -36,7 +36,6 @@
     "getmac": "^6.6.0",
     "lamejs": "^1.2.1",
     "mqtt": "^5.14.1",
-    "node-machine-id": "^1.1.12",
     "node-screenshots": "^0.2.1",
     "openai": "^6.9.1",
     "opusscript": "^0.1.1",

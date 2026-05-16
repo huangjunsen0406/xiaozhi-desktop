@@ -56,7 +56,7 @@ export class ActivationService {
     this.logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
     try {
-      await this.initializeDeviceFingerprint()
+      this.initializeDeviceFingerprint()
       await this.initializeConfig()
 
       this.logger.info('基础设备信息初始化完成')
@@ -123,9 +123,9 @@ export class ActivationService {
     }
   }
 
-  private async initializeDeviceFingerprint(): Promise<void> {
+  private initializeDeviceFingerprint(): void {
     if (!this.initialized) {
-      this.deviceFingerprint = await DeviceFingerprintManager.getInstanceAsync()
+      this.deviceFingerprint = DeviceFingerprintManager.getInstance()
       this.initialized = true
 
       const [serialNumber, hmacKey, isActivated] = this.deviceFingerprint.ensureDeviceIdentity()
