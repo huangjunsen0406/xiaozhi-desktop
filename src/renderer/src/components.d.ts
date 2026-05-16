@@ -34,6 +34,7 @@ declare module 'vue' {
     NInput: typeof import('naive-ui')['NInput']
     NInputOtp: typeof import('naive-ui')['NInputOtp']
     NScrollbar: typeof import('naive-ui')['NScrollbar']
+    PetsSettings: typeof import('./components/settings/PetsSettings.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ShortcutRecorder: typeof import('./components/ShortcutRecorder.vue')['default']

@@ -23,6 +23,9 @@ importers:
       '@vueuse/core':
         specifier: ^13.9.0
         version: 13.9.0(vue@3.5.18(typescript@5.9.2))
+      async-mutex:
+        specifier: ^0.5.0
+        version: 0.5.0
       axios:
         specifier: ^1.13.2
         version: 1.13.2
@@ -44,9 +47,6 @@ importers:
       mqtt:
         specifier: ^5.14.1
         version: 5.14.1
-      node-machine-id:
-        specifier: ^1.1.12
-        version: 1.1.12
       node-screenshots:
         specifier: ^0.2.1
         version: 0.2.1
@@ -1768,6 +1768,9 @@ packages:
   async-exit-hook@2.0.1:
     resolution: {integrity: sha512-NW2cX8m1Q7KPA7a5M2ULQeZ2wR5qI5PAbw5L0UOMxdioVk9PMZ0h1TmyZEkPYrCvYjDlFICusOu1dlEKAAeXBw==}
     engines: {node: '>=0.12.0'}
+
+  async-mutex@0.5.0:
+    resolution: {integrity: sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA==}
 
   async-validator@4.2.5:
     resolution: {integrity: sha512-7HhHjtERjqlNbZtqNqy2rckN/SpOOlmDliet+lP7k+eKZEjPk3DgyeU9lIXLdeLz0uBbbVp+9Qdow9wJWgwwfg==}
@@ -3573,9 +3576,6 @@ packages:
     resolution: {integrity: sha512-OQkWKbjQKbGkMf/xqI1jjy3oCTgMKJac58G2+bjZb3fza6gW2YrCSdMQYaoTb70crvE//Gngr4f0AgVHmqHvBQ==}
     engines: {node: ^12.13 || ^14.13 || >=16}
     hasBin: true
-
-  node-machine-id@1.1.12:
-    resolution: {integrity: sha512-QNABxbrPa3qEIfrE6GOJ7BYIuignnJw7iQ2YPbc3Nla1HzRJjXzZOiikfF8m7eAMfichLt3M4VgLOetqgDmgGQ==}
 
   node-releases@2.0.19:
     resolution: {integrity: sha512-xxOWJsBKtzAq7DY0J+DTzuz58K8e7sJbdgwkbMWQe8UYB6ekmsQ45q0M/tJDsGaZmbC+l7n57UV8Hl5tHxO9uw==}
@@ -6318,6 +6318,10 @@ snapshots:
 
   async-exit-hook@2.0.1: {}
 
+  async-mutex@0.5.0:
+    dependencies:
+      tslib: 2.8.1
+
   async-validator@4.2.5: {}
 
   async@2.6.4:
@@ -8516,8 +8520,6 @@ snapshots:
     transitivePeerDependencies:
       - bluebird
       - supports-color
-
-  node-machine-id@1.1.12: {}
 
   node-releases@2.0.19: {}
 
