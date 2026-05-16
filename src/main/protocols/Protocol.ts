@@ -223,6 +223,7 @@ export abstract class Protocol {
         payload: payloadData,
       }
 
+      logger.info('发送 MCP 响应:', JSON.stringify(message))
       return await this.sendText(JSON.stringify(message))
     }
     catch (error) {

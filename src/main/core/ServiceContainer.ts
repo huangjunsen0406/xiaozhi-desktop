@@ -89,10 +89,29 @@ class PluginCommandsAdapter implements PluginCommands {
   ) {}
 
   async startListening(mode: ListeningMode): Promise<void> {
-    // 自动连接协议（唤醒词触发时 WebSocket 可能已断开）
-    const connected = await this.container.protocolManager.openAudioChannel()
-    if (!connected) return
-    await this.container.protocolManager.sendStartListening(mode)
+    const sm = this.container.stateManager
+    const pm = this.container.protocolManager
+
+    // 设置监听模式和持续监听标志
+    sm.setListeningMode(mode)
+    sm.setKeepListening(mode === ListeningModeValue.REALTIME || mode === ListeningModeValue.AUTO)
+    await sm.setDeviceState(DeviceStateValue.CONNECTING)
+
+    // 先关闭旧连接（确保每次对话使用新 session）
+    if (pm.isAudioChannelOpened()) {
+      await pm.closeAudioChannel()
+    }
+
+    // 建立新连接
+    const connected = await pm.openAudioChannel()
+    if (!connected) {
+      sm.setKeepListening(false)
+      await sm.setDeviceState(DeviceStateValue.IDLE)
+      return
+    }
+
+    await pm.sendStartListening(mode)
+    await sm.setDeviceState(DeviceStateValue.LISTENING)
   }
 
   async stopListening(): Promise<void> {

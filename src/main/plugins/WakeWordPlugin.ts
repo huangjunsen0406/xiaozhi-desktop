@@ -218,10 +218,9 @@ export class WakeWordPlugin extends Plugin {
         return
       }
 
-      // 情况2 & 通用: 发送唤醒词检测消息并启动自动对话
+      // 情况2 & 通用: 建立新连接并启动自动对话
       logger.info('启动自动对话')
-      await this.cmd.sendText('唤醒')
-      await this.cmd.startListening('auto')
+      await this.cmd.startListening('realtime')
     }
     catch (error) {
       logger.error('处理唤醒词失败', error)
