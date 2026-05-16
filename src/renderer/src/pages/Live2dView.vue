@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { AppStateSnapshot, ServerMessage } from '@shared/types'
 import * as pixiFnPatch from '@pixi/unsafe-eval'
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import * as PIXI from 'pixi.js'
@@ -11,6 +12,7 @@ pixiFnPatch.install(PIXI)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 const canvasSize = { width: 200, height: 400 }
+const bubbleText = ref('')
 
 // 默认模型（首次加载或配置为空时使用）
 const DEFAULT_MODEL = 'Hiyori'
@@ -21,6 +23,9 @@ let isDragging = false
 let currentModelId = '' // 当前加载的模型ID
 let removeAudioVolumeListener: (() => void) | null = null
 let removeModelChangedListener: (() => void) | null = null
+let removeStateListener: (() => void) | null = null
+let removeMessageListener: (() => void) | null = null
+let bubbleTimer: ReturnType<typeof setTimeout> | null = null
 
 const status = ref({
   canvas: false,
@@ -126,6 +131,63 @@ async function handleModelChange(newModelId: string): Promise<void> {
   }
 }
 
+/**
+ * 显示气泡文字
+ */
+function showBubble(text: string, autoHideMs = 0): void {
+  if (bubbleTimer) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
+  }
+  bubbleText.value = text
+  if (autoHideMs > 0) {
+    bubbleTimer = setTimeout(() => {
+      bubbleText.value = ''
+      bubbleTimer = null
+    }, autoHideMs)
+  }
+}
+
+/**
+ * 隐藏气泡
+ */
+function hideBubble(): void {
+  if (bubbleTimer) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
+  }
+  bubbleText.value = ''
+}
+
+/**
+ * 处理设备状态变更
+ */
+function handleStateChanged(state: AppStateSnapshot): void {
+  const deviceState = state.deviceState
+  if (deviceState === 'idle') {
+    hideBubble()
+  }
+  else if (deviceState === 'connecting') {
+    showBubble('🔗 连接中...')
+  }
+  else if (deviceState === 'listening') {
+    showBubble('🎤 聆听中...')
+  }
+  // speaking 状态下等服务器消息内容填充
+}
+
+/**
+ * 处理服务器消息（获取 AI 回复文字）
+ */
+function handleServerMessage(message: ServerMessage): void {
+  if (message.type === 'tts' && message.state === 'sentence_start' && message.text) {
+    showBubble(message.text, 5000)
+  }
+  else if (message.type === 'llm' && message.text) {
+    showBubble(message.text, 5000)
+  }
+}
+
 // 注册清理函数(必须在 async 之前)
 onUnmounted(() => {
   if (containerRef.value) {
@@ -149,6 +211,19 @@ onUnmounted(() => {
   if (removeModelChangedListener) {
     removeModelChangedListener()
     removeModelChangedListener = null
+  }
+  // 移除状态和消息监听
+  if (removeStateListener) {
+    removeStateListener()
+    removeStateListener = null
+  }
+  if (removeMessageListener) {
+    removeMessageListener()
+    removeMessageListener = null
+  }
+  if (bubbleTimer) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
   }
 })
 
@@ -196,6 +271,12 @@ onMounted(async () => {
     // 监听模型切换事件
     removeModelChangedListener = window.api?.modelOnChanged?.(handleModelChange) ?? null
     console.log('[Live2D] 模型切换监听已注册')
+
+    // 监听设备状态变更
+    removeStateListener = window.api?.appOnStateChanged?.(handleStateChanged) ?? null
+
+    // 监听服务器消息
+    removeMessageListener = window.api?.appOnServerMessage?.(handleServerMessage) ?? null
   }
   catch (error) {
     console.error('Failed to initialize', error)
@@ -336,6 +417,16 @@ function startLipSyncAnimation(): void {
 
 <template>
   <div ref="containerRef" class="live2d-container">
+    <!-- 气泡区域 -->
+    <Transition name="bubble">
+      <div v-if="bubbleText" class="bubble">
+        <div class="bubble-content">
+          {{ bubbleText }}
+        </div>
+        <div class="bubble-arrow" />
+      </div>
+    </Transition>
+
     <canvas
       id="live2d-canvas"
       ref="canvasRef"
@@ -355,12 +446,71 @@ function startLipSyncAnimation(): void {
   overflow: hidden;
   cursor: move;
   background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 #live2d-canvas {
   display: block;
   width: 100%;
-  height: 100%;
+  flex: 1;
+}
+
+/* 气泡 */
+.bubble {
+  max-width: 180px;
+  margin-top: 8px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.bubble-content {
+  background: white;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+/* 深色模式 */
+:global(.dark) .bubble-content {
+  background: #2a2a2a;
+  color: #ddd;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* 小三角箭头 */
+.bubble-arrow {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid white;
+  margin: 0 auto;
+}
+
+:global(.dark) .bubble-arrow {
+  border-top-color: #2a2a2a;
+}
+
+/* 淡入淡出动画 */
+.bubble-enter-active,
+.bubble-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.bubble-enter-from,
+.bubble-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .debug-info {
