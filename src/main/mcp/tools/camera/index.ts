@@ -8,7 +8,7 @@ import { VLCamera } from './VLCamera'
 
 import { WebCamera } from './WebCamera'
 
-const logger = getLogger('Index')
+const logger = getLogger('Camera')
 
 /** 摄像头配置 */
 interface CameraOptions {
@@ -28,23 +28,38 @@ interface CameraOptions {
   clientId?: string
 }
 
+let lastCameraType: 'vl' | 'web' | null = null
+let lastVlConfig: { apiKey: string, url: string, model: string } | null = null
+
 /**
  * 获取摄像头实例
- * 根据配置返回 VLCamera 或 WebCamera
+ * 根据配置返回 VLCamera 或 WebCamera，配置变更时重建实例
  */
 export function getCameraInstance(options: CameraOptions): BaseCamera {
-  // 检查是否配置了智普 AI
   if (options.vlApiKey && options.vlUrl) {
-    logger.info(`使用 VL Camera，URL: ${options.vlUrl}`)
-    const camera = VLCamera.getInstance(
-      options.vlApiKey,
-      options.vlUrl,
-      options.vlModel || 'glm-4v-plus',
-    )
-    return camera
+    const model = options.vlModel || 'glm-4v-plus'
+    const configChanged = lastCameraType !== 'vl'
+      || lastVlConfig?.apiKey !== options.vlApiKey
+      || lastVlConfig?.url !== options.vlUrl
+      || lastVlConfig?.model !== model
+
+    if (configChanged) {
+      VLCamera.resetInstance()
+      logger.info(`使用 VL Camera，URL: ${options.vlUrl}`)
+    }
+
+    lastCameraType = 'vl'
+    lastVlConfig = { apiKey: options.vlApiKey, url: options.vlUrl, model }
+
+    return VLCamera.getInstance(options.vlApiKey, options.vlUrl, model)
   }
 
-  logger.info('VL 配置未找到，使用 WebCamera 实现')
+  if (lastCameraType !== 'web') {
+    logger.info('VL 配置未找到，使用 WebCamera 实现')
+  }
+  lastCameraType = 'web'
+  lastVlConfig = null
+
   const camera = WebCamera.getInstance()
 
   if (options.explainUrl) {

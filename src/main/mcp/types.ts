@@ -140,6 +140,7 @@ export interface JsonRpcResponse {
   id: string | number
   result?: unknown
   error?: {
+    code: number
     message: string
     data?: unknown
   }

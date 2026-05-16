@@ -1,12 +1,9 @@
-import type { AnalyzeResult, CameraToolConfig, CaptureResult } from './types'
+import type { AnalyzeResult, CameraToolConfig } from './types'
 
 /**
  * Web 摄像头实现
  * 通过渲染进程 getUserMedia 捕获图像，使用远程 API 分析
  */
-import { Buffer } from 'node:buffer'
-import { BrowserWindow, ipcMain } from 'electron'
-import sharp from 'sharp'
 import { getLogger } from '../../../utils/logger'
 
 import { BaseCamera } from './BaseCamera'
@@ -61,64 +58,6 @@ export class WebCamera extends BaseCamera {
    */
   setClientId(clientId: string): void {
     this.clientId = clientId
-  }
-
-  /**
-   * 捕获图像（通过 IPC 调用渲染进程）
-   */
-  async capture(): Promise<CaptureResult> {
-    try {
-      logger.info('开始捕获图像...')
-
-      // 获取当前焦点窗口
-      const win = BrowserWindow.getFocusedWindow()
-      if (!win || win.isDestroyed()) {
-        logger.error('未找到可用的焦点窗口')
-        return { success: false, message: '未找到可用的焦点窗口' }
-      }
-
-      // 通知渲染进程捕获图像
-      win.webContents.send('camera:request-capture')
-
-      // 等待渲染进程返回图像数据（设置超时 10 秒）
-      const imageData = await new Promise<Buffer>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('捕获图像超时'))
-        }, 10000)
-
-        ipcMain.once('camera:capture-result', (_event, data: { success: boolean, data?: Uint8Array, message?: string }) => {
-          clearTimeout(timeout)
-          if (data.success && data.data) {
-            // 将 Uint8Array 转换为 Buffer
-            resolve(Buffer.from(data.data))
-          }
-          else {
-            reject(new Error(data.message || '捕获失败'))
-          }
-        })
-      })
-
-      // 使用 sharp 压缩和调整大小
-      const resizedBuffer = await sharp(imageData)
-        .resize(this.config.maxDimension, this.config.maxDimension, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: this.config.jpegQuality })
-        .toBuffer()
-
-      this.setJpegBuffer(resizedBuffer)
-      logger.info(`图像捕获成功 (大小: ${resizedBuffer.length} 字节)`)
-
-      return { success: true, data: resizedBuffer }
-    }
-    catch (error) {
-      logger.error('捕获图像失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '捕获图像失败',
-      }
-    }
   }
 
   /**

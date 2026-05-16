@@ -131,6 +131,7 @@ export class McpServer {
    * 解析 MCP 消息
    */
   async parseMessage(message: string | Record<string, unknown>): Promise<void> {
+    let requestId: string | number | undefined
     try {
       const data: JsonRpcRequest
         = typeof message === 'string'
@@ -138,6 +139,8 @@ export class McpServer {
           : message as unknown as JsonRpcRequest
 
       logger.debug('解析消息', data)
+
+      requestId = data.id
 
       // 检查 JSONRPC 版本
       if (data.jsonrpc !== '2.0') {
@@ -177,14 +180,13 @@ export class McpServer {
       }
       else {
         logger.error('方法未实现', { method })
-        await this.replyError(id, `Method not implemented: ${method}`)
+        await this.replyError(id, -32601, `Method not implemented: ${method}`)
       }
     }
     catch (error) {
       logger.error('解析消息失败', error)
-      // 尝试回复错误（如果有 id）
-      if (typeof error === 'object' && error && 'id' in error) {
-        await this.replyError(error.id as string | number, String(error))
+      if (requestId !== undefined) {
+        await this.replyError(requestId, -32603, String(error))
       }
     }
   }
@@ -282,7 +284,7 @@ export class McpServer {
 
     const toolName = params?.name as string | undefined
     if (!toolName) {
-      await this.replyError(id, 'Missing tool name')
+      await this.replyError(id, -32602, 'Missing tool name')
       return
     }
 
@@ -291,7 +293,7 @@ export class McpServer {
     // 查找工具
     const tool = this.tools.find(t => t.name === toolName)
     if (!tool) {
-      await this.replyError(id, `Unknown tool: ${toolName}`)
+      await this.replyError(id, -32602, `Unknown tool: ${toolName}`)
       return
     }
 
@@ -308,7 +310,7 @@ export class McpServer {
     }
     catch (error) {
       logger.error('工具执行失败', error, { toolName })
-      await this.replyError(id, String(error))
+      await this.replyError(id, -32603, String(error))
     }
   }
 
@@ -424,16 +426,17 @@ export class McpServer {
   /**
    * 发送错误响应
    */
-  private async replyError(id: string | number, message: string): Promise<void> {
+  private async replyError(id: string | number, code: number, message: string): Promise<void> {
     const payload: JsonRpcResponse = {
       jsonrpc: '2.0',
       id,
       error: {
+        code,
         message,
       },
     }
 
-    logger.error('发送错误响应', { id, message })
+    logger.error('发送错误响应', { id, code, message })
 
     if (this.sendCallback) {
       await this.sendCallback(JSON.stringify(payload))
