@@ -1,13 +1,13 @@
 import type { IpcMainInvokeEvent } from 'electron'
-import type { Application } from '../services/Application'
+import type { ServiceContainer } from '../core/ServiceContainer'
 import { ipcMain } from 'electron'
 
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('ShortcutIpc')
 
-export function registerShortcutIpcChannels(application: Application) {
-  const shortcutManager = application.getShortcutManager()
+export function registerShortcutIpcChannels(container: ServiceContainer) {
+  const shortcutManager = container.getShortcutManager()
 
   if (!shortcutManager) {
     logger.warn('ShortcutManager 未初始化')

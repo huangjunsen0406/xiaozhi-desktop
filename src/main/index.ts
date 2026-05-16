@@ -4,10 +4,10 @@ import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage, session } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
+import { getServiceContainer } from './core/ServiceContainer'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { getActivationService } from './services/ActivationService'
 
-import { getApplication } from './services/Application'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
@@ -127,11 +127,11 @@ app.whenReady().then(async () => {
     logger.info('尝试绕过代理以解决企业版网络问题...')
 
     try {
-      // 方案1: 对特定域名设置 direct 连接（不使用代理）
+      // 对特定域名设置 direct 连接（不使用代理）
       await session.defaultSession.setProxy({
         mode: 'direct', // 直连，不使用代理
       })
-      logger.info('✓ 已设置直连模式（绕过系统代理）')
+      logger.info('已设置直连模式（绕过系统代理）')
     }
     catch (error) {
       logger.error('设置代理配置失败', error)
@@ -177,19 +177,18 @@ app.whenReady().then(async () => {
   logger.info('创建后台音频窗口...')
   const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
-  // 初始化应用
-  const application = getApplication()
-  await application.initialize('websocket')
+  // 初始化 ServiceContainer
+  const container = getServiceContainer()
+  await container.initialize('websocket')
 
-  const audioPlugin = application.getAudioPlugin()
-  if (audioPlugin && backgroundAudioWindow) {
-    audioPlugin.setBackgroundAudioWindow(backgroundAudioWindow)
-    logger.info('AudioPlugin 窗口引用已设置')
+  // 设置音频插件的后台窗口
+  if (backgroundAudioWindow) {
+    container.setAudioPluginBackgroundWindow(backgroundAudioWindow)
   }
 
-  await application.start()
+  await container.start()
 
-  const ipcContext: IpcContext = { application }
+  const ipcContext: IpcContext = { container }
   registerAppIpcChannels(ipcContext)
 
   // 先显示主窗口，让用户看到界面
@@ -199,8 +198,6 @@ app.whenReady().then(async () => {
   activationService.checkActivationStatus().then((result) => {
     if (result.error) {
       logger.warn('激活状态检查失败（已忽略）', result.error)
-      // 可以在这里通过 IPC 向渲染进程发送通知，显示错误提示
-      // 例如：mainWindow.webContents.send('activation:error', result.error)
     }
     else {
       logger.info('激活状态检查完成', result.message)
@@ -255,7 +252,7 @@ app.on('before-quit', async (event) => {
     if (backgroundAudioWindow && !backgroundAudioWindow.isDestroyed()) {
       logger.info('正在清理后台音频系统...')
       backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
-      // 等待一小段时间让cleanup完成
+      // 等待一小段时间让 cleanup 完成
       await new Promise(resolve => setTimeout(resolve, 100))
       logger.info('后台音频系统已清理')
     }
@@ -264,14 +261,14 @@ app.on('before-quit', async (event) => {
     logger.error('清理后台音频系统失败', error)
   }
 
-  // 关闭 Application（数据库、插件等）
+  // 关闭 ServiceContainer（插件、协议、任务等）
   try {
-    const application = getApplication()
-    await application.shutdown()
-    logger.info('Application 已关闭')
+    const container = getServiceContainer()
+    await container.shutdown()
+    logger.info('ServiceContainer 已关闭')
   }
   catch (error) {
-    logger.error('Application 关闭失败', error)
+    logger.error('ServiceContainer 关闭失败', error)
   }
 
   await shutdownLogger()

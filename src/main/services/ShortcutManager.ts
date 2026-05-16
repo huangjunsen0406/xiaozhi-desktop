@@ -1,6 +1,6 @@
 import type { ShortcutConfig } from '@shared/types'
+import type { ServiceContainer } from '../core/ServiceContainer'
 import type { DbShortcutConfig } from '../types/database'
-import type { Application } from './Application'
 import type { DatabaseManager } from './database'
 import { globalShortcut } from 'electron'
 import { getLogger } from '../utils/logger'
@@ -15,7 +15,7 @@ import {
 } from '../windows/windowManager'
 
 /**
- * Convert DB shortcut record (number fields) to shared ShortcutConfig (boolean fields)
+ * 将数据库快捷键记录转为共享类型
  */
 function dbToShortcutConfig(row: DbShortcutConfig): ShortcutConfig {
   return {
@@ -31,13 +31,13 @@ function dbToShortcutConfig(row: DbShortcutConfig): ShortcutConfig {
 
 export class ShortcutManager {
   private db: DatabaseManager
-  private application: Application
+  private container: ServiceContainer
   private shortcuts: Map<string, ShortcutConfig> = new Map()
   private logger = getLogger('ShortcutManager')
 
-  constructor(db: DatabaseManager, application: Application) {
+  constructor(db: DatabaseManager, container: ServiceContainer) {
     this.db = db
-    this.application = application
+    this.container = container
     this.initDatabase()
   }
 
@@ -147,29 +147,29 @@ export class ShortcutManager {
         break
 
       case 'conversation.manual': {
-        const state = this.application.getStateSnapshot()
+        const state = this.container.getStateSnapshot()
         if (state.deviceState === 'idle') {
-          this.application.startListeningManual()
+          this.container.startListeningManual()
         }
         else if (state.deviceState === 'listening' && state.listeningMode === 'manual') {
-          this.application.stopListeningManual()
+          this.container.stopListeningManual()
         }
         break
       }
 
       case 'conversation.auto': {
-        const autoState = this.application.getStateSnapshot()
+        const autoState = this.container.getStateSnapshot()
         if (autoState.channelOpen) {
-          this.application.stopAutoConversation()
+          this.container.stopAutoConversation()
         }
         else {
-          this.application.startAutoConversation()
+          this.container.startAutoConversation()
         }
         break
       }
 
       case 'conversation.interrupt':
-        this.application.interruptSpeaking()
+        this.container.interruptSpeaking()
         break
 
       case 'app.activate': {

@@ -24,7 +24,7 @@ import { registerThemeIpc } from './themeIpc'
 const logger = getLogger('Index')
 
 /**
- * 注册基础 IPC 通道（不依赖 Application）
+ * 注册基础 IPC 通道（不依赖 ServiceContainer）
  * 包括: 悬停、激活、配置、音频、后台音频、窗口控制等
  */
 export function registerBasicIpcChannels(): void {
@@ -149,31 +149,31 @@ export function registerBasicIpcChannels(): void {
     }
   })
 
-  logger.info('✓ 基础 IPC 通道已注册')
+  logger.info('基础 IPC 通道已注册')
 }
 
 /**
- * 注册 Application 相关的 IPC 通道（依赖 Application 实例）
+ * 注册应用相关的 IPC 通道（依赖 ServiceContainer 实例）
  * 包括: 监听控制、状态管理、文本发送、唤醒词等
- * @param context - IPC 上下文，包含 Application 实例
+ * @param context - IPC 上下文，包含 ServiceContainer 实例
  */
 export function registerAppIpcChannels(context: IpcContext): void {
-  logger.info('注册 Application IPC 通道...')
+  logger.info('注册应用 IPC 通道...')
   registerAppIpc(context)
 
   // 注入表情广播回调（通过 UIPlugin）
-  const pluginManager = context.application.getPluginManager()
+  const pluginManager = context.container.getPluginManager()
   const uiPlugin = pluginManager.getPlugin('UIPlugin')
   const uiPluginWithEmotion = uiPlugin as unknown as { broadcastEmotion?: (emotionType: string) => void }
   if (uiPluginWithEmotion && typeof uiPluginWithEmotion.broadcastEmotion === 'function') {
     setEmotionBroadcastCallback((emotionType: string) => {
       uiPluginWithEmotion.broadcastEmotion!(emotionType)
     })
-    logger.info('✓ 表情广播回调已注入到 emotionIpc')
+    logger.info('表情广播回调已注入到 emotionIpc')
   }
   else {
     logger.warn('UIPlugin 未找到或不支持 broadcastEmotion，表情广播将使用降级方案')
   }
 
-  logger.info('✓ Application IPC 通道已注册')
+  logger.info('应用 IPC 通道已注册')
 }

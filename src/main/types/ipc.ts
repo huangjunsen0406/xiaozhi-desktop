@@ -7,10 +7,10 @@ import type {
   DeviceInfo,
   IpcResult,
 } from '@shared/types'
-import type { Application } from '../services/Application'
+import type { ServiceContainer } from '../core/ServiceContainer'
 
 export interface IpcContext {
-  application: Application
+  container: ServiceContainer
 }
 
 export type {

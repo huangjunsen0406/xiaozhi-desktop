@@ -1,8 +1,8 @@
 import type { MqttInfo } from '../services/configManagerDB'
 import axios from 'axios'
 import { ipcMain } from 'electron'
+import { getServiceContainer } from '../core/ServiceContainer'
 import { getActivationService } from '../services/ActivationService'
-import { getApplication } from '../services/Application'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
 
@@ -239,8 +239,8 @@ export function registerConfigIpc(): void {
 
                 // 刷新协议配置，让新的 WebSocket/MQTT 配置生效
                 try {
-                  const application = getApplication()
-                  application.reloadProtocolConfig()
+                  const container = getServiceContainer()
+                  container.reloadProtocolConfig()
                   logger.info('协议配置已刷新')
                 }
                 catch (reloadError) {

@@ -10,7 +10,7 @@ import type {
   StartCountdownResult,
   TimerInfo,
 } from './types'
-import { getApplication } from '../../../services/Application'
+import { getServiceContainer } from '../../../core/ServiceContainer'
 import { getLogger } from '../../../utils/logger'
 import { getMcpContext } from '../../McpContext'
 
@@ -299,8 +299,8 @@ export class TimerService {
     _result: string,
   ): Promise<void> {
     try {
-      // 获取 Application 实例并发送 TTS
-      const app = getApplication()
+      // 获取 ServiceContainer 实例并发送 TTS
+      const container = getServiceContainer()
 
       let message = ''
       if (success) {
@@ -315,7 +315,7 @@ export class TimerService {
       }
 
       logger.info('Notifying:', message)
-      await app.sendText(message)
+      await container.sendText(message)
     }
     catch (error) {
       logger.warn('Failed to notify execution result:', error)

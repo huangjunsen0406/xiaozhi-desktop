@@ -67,6 +67,12 @@ export interface PluginCommands {
   /** 连接协议通道 */
   connectProtocol: () => Promise<boolean>
 
+  /** 发送 MCP 消息 */
+  sendMcpMessage: (message: string) => Promise<void>
+
+  /** 发送唤醒词检测消息 */
+  sendWakeWordDetected: (text: string) => Promise<void>
+
   /** 创建异步任务（带追踪） */
   spawn: <T>(promise: Promise<T>, name: string) => Promise<T>
 }

@@ -1,5 +1,4 @@
 import type { PluginCommands, PluginContext } from '../core'
-import type { Protocol } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Events } from '../core'
@@ -13,6 +12,9 @@ const logger = getLogger('McpPlugin')
 /**
  * MCP 插件
  * 负责接收服务端的 MCP 消息并转发到 McpServer 处理
+ *
+ * 不直接持有 protocol 引用，通过 cmd.sendMcpMessage 发送消息，
+ * 实现与协议层完全解耦。
  */
 export class McpPlugin extends Plugin {
   readonly name = 'McpPlugin'
@@ -28,7 +30,6 @@ export class McpPlugin extends Plugin {
   }
 
   private mcpServer: McpServer | null = null
-  private protocol: Protocol | null = null
 
   /**
    * 插件初始化
@@ -42,15 +43,10 @@ export class McpPlugin extends Plugin {
       // 获取 McpServer 单例
       this.mcpServer = McpServer.getInstance()
 
-      // 设置发送回调：通过协议层发送 MCP 响应
+      // 设置发送回调：通过 PluginCommands 接口发送 MCP 响应
       const sendCallback = async (message: string): Promise<void> => {
         try {
-          if (!this.protocol) {
-            logger.error('协议不可用')
-            return
-          }
-          // 调用协议层的 sendMcpMessage 方法
-          await this.protocol.sendMcpMessage(message)
+          await cmd.sendMcpMessage(message)
         }
         catch (error) {
           logger.error('发送 MCP 消息失败', error)
@@ -84,11 +80,6 @@ export class McpPlugin extends Plugin {
       }
 
       this.mcpServer.setThemeBroadcastCallback(themeBroadcastCallback)
-
-      // 订阅协议连接事件
-      ctx.eventBus.on(Events.PROTOCOL_CONNECTED, (data) => {
-        this.protocol = data as Protocol
-      })
 
       // 订阅 JSON 消息事件
       ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
@@ -140,8 +131,6 @@ export class McpPlugin extends Plugin {
       this.mcpServer.setSendCallback(async () => {})
       this.mcpServer = null
     }
-
-    this.protocol = null
 
     // 调用父类 shutdown
     await super.shutdown()

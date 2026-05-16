@@ -109,12 +109,12 @@ export function registerWakeWordIpc(context: IpcContext): void {
 
           // 写入文件
           writeFileSync(keywordsPath, `${keywordLine}\n`, 'utf-8')
-          logger.info(`✅ 已生成 keywords.txt: ${keywordsPath}`)
-          logger.info(`✅ 唤醒词内容: ${keywordLine}`)
+          logger.info(`已生成 keywords.txt: ${keywordsPath}`)
+          logger.info(`唤醒词内容: ${keywordLine}`)
         }
         catch (fileError) {
-          logger.error('❌ 生成 keywords.txt 失败:', fileError)
-          logger.error('❌ 错误堆栈:', (fileError as Error).stack)
+          logger.error('生成 keywords.txt 失败:', fileError)
+          logger.error('错误堆栈:', (fileError as Error).stack)
           // 不影响主流程，继续执行
         }
       }
@@ -123,7 +123,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
       db.updateWakeWordConfig(dbUpdates)
 
       // 通知 WakeWordPlugin 重新加载配置
-      const wakeWordPlugin = context.application?.getWakeWordPlugin()
+      const wakeWordPlugin = context.container?.getWakeWordPlugin()
       if (wakeWordPlugin && typeof wakeWordPlugin.reloadConfig === 'function') {
         await wakeWordPlugin.reloadConfig()
         logger.info('WakeWordPlugin 配置已重新加载')
@@ -152,13 +152,13 @@ export function registerWakeWordIpc(context: IpcContext): void {
       const config = db.getFormattedWakeWordConfig()
 
       // 模拟唤醒词检测（触发自动对话）
-      if (context.application) {
+      if (context.container) {
         logger.info(`模拟检测到唤醒词: ${config.keyword}`)
-        await context.application.startAutoConversation()
+        await context.container.startAutoConversation()
         return { success: true, keyword: config.keyword }
       }
       else {
-        return { success: false, error: 'Application 未初始化' }
+        return { success: false, error: 'ServiceContainer 未初始化' }
       }
     }
     catch (error) {

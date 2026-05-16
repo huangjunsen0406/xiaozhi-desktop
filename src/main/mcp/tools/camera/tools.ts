@@ -4,7 +4,7 @@
 
 import type { ChatPlugin } from '../../../plugins/ChatPlugin'
 
-import { getApplication } from '../../../services/Application'
+import { getServiceContainer } from '../../../core/ServiceContainer'
 import { DatabaseManager } from '../../../services/database'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
@@ -79,8 +79,8 @@ Examples:
       logger.info('拍照成功，开始分析...')
 
       const imageBase64 = captureResult.data.toString('base64')
-      const app = getApplication()
-      const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+      const container = getServiceContainer()
+      const chatPlugin = container.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(imageBase64, 'camera')
 
       return await analyzeImage(imageBase64, question || '请描述这张照片的内容')

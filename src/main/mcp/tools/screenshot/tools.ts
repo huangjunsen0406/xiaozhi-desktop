@@ -4,7 +4,7 @@
 
 import type { ChatPlugin } from '../../../plugins/ChatPlugin'
 
-import { getApplication } from '../../../services/Application'
+import { getServiceContainer } from '../../../core/ServiceContainer'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
@@ -77,8 +77,8 @@ Examples:
 
       logger.info('截图成功，开始分析...')
 
-      const app = getApplication()
-      const chatPlugin = app.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+      const container = getServiceContainer()
+      const chatPlugin = container.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(result.base64, 'screenshot')
 
       return await analyzeImage(result.base64, question || '请描述这张截图的内容')

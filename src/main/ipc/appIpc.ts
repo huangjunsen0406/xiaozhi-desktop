@@ -8,23 +8,23 @@ import { registerWakeWordIpc } from './wakeWordIpc'
 const logger = getLogger('AppIpc')
 
 /**
- * 注册 Application 控制相关的 IPC 通道
- * @param context - IPC 上下文，包含依赖实例
+ * 注册应用控制相关的 IPC 通道
+ * @param context - IPC 上下文，包含 ServiceContainer 实例
  */
 export function registerAppIpc(context: IpcContext): void {
-  const { application } = context
-  logger.info('注册 Application 控制 IPC 通道...')
+  const { container } = context
+  logger.info('注册��用控制 IPC 通道...')
 
   // 注册唤醒词 IPC
   registerWakeWordIpc(context)
 
   // 注册快捷键 IPC
-  registerShortcutIpcChannels(application)
+  registerShortcutIpcChannels(container)
 
   // 开始手动监听
   ipcMain.handle('app:start-listening-manual', async () => {
     try {
-      await application.startListeningManual()
+      await container.startListeningManual()
       return { success: true }
     }
     catch (error) {
@@ -36,7 +36,7 @@ export function registerAppIpc(context: IpcContext): void {
   // 停止手动监听
   ipcMain.handle('app:stop-listening-manual', async () => {
     try {
-      await application.stopListeningManual()
+      await container.stopListeningManual()
       return { success: true }
     }
     catch (error) {
@@ -48,7 +48,7 @@ export function registerAppIpc(context: IpcContext): void {
   // 开始自动对话
   ipcMain.handle('app:start-auto-conversation', async () => {
     try {
-      await application.startAutoConversation()
+      await container.startAutoConversation()
       return { success: true }
     }
     catch (error) {
@@ -60,7 +60,7 @@ export function registerAppIpc(context: IpcContext): void {
   // 停止自动对话
   ipcMain.handle('app:stop-auto-conversation', async () => {
     try {
-      await application.stopAutoConversation()
+      await container.stopAutoConversation()
       return { success: true }
     }
     catch (error) {
@@ -72,7 +72,7 @@ export function registerAppIpc(context: IpcContext): void {
   // 获取状态快照
   ipcMain.handle('app:get-state', () => {
     try {
-      return application.getStateSnapshot()
+      return container.getStateSnapshot()
     }
     catch (error) {
       logger.error('获取状态快照失败:', error)
@@ -97,7 +97,7 @@ export function registerAppIpc(context: IpcContext): void {
         return { success: false, error: '文本内容不能超过 500 字符' }
       }
 
-      await application.sendText(text)
+      await container.sendText(text)
       return { success: true }
     }
     catch (error) {
@@ -106,5 +106,5 @@ export function registerAppIpc(context: IpcContext): void {
     }
   })
 
-  logger.info('Application 控制 IPC 通道已注册')
+  logger.info('应用控制 IPC 通道已注册')
 }

@@ -2,7 +2,6 @@ import type { AudioListener, DeviceState } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
 import type { PluginCommands, PluginContext } from '../core'
-import type { Protocol } from '../protocols/Protocol'
 import { ipcMain } from 'electron'
 import { Events } from '../core'
 import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
@@ -19,10 +18,12 @@ const logger = getLogger('AudioPlugin')
  * 职责：
  * - 初始化 OpusCodec
  * - 监听渲染进程的 PCM 数据（IPC）
- * - 编码 PCM -> Opus，发送到协议层
+ * - 编码 PCM -> Opus，通过 cmd.sendAudio 发送到协议层
  * - 接收协议层的 Opus 数据
  * - 解码 Opus -> PCM，发送到渲染进程（IPC）
  * - 控制后台音频窗口采集
+ *
+ * 不直接持有 protocol 引用，通过 PluginCommands 接口操作协议。
  */
 export class AudioPlugin extends Plugin {
   readonly name = 'AudioPlugin'
@@ -37,24 +38,13 @@ export class AudioPlugin extends Plugin {
     author: 'Junsen',
   }
 
-  private protocol: Protocol | null = null
   private backgroundAudioWindow: BrowserWindow | null = null
 
-  // 音频监听器（观察者模式）
+  // 音���监听器（观察者模式）
   private audioListeners: Set<AudioListener> = new Set()
 
   // IPC 监听器引用（用于精确移除）
   private pcmHandler: ((_event: Electron.IpcMainEvent, pcmData: Int16Array) => void) | null = null
-
-  // ========== 背压控制 ==========
-  /** 最大允许的 WebSocket 缓冲区大小（字节） */
-  private readonly MAX_BUFFER_SIZE = 64 * 1024 // 64KB
-  /** 连续丢帧计数（用于日志节流） */
-  private consecutiveDrops = 0
-  /** 丢帧日志节流阈值 */
-  private readonly DROP_LOG_THRESHOLD = 50 // 每 50 帧打印一次
-  /** 丢弃帧数（背压控制） */
-  private droppedFrames = 0
 
   /**
    * 插件初始化
@@ -74,13 +64,6 @@ export class AudioPlugin extends Plugin {
         this.handlePCMFromRenderer(pcmData)
       }
       ipcMain.on('audio:pcm', this.pcmHandler)
-
-      // 订阅协议连接事件
-      ctx.eventBus.on(Events.PROTOCOL_CONNECTED, (data) => {
-        const protocol = data as Protocol
-        this.protocol = protocol
-        logger.info('协议已连接')
-      })
 
       // 订阅音频接收事件
       ctx.eventBus.on(Events.INCOMING_AUDIO, (data) => {
@@ -178,52 +161,12 @@ export class AudioPlugin extends Plugin {
   }
 
   /**
-   * 检查是否应该丢弃帧（背压控制）
-   * @returns true 如果应该丢弃当前帧
-   */
-  private shouldDropFrame(): boolean {
-    // 获取 WebSocket 实例检查缓冲区
-    const ws = (this.protocol as unknown as { ws?: { bufferedAmount?: number } })?.ws
-    if (!ws) {
-      return false
-    }
-
-    // 检查 WebSocket 缓冲区大小
-    const bufferedAmount = ws.bufferedAmount || 0
-    if (bufferedAmount > this.MAX_BUFFER_SIZE) {
-      this.consecutiveDrops++
-      this.droppedFrames++
-
-      // 节流日志：每 DROP_LOG_THRESHOLD 帧打印一次
-      if (this.consecutiveDrops % this.DROP_LOG_THRESHOLD === 1) {
-        logger.warn(
-          `网络拥塞，丢弃帧 (buffered: ${(bufferedAmount / 1024).toFixed(1)}KB, 连续丢弃: ${this.consecutiveDrops})`,
-        )
-      }
-      return true
-    }
-
-    // 缓冲区恢复正常，重置计数
-    if (this.consecutiveDrops > 0) {
-      logger.info(`网络恢复，共丢弃 ${this.consecutiveDrops} 帧`)
-      this.consecutiveDrops = 0
-    }
-    return false
-  }
-
-  /**
    * 处理来自渲染进程的 PCM 数据
    */
   private handlePCMFromRenderer(pcmData: Int16Array): void {
     try {
       // 1. 发送到服务器（仅在应该采集时）
       if (this.ctx?.shouldCaptureAudio()) {
-        // 背压控制：检查是否应该丢弃��
-        if (this.shouldDropFrame()) {
-          // 丢弃帧，finally 会统一通知监听器（唤醒词检测等）
-          return
-        }
-
         const opusCodec = getOpusCodec()
         if (!opusCodec) {
           logger.error('OpusCodec 未初始化')
@@ -233,9 +176,9 @@ export class AudioPlugin extends Plugin {
         // 编码 PCM -> Opus
         const opusFrame = opusCodec.encode(pcmData)
 
-        // 发送到 WebSocket 服务器
-        if (this.protocol && this.protocol.isAudioChannelOpened()) {
-          this.protocol.sendAudio(opusFrame).catch((error) => {
+        // 通过 PluginCommands 发送音频
+        if (this.ctx.isAudioChannelOpened()) {
+          this.cmd?.sendAudio(opusFrame).catch((error) => {
             logger.error('发送音频失败', error)
           })
         }
@@ -264,7 +207,7 @@ export class AudioPlugin extends Plugin {
       // 解码 Opus -> PCM (只解码一次!)
       const pcmBuffer = opusCodec.decode(opusFrame)
 
-      // 1. 发送到后台音频窗口播���
+      // 1. 发送到后台音频窗口播放
       if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
         this.backgroundAudioWindow.webContents.send('audio:opus-decoded', pcmBuffer)
       }
@@ -272,7 +215,7 @@ export class AudioPlugin extends Plugin {
         logger.warn('后台音频窗口不存在，无法播放音频')
       }
 
-      // 2. 通过 EventBus 广播解码后的音频（Live2D 等订阅者接收）
+      // 2. 通过 EventBus 广播解码后的音频（Live2D ���订阅者接收）
       setImmediate(() => {
         if (this.ctx) {
           this.ctx.eventBus.emit(Events.AUDIO_DECODED, pcmBuffer).catch((error) => {
@@ -313,14 +256,9 @@ export class AudioPlugin extends Plugin {
     }
 
     // 清理引用
-    this.protocol = null
     this.backgroundAudioWindow = null
 
-    // 重置计数器
-    this.consecutiveDrops = 0
-    this.droppedFrames = 0
-
-    // 调用父类 shutdown
+    // ���用父类 shutdown
     await super.shutdown()
 
     logger.info('已关闭')
