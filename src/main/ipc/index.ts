@@ -3,7 +3,7 @@ import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
-import { getLive2dWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { getLive2dWindow, getPetsWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
 
 import { registerAppIpc } from './appIpc'
@@ -18,6 +18,7 @@ import { registerModelIpc } from './modelIpc'
 
 import { registerMusicConfigIpc } from './musicConfigIpc'
 import { registerMusicIpc } from './musicIpc'
+import { registerPetsIpc } from './petsIpc'
 import { registerThemeIpc } from './themeIpc'
 
 const logger = getLogger('Index')
@@ -42,6 +43,7 @@ export function registerBasicIpcChannels(): void {
   registerMusicConfigIpc()
 
   registerModelIpc()
+  registerPetsIpc()
   registerClipboardIpcChannels()
 
   // 注册窗口拖动行为（提取到独立模块）
@@ -116,8 +118,20 @@ export function registerBasicIpcChannels(): void {
     }
   })
 
+  // 精灵宠物窗口
+  ipcMain.on('window:toggle-pets', () => {
+    toggleToPets()
+  })
+
+  ipcMain.on('pets:set-ignore-mouse', (_, ignore: boolean) => {
+    const win = getPetsWindow()
+    if (win) {
+      win.setIgnoreMouseEvents(ignore, { forward: ignore })
+    }
+  })
+
   // 显示模式切换
-  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini' | 'chat' | 'live2d') => {
+  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => {
     if (mode === 'mini') {
       toggleToMini()
     }
@@ -126,6 +140,9 @@ export function registerBasicIpcChannels(): void {
     }
     else if (mode === 'live2d') {
       toggleToLive2d()
+    }
+    else if (mode === 'pets') {
+      toggleToPets()
     }
     else {
       toggleToMain()

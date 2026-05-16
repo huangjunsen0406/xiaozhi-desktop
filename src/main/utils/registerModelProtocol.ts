@@ -1,11 +1,8 @@
 /**
- * Live2D 模型文件协议注册
+ * 自定义协议注册
  *
- * 注册 live2d-model:// 自定义协议，用于渲染进程访问 userData/models/ 目录中的模型文件
- *
- * 用法:
- * - live2d-model://ModelName/model.json
- * - live2d-model://ModelName/texture.png
+ * live2d-model:// — 访问 userData/models/ 中的 Live2D 模型文件
+ * sprite-pet://   — 访问 userData/pets/ 中的精灵宠物文件
  */
 import path from 'node:path'
 import { app, net, protocol } from 'electron'
@@ -20,6 +17,10 @@ const logger = getLogger('ModelProtocol')
  */
 function getModelsDir(): string {
   return path.join(app.getPath('userData'), 'models')
+}
+
+function getPetsDir(): string {
+  return path.join(app.getPath('userData'), 'pets')
 }
 
 /**
@@ -37,8 +38,17 @@ export function registerModelProtocolScheme(): void {
         corsEnabled: true,
       },
     },
+    {
+      scheme: 'sprite-pet',
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
   ])
-  logger.info('live2d-model:// 协议方案已注册')
+  logger.info('live2d-model:// + sprite-pet:// 协议方案已注册')
 }
 
 /**
@@ -91,4 +101,41 @@ export function registerModelProtocolHandler(): void {
   })
 
   logger.info('live2d-model:// 协议处理器已注册')
+
+  // 注册 sprite-pet:// 协议处理器
+  protocol.handle('sprite-pet', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const petId = url.hostname
+      const filePath = decodeURIComponent(url.pathname)
+
+      if (!petId) {
+        return new Response('Pet ID required', { status: 400 })
+      }
+
+      const petsDir = getPetsDir()
+      const fullPath = path.join(petsDir, petId, filePath)
+      const normalizedPath = path.normalize(fullPath)
+
+      if (!normalizedPath.startsWith(petsDir)) {
+        return new Response('Access denied', { status: 403 })
+      }
+
+      if (!(await fs.pathExists(normalizedPath))) {
+        return new Response('File not found', { status: 404 })
+      }
+
+      const pathWithForwardSlashes = normalizedPath.replace(/\\/g, '/')
+      const fileUrl = pathWithForwardSlashes.startsWith('/')
+        ? `file://${pathWithForwardSlashes}`
+        : `file:///${pathWithForwardSlashes}`
+      return net.fetch(fileUrl)
+    }
+    catch (error) {
+      logger.error('处理精灵宠物协议请求失败', error)
+      return new Response('Internal server error', { status: 500 })
+    }
+  })
+
+  logger.info('sprite-pet:// 协议处理器已注册')
 }

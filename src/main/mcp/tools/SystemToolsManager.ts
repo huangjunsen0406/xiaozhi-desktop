@@ -1,7 +1,7 @@
 import type { PropertyList, PropertyType, ToolCallback } from '../types'
 import { getLogger } from '../../utils/logger'
-import { MusicToolsManager } from './music'
 import { getAllTools } from './index'
+import { MusicToolsManager } from './music'
 
 const logger = getLogger('SystemTools')
 

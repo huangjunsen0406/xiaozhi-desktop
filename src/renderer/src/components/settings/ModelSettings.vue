@@ -33,8 +33,7 @@ async function loadModels() {
     models.value = list
     currentModelId.value = current
   }
-  catch (error) {
-    console.error('加载模型列表失败', error)
+  catch {
     message.error('加载模型列表失败')
   }
   finally {
@@ -54,8 +53,7 @@ async function handleSelectModel(modelId: string) {
     currentModelId.value = modelId
     message.success('模型已切换，重启后生效')
   }
-  catch (error) {
-    console.error('切换模型失败', error)
+  catch {
     message.error('切换模型失败')
   }
 }
@@ -65,7 +63,7 @@ async function handleSelectModel(modelId: string) {
  */
 async function handleImport() {
   try {
-    // 1. 打开文件夹选择器
+    // 打开文件夹选择器
     const result = await window.api.modelSelectFolder()
     if (result.canceled || !result.filePaths.length) {
       return
@@ -74,15 +72,14 @@ async function handleImport() {
     const sourcePath = result.filePaths[0]
     importing.value = true
 
-    // 2. 导入模型
+    // 导入模型
     const modelId = await window.api.modelImport(sourcePath)
     message.success(modelId ? `模型 "${modelId}" 导入成功` : '模型导入成功')
 
-    // 3. 刷新列表
+    // 刷新列表
     await loadModels()
   }
-  catch (error) {
-    console.error('导入模型失败', error)
+  catch {
     message.error('导入模型失败')
   }
   finally {
@@ -103,8 +100,7 @@ async function handleDelete(modelId: string) {
     // 刷新列表
     await loadModels()
   }
-  catch (error) {
-    console.error('删除模型失败', error)
+  catch {
     message.error('删除模型失败')
   }
   finally {
@@ -119,8 +115,7 @@ async function handleOpenFolder() {
   try {
     await window.api.modelOpenFolder()
   }
-  catch (error) {
-    console.error('打开目录失败', error)
+  catch {
     message.error('打开目录失败')
   }
 }
@@ -144,18 +139,29 @@ defineExpose({
 
 <template>
   <div>
-    <!-- 说明文字 -->
-    <div class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-      管理 Live2D 模型，点击模型卡片切换当前使用的模型。支持导入自定义模型（需包含 model.json 配置文件）。
+    <!-- 顶部操作栏 -->
+    <div class="flex items-center gap-2 mb-4">
+      <NButton type="primary" size="small" :loading="importing" @click="handleImport">
+        <template #icon>
+          <IconCarbonAdd class="w-4 h-4" />
+        </template>
+        {{ importing ? '导入中...' : '导入模型' }}
+      </NButton>
+      <NButton quaternary size="small" @click="handleOpenFolder">
+        <template #icon>
+          <IconCarbonFolder class="w-4 h-4" />
+        </template>
+        打开目录
+      </NButton>
     </div>
 
     <!-- 加载状态 -->
     <NSpin :show="loading">
-      <!-- 模型网格 -->
+      <!-- 模型卡片网格 -->
       <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4">
-        <!-- 导入按钮卡片 -->
+        <!-- 虚线导入卡片 -->
         <div
-          class="flex flex-col items-center justify-center min-h-[120px] gap-2 p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+          class="flex flex-col items-center justify-center min-h-[120px] gap-2 p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
           :class="{ 'opacity-60 cursor-not-allowed': importing }"
           @click="!importing && handleImport()"
         >
@@ -167,8 +173,10 @@ defineExpose({
         <div
           v-for="model in models"
           :key="model.id"
-          class="group flex flex-col items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-all bg-gray-50 dark:bg-gray-800/50 hover:border-blue-400 hover:shadow-lg hover:-translate-y-0.5"
-          :class="model.id === currentModelId ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'"
+          class="group relative flex flex-col items-center gap-2 p-3 rounded-xl cursor-pointer transition-colors border-2"
+          :class="model.id === currentModelId
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+            : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-blue-400'"
           @click="handleSelectModel(model.id)"
         >
           <!-- 预览图 -->
@@ -179,19 +187,19 @@ defineExpose({
               :alt="model.name"
               class="block w-full h-full object-cover"
             >
-            <div v-else class="flex items-center justify-center w-full h-full bg-gradient-to-br from-purple-400 to-purple-600 text-white text-[32px] font-bold">
+            <div v-else class="flex items-center justify-center w-full h-full bg-gradient-to-br from-purple-400 to-purple-600 text-white text-2xl font-bold">
               <span>{{ model.name.charAt(0).toUpperCase() }}</span>
             </div>
 
-            <!-- 选中标记 -->
+            <!-- 选中角标 -->
             <div
               v-if="model.id === currentModelId"
-              class="absolute top-2 left-2 w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center"
+              class="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-sm"
             >
               <IconCarbonCheckmark class="w-3 h-3" />
             </div>
 
-            <!-- 删除按钮 -->
+            <!-- 删除按钮（hover 时显示） -->
             <NPopconfirm
               placement="top"
               positive-text="确定"
@@ -203,7 +211,7 @@ defineExpose({
                   circle
                   size="tiny"
                   type="error"
-                  class="!absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="!absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
                   :loading="deletingModelId === model.id"
                   @click.stop
                 >
@@ -217,7 +225,7 @@ defineExpose({
           </div>
 
           <!-- 模型名称 -->
-          <div class="text-sm font-medium text-gray-800 dark:text-gray-200 text-center max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+          <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate w-full text-center">
             {{ model.name }}
           </div>
 
@@ -252,22 +260,11 @@ defineExpose({
         <template #extra>
           <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
             <p>请将 Live2D 模型文件夹复制到模型目录</p>
-            <p class="mt-1">
-              或点击上方"导入模型"按钮
-            </p>
+            <p class="mt-1">或点击上方"导入模型"按钮</p>
           </div>
         </template>
       </NEmpty>
     </NSpin>
 
-    <!-- 底部操作 -->
-    <div class="mt-6 flex items-center gap-2">
-      <NButton quaternary size="small" @click="handleOpenFolder">
-        <template #icon>
-          <IconCarbonFolder class="w-4 h-4" />
-        </template>
-        打开模型目录
-      </NButton>
-    </div>
   </div>
 </template>

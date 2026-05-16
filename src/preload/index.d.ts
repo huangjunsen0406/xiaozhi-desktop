@@ -13,6 +13,7 @@ import type {
   DeviceInfo,
   ModelInfo,
   MusicConfig,
+  PetInfo,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -40,6 +41,7 @@ export type {
   DeviceInfo,
   ModelInfo,
   MusicConfig,
+  PetInfo,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -50,7 +52,7 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
-  switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d') => Promise<void>
+  switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => Promise<void>
   showActivation: () => void
   toggleSettings: () => void
   setIgnoreMouseEvents: (ignore: boolean) => void
@@ -169,6 +171,18 @@ export interface RendererApi {
   modelOpenFolder: () => Promise<void>
   modelGetFolderPath: () => Promise<string>
   modelOnChanged: (callback: (modelId: string) => void) => () => void
+
+  // Pets APIs
+  petsGetList: () => Promise<PetInfo[]>
+  petsGetCurrent: () => Promise<string>
+  petsSetCurrent: (petId: string) => Promise<void>
+  petsSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
+  petsImport: (sourcePath: string) => Promise<string | undefined>
+  petsDelete: (petId: string) => Promise<void>
+  petsGetFolderPath: () => Promise<string>
+  petsGetSpritesheet: (petId: string) => Promise<string | null>
+  petsOpenFolder: () => Promise<void>
+  petsOnChanged: (callback: (petId: string) => void) => () => void
 
   // 剪贴板 API
   clipboardWriteText: (text: string) => Promise<void>

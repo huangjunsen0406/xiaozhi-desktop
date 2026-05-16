@@ -2,7 +2,7 @@ import type { BrowserWindow } from 'electron'
 import process from 'node:process'
 import { hide as hideHover } from '../hover/controller'
 import { getLogger } from '../utils/logger'
-import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildSettingsWindow } from './builders'
+import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
 
 const logger = getLogger('WindowManager')
 
@@ -16,10 +16,11 @@ const windowRefs = {
   backgroundAudio: { current: null as BrowserWindow | null },
   chat: { current: null as BrowserWindow | null },
   live2d: { current: null as BrowserWindow | null },
+  pets: { current: null as BrowserWindow | null },
 }
 
 // 显示模式状态管理
-type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d'
+type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
 let currentDisplayMode: DisplayMode = 'main'
 let onDisplayModeChanged: ((mode: DisplayMode) => void) | null = null
 
@@ -116,6 +117,11 @@ export const ensureLive2dWindow = createWindowEnsurer(
   buildLive2dWindow,
 )
 
+export const ensurePetsWindow = createWindowEnsurer(
+  windowRefs.pets,
+  buildPetsWindow,
+)
+
 // 窗口切换和控制函数
 export function toggleToMini(): void {
   const mini = ensureMiniWindow()
@@ -126,6 +132,8 @@ export function toggleToMini(): void {
     windowRefs.chat.current.hide()
   if (windowRefs.live2d.current)
     windowRefs.live2d.current.hide()
+  if (windowRefs.pets.current)
+    windowRefs.pets.current.hide()
   setDisplayMode('mini')
 }
 
@@ -138,6 +146,8 @@ export function toggleToMain(): void {
     windowRefs.chat.current.hide()
   if (windowRefs.live2d.current)
     windowRefs.live2d.current.hide()
+  if (windowRefs.pets.current)
+    windowRefs.pets.current.hide()
   // 关闭 panel 窗口（仅在 miniview 模式下可用）
   if (windowRefs.panel.current)
     windowRefs.panel.current.hide()
@@ -186,6 +196,8 @@ export function toggleToChat(): void {
     windowRefs.mini.current.hide()
   if (windowRefs.live2d.current)
     windowRefs.live2d.current.hide()
+  if (windowRefs.pets.current)
+    windowRefs.pets.current.hide()
   // 关闭 panel 窗口（仅在 miniview 模式下可用）
   if (windowRefs.panel.current)
     windowRefs.panel.current.hide()
@@ -208,6 +220,8 @@ export function toggleToLive2d(): void {
     windowRefs.mini.current.hide()
   if (windowRefs.chat.current)
     windowRefs.chat.current.hide()
+  if (windowRefs.pets.current)
+    windowRefs.pets.current.hide()
   // 关闭 panel 窗口（仅在 miniview 模式下可用）
   if (windowRefs.panel.current)
     windowRefs.panel.current.hide()
@@ -218,6 +232,30 @@ export function toggleToLive2d(): void {
 
 export function getLive2dWindow(): BrowserWindow | null {
   return windowRefs.live2d.current
+}
+
+export function toggleToPets(): void {
+  const win = ensurePetsWindow()
+  win.show()
+  win.moveTop()
+  if (windowRefs.main.current)
+    windowRefs.main.current.hide()
+  if (windowRefs.mini.current)
+    windowRefs.mini.current.hide()
+  if (windowRefs.chat.current)
+    windowRefs.chat.current.hide()
+  if (windowRefs.live2d.current)
+    windowRefs.live2d.current.hide()
+  // 关闭 panel 窗口（仅在 miniview 模式下可用）
+  if (windowRefs.panel.current)
+    windowRefs.panel.current.hide()
+  // 隐藏悬浮窗
+  hideHover()
+  setDisplayMode('pets')
+}
+
+export function getPetsWindow(): BrowserWindow | null {
+  return windowRefs.pets.current
 }
 
 /**
@@ -233,6 +271,8 @@ export function getCurrentModeWindow(): BrowserWindow | null {
       return windowRefs.chat.current
     case 'live2d':
       return windowRefs.live2d.current
+    case 'pets':
+      return windowRefs.pets.current
     default:
       return windowRefs.main.current
   }

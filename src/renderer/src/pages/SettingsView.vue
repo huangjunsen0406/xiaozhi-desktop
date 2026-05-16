@@ -12,6 +12,7 @@ import {
 import { computed, h, ref } from 'vue'
 
 // 图标
+import IconCarbonPet from '~icons/carbon/bot'
 import IconCarbonCamera from '~icons/carbon/camera'
 import IconCarbonFaceActivated from '~icons/carbon/face-activated'
 import IconCarbonHeadphones from '~icons/carbon/headphones'
@@ -30,11 +31,12 @@ import EmotionSettings from '../components/settings/EmotionSettings.vue'
 import HotkeySettings from '../components/settings/HotkeySettings.vue'
 import ModelSettings from '../components/settings/ModelSettings.vue'
 import MusicSettings from '../components/settings/MusicSettings.vue'
+import PetsSettings from '../components/settings/PetsSettings.vue'
 import SystemSettings from '../components/settings/SystemSettings.vue'
 import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
 import TitleBar from '../components/TitleBar.vue'
 
-type Key = 'system' | 'appearance' | 'model' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey'
+type Key = 'system' | 'appearance' | 'model' | 'pets' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey'
 const selected = ref<Key>('system')
 const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
 const showTitleBar = window.electron.process.platform !== 'darwin'
@@ -43,6 +45,7 @@ const menuOptions = [
   { label: '系统选项', key: 'system', icon: withIcon(IconCarbonSettings) },
   { label: '外观', key: 'appearance', icon: withIcon(IconCarbonView) },
   { label: '模型', key: 'model', icon: withIcon(IconCarbonUser) },
+  { label: '精灵宠物', key: 'pets', icon: withIcon(IconCarbonPet) },
   { label: '表情', key: 'emotion', icon: withIcon(IconCarbonFaceActivated) },
   { label: '唤醒词', key: 'wake', icon: withIcon(IconCarbonMicrophone) },
   { label: '摄像头', key: 'camera', icon: withIcon(IconCarbonCamera) },
@@ -62,6 +65,7 @@ const panelRefs = ref<Record<Key, PanelExposed | null>>({
   system: null,
   appearance: null,
   model: null,
+  pets: null,
   emotion: null,
   wake: null,
   camera: null,
@@ -86,9 +90,10 @@ const customButtonTextByKey: Record<Key, string | undefined> = {
   system: '重置',
   appearance: undefined,
   model: '刷新列表',
+  pets: '刷新列表',
   emotion: undefined, // 表情设置没有自定义按钮
   wake: '测试',
-  camera: undefined, // 摄像头改为内嵌预��，不需要自定义按钮
+  camera: undefined, // 摄像头改为内嵌预览，不需要自定义按钮
   music: undefined,
   audio: '刷新设备',
   hotkey: '重置所有',
@@ -168,6 +173,7 @@ async function onCustomClick() {
                 <SystemSettings v-show="selected === 'system'" :ref="setPanelRef('system')" />
                 <AppearanceSettings v-show="selected === 'appearance'" :ref="setPanelRef('appearance')" />
                 <ModelSettings v-show="selected === 'model'" :ref="setPanelRef('model')" />
+                <PetsSettings v-show="selected === 'pets'" :ref="setPanelRef('pets')" />
                 <EmotionSettings v-show="selected === 'emotion'" :ref="setPanelRef('emotion')" />
                 <WakeWordSettings v-show="selected === 'wake'" :ref="setPanelRef('wake')" />
                 <CameraSettings v-show="selected === 'camera'" :ref="setPanelRef('camera')" />

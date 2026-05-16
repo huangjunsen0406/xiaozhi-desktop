@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from 'electron'
 import process from 'node:process'
 import { app, Menu } from 'electron'
-import { getCurrentDisplayMode, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini } from '../windows/windowManager'
+import { getCurrentDisplayMode, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 /**
  * 构建应用菜单（包含 Edit 菜单以支持复制粘贴等操作）
  */
@@ -110,6 +110,14 @@ export function buildDisplayModeMenu(includeQuit: boolean = false): Menu {
           checked: currentMode === 'live2d',
           click: () => {
             toggleToLive2d()
+          },
+        },
+        {
+          label: '精灵宠物',
+          type: 'radio',
+          checked: currentMode === 'pets',
+          click: () => {
+            toggleToPets()
           },
         },
       ],

@@ -8,7 +8,7 @@ export const windowApi = {
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
-  switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d'): Promise<void> => ipcRenderer.invoke('window:switch-display-mode', mode),
+  switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets'): Promise<void> => ipcRenderer.invoke('window:switch-display-mode', mode),
 
   // 激活窗口
   showActivation: (): void => ipcRenderer.send('activation:show'),

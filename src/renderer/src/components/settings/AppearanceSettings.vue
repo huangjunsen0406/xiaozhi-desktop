@@ -14,7 +14,7 @@ const mode = useColorMode({
   },
 })
 
-const displayMode = ref<'main' | 'mini' | 'chat' | 'live2d'>('main')
+const displayMode = ref<'main' | 'mini' | 'chat' | 'live2d' | 'pets'>('main')
 
 // 选项定义
 const displayModeOptions = [
@@ -22,6 +22,7 @@ const displayModeOptions = [
   { label: '迷你悬浮球', value: 'mini' },
   { label: '聊天视图', value: 'chat' },
   { label: 'Live2D 桌面宠物', value: 'live2d' },
+  { label: '精灵宠物', value: 'pets' },
 ]
 
 const themeOptions = [
@@ -30,19 +31,17 @@ const themeOptions = [
   { label: '跟随系统', value: 'auto' },
 ]
 
-async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat' | 'live2d') {
+async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') {
   try {
     await window.api.switchDisplayMode(value)
-    console.log(`已切换到 ${value} 模式`)
   }
-  catch (error) {
-    console.error('切换显示模式失败:', error)
+  catch {
+    // 切换失败静默处理
   }
 }
 
 function handleThemeChange(value: 'light' | 'dark' | 'auto') {
   mode.value = value
-  console.log(`已切换到 ${value} 主题`)
 }
 </script>
 

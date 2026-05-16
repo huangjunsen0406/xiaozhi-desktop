@@ -38,6 +38,10 @@ const routes: RouteRecordRaw[] = [
     path: '/live2d',
     component: () => import('../pages/Live2dView.vue'),
   },
+  {
+    path: '/pets',
+    component: () => import('../pages/PetsView.vue'),
+  },
 ]
 
 export const router = createRouter({

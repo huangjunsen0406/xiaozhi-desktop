@@ -3,8 +3,7 @@
  * 提供函数式的工具注册机制，工具通过 defineTool() 注册到全局注册表
  */
 
-import type { ToolCallback } from '../types'
-import { PropertyList } from '../types'
+import type { PropertyList, ToolCallback } from '../types'
 
 /** 工具定义 */
 export interface ToolDef {

@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, musicConfigApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -138,6 +138,18 @@ const api = {
   modelOpenFolder: modelApi.openFolder,
   modelGetFolderPath: modelApi.getFolderPath,
   modelOnChanged: modelApi.onChanged,
+
+  // 精灵宠物管�� API
+  petsGetList: petsApi.getList,
+  petsGetCurrent: petsApi.getCurrent,
+  petsSetCurrent: petsApi.setCurrent,
+  petsSelectFolder: petsApi.selectFolder,
+  petsImport: petsApi.import,
+  petsDelete: petsApi.delete,
+  petsOpenFolder: petsApi.openFolder,
+  petsGetFolderPath: petsApi.getFolderPath,
+  petsGetSpritesheet: petsApi.getSpritesheet,
+  petsOnChanged: petsApi.onChanged,
 
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,
