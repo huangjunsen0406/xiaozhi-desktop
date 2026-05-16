@@ -17,29 +17,41 @@ export type EventHandler = (data?: unknown) => Promise<void> | void
  * 集中管理所有事件名称，避免魔术字符串
  */
 export const Events = {
-  // 设备状态
-  DEVICE_STATE_CHANGED: 'device_state_changed',
+  /** ━━━ 设备状态 ━━━ */
+  /** 设备状态变更（idle/listening/speaking/connecting） */
+  DEVICE_STATE_CHANGED: 'device:state_changed',
 
-  // 协议相关
-  PROTOCOL_CONNECTED: 'protocol_connected',
-  PROTOCOL_DISCONNECTED: 'protocol_disconnected',
+  /** ━━━ 协议/连接 ━━━ */
+  /** 协议连接成功 */
+  PROTOCOL_CONNECTED: 'protocol:connected',
+  /** 协议断开 */
+  PROTOCOL_DISCONNECTED: 'protocol:disconnected',
+  /** 网络错误 */
+  NETWORK_ERROR: 'protocol:network_error',
 
-  // 数据流
-  INCOMING_JSON: 'incoming_json',
-  INCOMING_AUDIO: 'incoming_audio',
-  AUDIO_DECODED: 'audio_decoded',
+  /** ━━━ 音频 ━━━ */
+  /** 收到服务端音频帧（Opus 编码） */
+  INCOMING_AUDIO: 'audio:incoming',
+  /** 音频解码完成（PCM 数据，用于口型同步等） */
+  AUDIO_DECODED: 'audio:decoded',
+  /** 音频通道已打开 */
+  AUDIO_CHANNEL_OPENED: 'audio:channel_opened',
+  /** 音频通道已关闭 */
+  AUDIO_CHANNEL_CLOSED: 'audio:channel_closed',
 
-  // 网络
-  NETWORK_ERROR: 'network_error',
-  AUDIO_CHANNEL_OPENED: 'audio_channel_opened',
-  AUDIO_CHANNEL_CLOSED: 'audio_channel_closed',
+  /** ━━━ 消息 ━━━ */
+  /** 收到服务端 JSON 消息 */
+  INCOMING_JSON: 'message:incoming_json',
 
-  // 音乐控制
-  MUSIC_PAUSE_REQUEST: 'music_pause_request',
-  MUSIC_RESUME_REQUEST: 'music_resume_request',
+  /** ━━━ 音乐 ━━━ */
+  /** 请求暂停音乐（来源：tts/manual） */
+  MUSIC_PAUSE_REQUEST: 'music:pause_request',
+  /** 请求恢复音乐 */
+  MUSIC_RESUME_REQUEST: 'music:resume_request',
 
-  // 应用生命周期
-  APP_SHUTDOWN: 'app_shutdown',
+  /** ━━━ 应用生命周期 ━━━ */
+  /** 应用正在关闭 */
+  APP_SHUTDOWN: 'app:shutdown',
 } as const
 
 /**
