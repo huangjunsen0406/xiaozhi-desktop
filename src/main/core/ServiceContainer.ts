@@ -89,6 +89,9 @@ class PluginCommandsAdapter implements PluginCommands {
   ) {}
 
   async startListening(mode: ListeningMode): Promise<void> {
+    // 自动连接协议（唤醒词触发时 WebSocket 可能已断开）
+    const connected = await this.container.protocolManager.openAudioChannel()
+    if (!connected) return
     await this.container.protocolManager.sendStartListening(mode)
   }
 
@@ -105,6 +108,9 @@ class PluginCommandsAdapter implements PluginCommands {
   }
 
   async sendText(text: string): Promise<void> {
+    // 发送文本前确保协议已连接
+    const connected = await this.container.protocolManager.openAudioChannel()
+    if (!connected) return
     await this.container.protocolManager.sendText(text)
   }
 
