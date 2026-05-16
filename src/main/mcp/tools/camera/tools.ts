@@ -9,7 +9,7 @@ import { DatabaseManager } from '../../../services/database'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
-import { analyzeImage } from '../vision-analyze'
+import { analyzeImage } from '../visionAnalyze'
 import { getCameraInstance } from './index'
 
 const logger = getLogger('CameraTools')

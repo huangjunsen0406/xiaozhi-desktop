@@ -8,7 +8,7 @@ import { getApplication } from '../../../services/Application'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
-import { analyzeImage } from '../vision-analyze'
+import { analyzeImage } from '../visionAnalyze'
 import { ScreenshotTool } from './ScreenshotTool'
 
 const logger = getLogger('ScreenshotTools')
