@@ -12,7 +12,7 @@ const logger = getLogger('PetsWindow')
  * 构建精灵宠物桌面窗口
  */
 export function buildPetsWindow(): BrowserWindow {
-  const windowSize = { width: 220, height: 300 }
+  const windowSize = { width: 150, height: 180 }
 
   // 获取屏幕信息
   const display = screen.getPrimaryDisplay()

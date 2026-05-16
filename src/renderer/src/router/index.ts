@@ -42,6 +42,10 @@ const routes: RouteRecordRaw[] = [
     path: '/pets',
     component: () => import('../pages/PetsView.vue'),
   },
+  {
+    path: '/bubble',
+    component: () => import('../pages/BubbleView.vue'),
+  },
 ]
 
 export const router = createRouter({

@@ -2,10 +2,10 @@ import type { BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
-import { app } from 'electron'
+import { app, ipcMain } from 'electron'
 import { hide as hideHover } from '../hover/controller'
 import { getLogger } from '../utils/logger'
-import { buildActivationWindow, buildBackgroundAudioWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
+import { buildActivationWindow, buildBackgroundAudioWindow, buildBubbleWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
 
 const logger = getLogger('WindowManager')
 
@@ -20,6 +20,7 @@ const windowRefs = {
   chat: { current: null as BrowserWindow | null },
   live2d: { current: null as BrowserWindow | null },
   pets: { current: null as BrowserWindow | null },
+  bubble: { current: null as BrowserWindow | null },
 }
 
 // 显示模式状态管理
@@ -160,6 +161,97 @@ export const ensurePetsWindow = createWindowEnsurer(
   buildPetsWindow,
 )
 
+export const ensureBubbleWindow = createWindowEnsurer(
+  windowRefs.bubble,
+  buildBubbleWindow,
+)
+
+/**
+ * 将气泡窗口定位到目标窗口正上方
+ */
+function positionBubbleAbove(targetWindow: BrowserWindow): void {
+  const bubble = windowRefs.bubble.current
+  if (!bubble || bubble.isDestroyed())
+    return
+  if (targetWindow.isDestroyed())
+    return
+
+  const [x, y] = targetWindow.getPosition()
+  const [w] = targetWindow.getSize()
+  const [bw, bh] = bubble.getSize()
+
+  bubble.setPosition(
+    Math.round(x + w / 2 - bw / 2),
+    Math.round(y - bh - 4),
+  )
+}
+
+/**
+ * 显示气泡窗口（定位在目标窗口上方）
+ */
+function showBubbleAbove(targetWindow: BrowserWindow): void {
+  const bubble = ensureBubbleWindow()
+  positionBubbleAbove(targetWindow)
+  bubble.showInactive()
+  bubble.moveTop()
+}
+
+/**
+ * 隐藏气泡窗口
+ */
+function hideBubbleWindow(): void {
+  const bubble = windowRefs.bubble.current
+  if (bubble && !bubble.isDestroyed()) {
+    bubble.hide()
+  }
+}
+
+/**
+ * 获取当前活跃的精灵/Live2D 窗口
+ */
+function getCurrentPetWindow(): BrowserWindow | null {
+  if (currentDisplayMode === 'pets' && windowRefs.pets.current) {
+    return windowRefs.pets.current
+  }
+  if (currentDisplayMode === 'live2d' && windowRefs.live2d.current) {
+    return windowRefs.live2d.current
+  }
+  return null
+}
+
+/**
+ * 设置气泡跟随目标窗口移动
+ */
+function setupBubbleFollow(targetWindow: BrowserWindow): void {
+  const updatePosition = (): void => {
+    const bubble = windowRefs.bubble.current
+    if (!bubble || bubble.isDestroyed() || !bubble.isVisible())
+      return
+    if (targetWindow.isDestroyed())
+      return
+    positionBubbleAbove(targetWindow)
+  }
+
+  targetWindow.on('move', updatePosition)
+
+  // 目标窗口关闭时清理监听
+  targetWindow.once('closed', () => {
+    hideBubbleWindow()
+  })
+}
+
+// 注册气泡窗口 IPC 通道
+ipcMain.on('bubble:show', () => {
+  const target = getCurrentPetWindow()
+  if (target) {
+    showBubbleAbove(target)
+  }
+})
+
+ipcMain.on('bubble:hide', () => {
+  hideBubbleWindow()
+})
+
 // 窗口切换和控制函数
 export function toggleToMini(): void {
   const mini = ensureMiniWindow()
@@ -172,6 +264,7 @@ export function toggleToMini(): void {
     windowRefs.live2d.current.hide()
   if (windowRefs.pets.current)
     windowRefs.pets.current.hide()
+  hideBubbleWindow()
   setDisplayMode('mini')
 }
 
@@ -191,6 +284,7 @@ export function toggleToMain(): void {
     windowRefs.panel.current.hide()
   // 隐藏悬浮窗
   hideHover()
+  hideBubbleWindow()
   setDisplayMode('main')
 }
 
@@ -241,6 +335,7 @@ export function toggleToChat(): void {
     windowRefs.panel.current.hide()
   // 隐藏悬浮窗
   hideHover()
+  hideBubbleWindow()
   setDisplayMode('chat')
 }
 
@@ -265,6 +360,9 @@ export function toggleToLive2d(): void {
     windowRefs.panel.current.hide()
   // 隐藏悬浮窗
   hideHover()
+  // 确保气泡窗口就绪并设置跟随
+  ensureBubbleWindow()
+  setupBubbleFollow(win)
   setDisplayMode('live2d')
 }
 
@@ -289,6 +387,9 @@ export function toggleToPets(): void {
     windowRefs.panel.current.hide()
   // 隐藏悬浮窗
   hideHover()
+  // 确保气泡窗口就绪并设置跟随
+  ensureBubbleWindow()
+  setupBubbleFollow(win)
   setDisplayMode('pets')
 }
 

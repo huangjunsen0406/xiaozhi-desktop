@@ -14,7 +14,7 @@ const logger = getLogger('Live2dWindow')
  */
 export function buildLive2dWindow(): BrowserWindow {
   // 读取窗口位置配置（如果有的话）
-  const windowSize = { width: 260, height: 450 }
+  const windowSize = { width: 200, height: 400 }
 
   // 获取屏幕信息
   const display = screen.getPrimaryDisplay()
@@ -29,8 +29,8 @@ export function buildLive2dWindow(): BrowserWindow {
   const win = new BrowserWindow({
     x: defaultX,
     y: defaultY,
-    width: 260,
-    height: 450,
+    width: 200,
+    height: 400,
     show: false, // 初始隐藏，等待用户切换到 Live2D 模式
     frame: false,
     transparent: true,
