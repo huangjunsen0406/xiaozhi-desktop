@@ -101,7 +101,6 @@ function startAnimation(): void {
           FRAME_H,
         )
         // 检查离屏 canvas 是否有内容（跳过透明帧）
-        const pixelData = offCtx.getImageData(0, 0, 1, 1).data
         const hasContent = offCtx.getImageData(
           FRAME_W / 2,
           FRAME_H / 2,
