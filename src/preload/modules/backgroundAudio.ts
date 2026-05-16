@@ -4,8 +4,6 @@ import type { BackgroundAudioStateUpdate, BackgroundAudioStatus } from '@shared/
  */
 import { ipcRenderer } from 'electron'
 
-export type { BackgroundAudioStateUpdate, BackgroundAudioStatus }
-
 export const backgroundAudioApi = {
   // 监听音频命令
   onAudioCommand: (callback: (command: string, data?: unknown) => void): () => void => {
@@ -14,11 +12,8 @@ export const backgroundAudioApi = {
     return () => ipcRenderer.off('audio:command', handler)
   },
 
-  // 发送音频状态（旧版兼容）
+  // 发送音频状态
   sendAudioState: (state: BackgroundAudioStateUpdate): void => ipcRenderer.send('audio:state', state),
-
-  // 更新音频状态（新版）
-  audioUpdateState: (state: BackgroundAudioStateUpdate): void => ipcRenderer.send('audio:state', state),
 
   // 获取后台音频状态（仅主窗口可用）
   getStatus: (): Promise<BackgroundAudioStatus> => ipcRenderer.invoke('background-audio:get-status'),

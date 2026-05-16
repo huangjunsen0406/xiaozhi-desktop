@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ModelInfo } from '../../../../preload/index.d'
+import type { ModelInfo } from '@shared/types'
 import { NButton, NEmpty, NPopconfirm, NSpin, NTooltip, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import IconCarbonAdd from '~icons/carbon/add'

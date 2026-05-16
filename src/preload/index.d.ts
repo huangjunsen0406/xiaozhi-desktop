@@ -107,7 +107,6 @@ export interface RendererApi {
   // Background Audio Window APIs
   onAudioCommand: (callback: (command: string, data?: Record<string, unknown>) => void) => () => void
   sendAudioState: (state: BackgroundAudioStateUpdate) => void
-  audioUpdateState: (state: BackgroundAudioStateUpdate) => void
   backgroundAudioGetStatus: () => Promise<BackgroundAudioStatus>
   // Emotion APIs
   emotionSelectImage: () => Promise<Electron.OpenDialogReturnValue>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ActivationData } from '../../../preload/index.d'
+import type { ActivationData } from '@shared/types'
 import { computed, onMounted, ref } from 'vue'
 
 // 设备信息

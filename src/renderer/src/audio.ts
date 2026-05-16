@@ -111,7 +111,7 @@ function updateState(newState: AudioState): void {
   console.log(`[State] ${oldState} → ${newState}`)
 
   // 上报给主进程
-  window.api.audioUpdateState({
+  window.api.sendAudioState({
     state: newState,
     capturing: newState === AudioState.CAPTURING,
     initialized: newState !== AudioState.UNINITIALIZED && newState !== AudioState.INITIALIZING,

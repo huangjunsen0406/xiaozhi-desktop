@@ -1,5 +1,4 @@
-import type { AppStateSnapshot, DeviceState, ListeningMode } from '@shared/types'
-import type { ChatSession as IpcChatSession } from '../../../preload/index.d'
+import type { AppStateSnapshot, DeviceState, ChatSession as IpcChatSession, ListeningMode } from '@shared/types'
 import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from '../types/chat'
 /**
  * 全局应用 Store

@@ -77,7 +77,6 @@ const api = {
   // 后台音频窗口 API
   onAudioCommand: backgroundAudioApi.onAudioCommand,
   sendAudioState: backgroundAudioApi.sendAudioState,
-  audioUpdateState: backgroundAudioApi.audioUpdateState,
   backgroundAudioGetStatus: backgroundAudioApi.getStatus,
 
   // 表情 API

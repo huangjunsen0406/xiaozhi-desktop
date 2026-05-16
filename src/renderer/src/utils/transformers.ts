@@ -3,7 +3,7 @@
  * 统一处理 IPC 数据和前端数据的转换
  */
 
-import type { ChatMessage as IpcChatMessage, ChatSession as IpcChatSession } from '../../../preload/index.d'
+import type { ChatMessage as IpcChatMessage, ChatSession as IpcChatSession } from '@shared/types'
 import type { ChatMessage as ChatMessageType, ChatSession } from '../types/chat'
 
 /**
