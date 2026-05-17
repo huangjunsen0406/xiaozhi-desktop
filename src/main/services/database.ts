@@ -203,6 +203,15 @@ export class DatabaseManager {
       )
     `)
 
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS window_positions (
+        mode TEXT PRIMARY KEY,
+        x INTEGER NOT NULL,
+        y INTEGER NOT NULL,
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `)
+
     // 数据库迁移：从 keywords_list 迁移到 keyword_zh/keyword_en
     this.migrateWakeWordConfig()
 
@@ -854,6 +863,28 @@ export class DatabaseManager {
       SET ${setClause}, updated_at = strftime('%s', 'now')
       WHERE id = ?
     `).run(...values, config.id)
+  }
+
+  /**
+   * 读取窗口位置
+   */
+  getWindowPosition(mode: string): { x: number, y: number } | undefined {
+    const row = this.db.prepare('SELECT x, y FROM window_positions WHERE mode = ?').get(mode) as { x: number, y: number } | undefined
+    return row
+  }
+
+  /**
+   * 写入/更新窗口位置（UPSERT）
+   */
+  setWindowPosition(mode: string, x: number, y: number): void {
+    this.db.prepare(`
+      INSERT INTO window_positions (mode, x, y, updated_at)
+      VALUES (?, ?, ?, strftime('%s', 'now'))
+      ON CONFLICT(mode) DO UPDATE SET
+        x = excluded.x,
+        y = excluded.y,
+        updated_at = excluded.updated_at
+    `).run(mode, Math.round(x), Math.round(y))
   }
 
   createChatSession(data: {

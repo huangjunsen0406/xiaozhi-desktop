@@ -47,10 +47,13 @@ export class ConfigManager {
   async initializeDeviceIdAsync(): Promise<void> {
     const deviceFingerprint = DeviceFingerprintManager.getInstance()
     const macAddress = deviceFingerprint.getMacAddressFromEfuse()
+    const currentDeviceId = this.getDeviceId().trim()
 
-    if (macAddress && macAddress !== this.getDeviceId()) {
+    // Only backfill a default device ID on empty config.
+    // If a user has explicitly configured one, preserve it.
+    if (!currentDeviceId && macAddress) {
       this.setDeviceId(macAddress)
-      this.logger.info(`已设置 DEVICE_ID: ${macAddress}`)
+      this.logger.info(`已回填默认 DEVICE_ID: ${macAddress}`)
     }
   }
 

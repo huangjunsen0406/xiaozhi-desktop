@@ -225,6 +225,11 @@ function setupModel(model: Live2DModel): void {
   model.y = canvasSize.height - newBounds.height - newBounds.y // 底部对齐并居中
 
   console.log('Model positioned at:', { x: model.x, y: model.y })
+
+  // 上报模型头顶相对窗口顶边的偏移，供主进程气泡定位使用。
+  // 模型 bbox 底部对齐到 canvas 底，故 bbox 顶到 canvas 顶的距离 = canvasH - bboxH。
+  const headOffsetY = Math.max(0, canvasSize.height - newBounds.height)
+  window.electron?.ipcRenderer.send('bubble:set-anchor-offset', headOffsetY)
 }
 
 function isMouseOnModel(e: MouseEvent): boolean {

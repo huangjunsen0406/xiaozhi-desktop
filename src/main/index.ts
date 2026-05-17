@@ -12,7 +12,7 @@ import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
 import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
-import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentDisplayMode, getCurrentModeWindow, onDisplayModeChange, setIsQuitting, toggleToChat, toggleToLive2d, toggleToMini, toggleToPets } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentDisplayMode, getCurrentModeWindow, onDisplayModeChange, setIsQuitting, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from './windows/windowManager'
 
 const logger = getLogger('Index')
 const APP_DISPLAY_NAME = '小智'
@@ -109,8 +109,9 @@ else {
       ensureDockVisible()
     }
     else {
-      // 如果窗口不存在，创建主窗口
-      ensureMainWindow()
+      // 如果窗口不存在，创建并显示主窗口
+      const main = ensureMainWindow()
+      main.show()
     }
   })
 }
@@ -195,7 +196,8 @@ app.whenReady().then(async () => {
   const savedMode = getCurrentDisplayMode()
   switch (savedMode) {
     case 'mini':
-      ensureMainWindow() // mini 模式需要主窗口先创建
+      // 不再预先 ensureMainWindow，避免 builder ready-to-show 时序问题；
+      // toggleToMini 只在 main 已存在时 hide 它。
       toggleToMini()
       break
     case 'chat':
@@ -208,7 +210,7 @@ app.whenReady().then(async () => {
       toggleToPets()
       break
     default:
-      ensureMainWindow()
+      toggleToMain()
       break
   }
 
@@ -228,7 +230,8 @@ app.whenReady().then(async () => {
     // macOS 点击 Dock 图标时，显示当前模式对应的窗口
     const windows = BrowserWindow.getAllWindows()
     if (windows.length === 0) {
-      ensureMainWindow()
+      const main = ensureMainWindow()
+      main.show()
     }
     else {
       // 获取当前显示模式对应的窗口
@@ -241,8 +244,9 @@ app.whenReady().then(async () => {
         targetWindow.focus()
       }
       else {
-        // 如果当前模式的窗口不存在，创建主窗口
-        ensureMainWindow()
+        // 如果当前模式的窗口不存在，创建并显示主窗口
+        const main = ensureMainWindow()
+        main.show()
       }
     }
     ensureDockVisible()

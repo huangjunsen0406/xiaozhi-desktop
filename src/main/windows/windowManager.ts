@@ -2,8 +2,9 @@ import type { BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, screen } from 'electron'
 import { hide as hideHover } from '../hover/controller'
+import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildBubbleWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
 
@@ -96,12 +97,24 @@ export function onDisplayModeChange(callback: (mode: DisplayMode) => void): void
 }
 
 /**
+ * 位置记忆配置：
+ * - corner: 存窗口左上角 (x, y)，适用于尺寸固定且不与其它窗口共享位置的模式（main / chat）
+ * - center-shared: 存窗口视觉中心 (cx, cy)，切换时按各自尺寸反推左上角；
+ *   适用于多个尺寸不同的窗口共享同一个视觉位置（live2d + pets 共用 'pet-shared'）
+ */
+type PositionConfig
+  = | { type: 'corner', key: string }
+    | { type: 'center-shared', key: string }
+
+/**
  * 创建窗口确保函数的工厂
- * 统一处理窗口创建、引用管理和关闭事件
+ * 统一处理窗口创建、引用管理和关闭事件。
+ * 传入 position 时启用位置记忆。
  */
 function createWindowEnsurer(
   windowRef: { current: BrowserWindow | null },
   builder: () => BrowserWindow,
+  position?: PositionConfig,
 ): () => BrowserWindow {
   return () => {
     if (windowRef.current == null) {
@@ -110,8 +123,203 @@ function createWindowEnsurer(
       win.on('closed', () => {
         windowRef.current = null
       })
+      if (position) {
+        if (position.type === 'corner') {
+          setupPositionMemory(win, position.key)
+        }
+        else {
+          setupSharedCenterPosition(win, position.key)
+        }
+      }
     }
     return windowRef.current as BrowserWindow
+  }
+}
+
+/**
+ * 为窗口装配位置记忆：
+ * - 创建后立刻从 DB 读取上次位置并 setPosition（window 仍 show: false，无闪烁）
+ * - 无记录时用当前可见的主要窗口中心做种子，避免首次切换跑到默认右下角
+ * - 监听 move 事件 debounce 300ms 写回 DB
+ */
+function setupPositionMemory(win: BrowserWindow, key: string): void {
+  const db = DatabaseManager.getInstance()
+  try {
+    const saved = db.getWindowPosition(key)
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      win.setPosition(saved.x, saved.y)
+    }
+    else {
+      const seed = computeSeedPosition(win)
+      if (seed) {
+        win.setPosition(seed.x, seed.y)
+        // 种子也持久化：避免反复进入该模式时位置漂移
+        db.setWindowPosition(key, seed.x, seed.y)
+      }
+    }
+  }
+  catch (error) {
+    logger.warn(`读取窗口位置失败 (${key})`, error)
+  }
+
+  let timer: NodeJS.Timeout | null = null
+  const flush = (): void => {
+    timer = null
+    if (win.isDestroyed())
+      return
+    const [x, y] = win.getPosition()
+    try {
+      DatabaseManager.getInstance().setWindowPosition(key, x, y)
+    }
+    catch (error) {
+      logger.warn(`保存窗口位置失败 (${key})`, error)
+    }
+  }
+
+  win.on('move', () => {
+    if (win.isDestroyed())
+      return
+    if (timer)
+      clearTimeout(timer)
+    timer = setTimeout(flush, 300)
+  })
+
+  win.once('closed', () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  })
+}
+
+/**
+ * 从 DB 读取共享中心位置并应用到窗口（按窗口当前尺寸反推左上角）
+ * 用于切换时把窗口对齐到最新的共享位置；无记录时返回 false 由调用方走兜底
+ */
+function applySharedCenterPosition(win: BrowserWindow, key: string): boolean {
+  if (win.isDestroyed())
+    return false
+  try {
+    const saved = DatabaseManager.getInstance().getWindowPosition(key)
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      const [w, h] = win.getSize()
+      win.setPosition(Math.round(saved.x - w / 2), Math.round(saved.y - h / 2))
+      return true
+    }
+  }
+  catch (error) {
+    logger.warn(`应用共享位置失败 (${key})`, error)
+  }
+  return false
+}
+
+/**
+ * 为窗口装配"共享视觉中心"位置记忆：
+ * - DB 中 (x, y) 解释为视觉中心 (cx, cy)，而非左上角
+ * - 读：按当前窗口尺寸 (w, h) 反推左上角 setPosition(cx - w/2, cy - h/2)
+ * - 写：取当前左上角 + 尺寸算中心点写回 DB
+ * - 使用场景：尺寸不同但需要共享同一视觉位置的窗口（live2d + pets）
+ */
+function setupSharedCenterPosition(win: BrowserWindow, key: string): void {
+  if (!applySharedCenterPosition(win, key)) {
+    // 无记录：用种子位置兜底，并把它换算为中心点写入 DB
+    const seed = computeSeedPosition(win)
+    if (seed) {
+      win.setPosition(seed.x, seed.y)
+      const [w, h] = win.getSize()
+      const cx = Math.round(seed.x + w / 2)
+      const cy = Math.round(seed.y + h / 2)
+      try {
+        DatabaseManager.getInstance().setWindowPosition(key, cx, cy)
+      }
+      catch (error) {
+        logger.warn(`保存共享窗口位置种子失败 (${key})`, error)
+      }
+    }
+  }
+
+  let timer: NodeJS.Timeout | null = null
+  const flush = (): void => {
+    timer = null
+    if (win.isDestroyed())
+      return
+    const [x, y] = win.getPosition()
+    const [w, h] = win.getSize()
+    const cx = Math.round(x + w / 2)
+    const cy = Math.round(y + h / 2)
+    try {
+      DatabaseManager.getInstance().setWindowPosition(key, cx, cy)
+    }
+    catch (error) {
+      logger.warn(`保存共享窗口位置失败 (${key})`, error)
+    }
+  }
+
+  win.on('move', () => {
+    if (win.isDestroyed())
+      return
+    if (timer)
+      clearTimeout(timer)
+    timer = setTimeout(flush, 300)
+  })
+
+  win.once('closed', () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  })
+}
+
+/**
+ * 计算位置种子：用当前显示模式（或其它可见的主要窗口）的中心点对齐新窗口
+ * 用中心点而不是左上角，避免不同尺寸窗口对齐到默认右下角导致跑到屏外
+ */
+function computeSeedPosition(newWin: BrowserWindow): { x: number, y: number } | null {
+  const [nw, nh] = newWin.getSize()
+
+  // 候选窗口：当前模式优先，其它主要窗口兜底
+  const seen = new Set<BrowserWindow>()
+  const candidates: BrowserWindow[] = []
+  const push = (ref: { current: BrowserWindow | null }): void => {
+    const w = ref.current
+    if (w && !w.isDestroyed() && w !== newWin && !seen.has(w)) {
+      seen.add(w)
+      candidates.push(w)
+    }
+  }
+  switch (currentDisplayMode) {
+    case 'pets':
+      push(windowRefs.pets)
+      break
+    case 'live2d':
+      push(windowRefs.live2d)
+      break
+    case 'main':
+      push(windowRefs.main)
+      break
+    case 'chat':
+      push(windowRefs.chat)
+      break
+    case 'mini':
+      push(windowRefs.mini)
+      break
+  }
+  push(windowRefs.pets)
+  push(windowRefs.live2d)
+  push(windowRefs.main)
+  push(windowRefs.chat)
+
+  const ref = candidates[0]
+  if (!ref)
+    return null
+  const [x, y] = ref.getPosition()
+  const [w, h] = ref.getSize()
+  const cx = x + w / 2
+  const cy = y + h / 2
+  return {
+    x: Math.round(cx - nw / 2),
+    y: Math.round(cy - nh / 2),
   }
 }
 
@@ -119,6 +327,7 @@ function createWindowEnsurer(
 export const ensureMainWindow = createWindowEnsurer(
   windowRefs.main,
   buildMainWindow,
+  { type: 'corner', key: 'main' },
 )
 
 export const ensureMiniWindow = createWindowEnsurer(
@@ -149,16 +358,19 @@ export const ensureBackgroundAudioWindow = createWindowEnsurer(
 export const ensureChatWindow = createWindowEnsurer(
   windowRefs.chat,
   buildChatWindow,
+  { type: 'corner', key: 'chat' },
 )
 
 export const ensureLive2dWindow = createWindowEnsurer(
   windowRefs.live2d,
   buildLive2dWindow,
+  { type: 'center-shared', key: 'pet-shared' },
 )
 
 export const ensurePetsWindow = createWindowEnsurer(
   windowRefs.pets,
   buildPetsWindow,
+  { type: 'center-shared', key: 'pet-shared' },
 )
 
 export const ensureBubbleWindow = createWindowEnsurer(
@@ -166,8 +378,25 @@ export const ensureBubbleWindow = createWindowEnsurer(
   buildBubbleWindow,
 )
 
+// Live2D 模型头顶相对于其窗口顶边的偏移（CSS px）。
+// Live2D 窗口尺寸固定，模型底部对齐，矮模型头顶距窗口顶可能很远；
+// 由渲染端 setupModel 通过 IPC bubble:set-anchor-offset 上报。
+let live2dAnchorOffsetY = 0
+
+// 气泡贴边时与屏幕工作区边缘的留白
+const BUBBLE_EDGE_MARGIN = 5
+// 箭头中心相对气泡左/右边的最小距离（圆角 10 + 箭头底半宽 6）
+const BUBBLE_ARROW_HALF = 16
+
+function getAnchorOffsetForTarget(target: BrowserWindow): number {
+  if (target === windowRefs.live2d.current)
+    return live2dAnchorOffsetY
+  return 0
+}
+
 /**
- * 将气泡窗口定位到目标窗口正上方
+ * 将气泡窗口定位到目标窗口正上方（按锚点偏移指向模型头顶）
+ * 屏幕边缘时 clamp 气泡到工作区内，箭头滑动指向模型中心
  */
 function positionBubbleAbove(targetWindow: BrowserWindow): void {
   const bubble = windowRefs.bubble.current
@@ -179,11 +408,28 @@ function positionBubbleAbove(targetWindow: BrowserWindow): void {
   const [x, y] = targetWindow.getPosition()
   const [w] = targetWindow.getSize()
   const [bw, bh] = bubble.getSize()
+  const anchorOffset = getAnchorOffsetForTarget(targetWindow)
 
-  bubble.setPosition(
-    Math.round(x + w / 2 - bw / 2),
-    Math.round(y - bh - 4),
-  )
+  const targetCenterX = x + w / 2
+  const desiredBubbleX = targetCenterX - bw / 2
+
+  // 拿目标窗口所在屏幕的工作区，避免多屏场景下气泡跑到主屏
+  const targetBounds = targetWindow.getBounds()
+  const display = screen.getDisplayMatching(targetBounds)
+  const workArea = display.workArea
+  const minX = workArea.x + BUBBLE_EDGE_MARGIN
+  const maxX = workArea.x + workArea.width - bw - BUBBLE_EDGE_MARGIN
+
+  const bubbleX = Math.round(Math.min(Math.max(desiredBubbleX, minX), maxX))
+  const bubbleY = Math.round(y + anchorOffset - bh - 4)
+
+  bubble.setPosition(bubbleX, bubbleY)
+
+  // 箭头水平位置（相对气泡窗口左上角），在圆角内 clamp
+  const arrowMin = BUBBLE_ARROW_HALF
+  const arrowMax = Math.max(arrowMin, bw - BUBBLE_ARROW_HALF)
+  const arrowX = Math.round(Math.min(Math.max(targetCenterX - bubbleX, arrowMin), arrowMax))
+  bubble.webContents.send('bubble:set-arrow-x', arrowX)
 }
 
 /**
@@ -219,11 +465,43 @@ function getCurrentPetWindow(): BrowserWindow | null {
   return null
 }
 
+// 当前气泡跟随的目标窗口与监听句柄（确保切换时只挂一个 move 监听）
+let currentBubbleTarget: BrowserWindow | null = null
+let currentBubbleMoveHandler: (() => void) | null = null
+let currentBubbleClosedHandler: (() => void) | null = null
+
 /**
- * 设置气泡跟随目标窗口移动
+ * 清除气泡对目标窗口的跟随监听
+ */
+function clearBubbleFollow(): void {
+  if (currentBubbleTarget && !currentBubbleTarget.isDestroyed()) {
+    if (currentBubbleMoveHandler)
+      currentBubbleTarget.removeListener('move', currentBubbleMoveHandler)
+    if (currentBubbleClosedHandler)
+      currentBubbleTarget.removeListener('closed', currentBubbleClosedHandler)
+  }
+  currentBubbleTarget = null
+  currentBubbleMoveHandler = null
+  currentBubbleClosedHandler = null
+}
+
+/**
+ * 设置气泡跟随目标窗口移动；切换目标时清理旧监听并立即重定位
  */
 function setupBubbleFollow(targetWindow: BrowserWindow): void {
-  const updatePosition = (): void => {
+  // 同一目标重复调用直接返回（仍然立即重定位一次）
+  if (currentBubbleTarget === targetWindow) {
+    if (windowRefs.bubble.current?.isVisible())
+      positionBubbleAbove(targetWindow)
+    return
+  }
+
+  // 清理旧目标的监听
+  clearBubbleFollow()
+
+  currentBubbleTarget = targetWindow
+
+  currentBubbleMoveHandler = (): void => {
     const bubble = windowRefs.bubble.current
     if (!bubble || bubble.isDestroyed() || !bubble.isVisible())
       return
@@ -232,12 +510,18 @@ function setupBubbleFollow(targetWindow: BrowserWindow): void {
     positionBubbleAbove(targetWindow)
   }
 
-  targetWindow.on('move', updatePosition)
-
-  // 目标窗口关闭时清理监听
-  targetWindow.once('closed', () => {
+  currentBubbleClosedHandler = (): void => {
+    clearBubbleFollow()
     hideBubbleWindow()
-  })
+  }
+
+  targetWindow.on('move', currentBubbleMoveHandler)
+  targetWindow.once('closed', currentBubbleClosedHandler)
+
+  // 切到新目标后立即重定位（若当前气泡可见）
+  const bubble = windowRefs.bubble.current
+  if (bubble && !bubble.isDestroyed() && bubble.isVisible())
+    positionBubbleAbove(targetWindow)
 }
 
 // 注册气泡窗口 IPC 通道
@@ -252,12 +536,26 @@ ipcMain.on('bubble:hide', () => {
   hideBubbleWindow()
 })
 
+// 渲染端上报模型头顶相对窗口顶边的偏移（仅 Live2D 使用）
+ipcMain.on('bubble:set-anchor-offset', (_event, offsetY: number) => {
+  if (typeof offsetY !== 'number' || !Number.isFinite(offsetY))
+    return
+  live2dAnchorOffsetY = Math.max(0, offsetY)
+  // 当前正跟随 Live2D 且气泡可见时，立即重定位
+  if (currentBubbleTarget && currentBubbleTarget === windowRefs.live2d.current) {
+    const bubble = windowRefs.bubble.current
+    if (bubble && !bubble.isDestroyed() && bubble.isVisible())
+      positionBubbleAbove(currentBubbleTarget)
+  }
+})
+
 // 窗口切换和控制函数
 export function toggleToMini(): void {
   const mini = ensureMiniWindow()
-  const main = ensureMainWindow()
   mini.show()
-  main.hide()
+  // 仅在 main 已存在时 hide，不要为了 hide 而主动创建（否则 ready-to-show 路径已删除后，
+  // 这里也会拖累 main 的延迟创建语义）
+  windowRefs.main.current?.hide()
   if (windowRefs.chat.current)
     windowRefs.chat.current.hide()
   if (windowRefs.live2d.current)
@@ -265,12 +563,14 @@ export function toggleToMini(): void {
   if (windowRefs.pets.current)
     windowRefs.pets.current.hide()
   hideBubbleWindow()
+  clearBubbleFollow()
   setDisplayMode('mini')
 }
 
 export function toggleToMain(): void {
-  if (windowRefs.main.current)
-    windowRefs.main.current.show()
+  // builder 不再自动 show，必须显式 ensure + show
+  const main = ensureMainWindow()
+  main.show()
   if (windowRefs.mini.current)
     windowRefs.mini.current.hide()
   if (windowRefs.chat.current)
@@ -285,6 +585,7 @@ export function toggleToMain(): void {
   // 隐藏悬浮窗
   hideHover()
   hideBubbleWindow()
+  clearBubbleFollow()
   setDisplayMode('main')
 }
 
@@ -336,6 +637,7 @@ export function toggleToChat(): void {
   // 隐藏悬浮窗
   hideHover()
   hideBubbleWindow()
+  clearBubbleFollow()
   setDisplayMode('chat')
 }
 
@@ -345,6 +647,9 @@ export function getChatWindow(): BrowserWindow | null {
 
 export function toggleToLive2d(): void {
   const win = ensureLive2dWindow()
+  // 每次切到 live2d 都重新从 DB 应用共享位置：
+  // 避免“窗口已存在”的路径下错过 pets 拖动后的最新位置
+  applySharedCenterPosition(win, 'pet-shared')
   win.show()
   win.moveTop()
   if (windowRefs.main.current)
@@ -372,6 +677,9 @@ export function getLive2dWindow(): BrowserWindow | null {
 
 export function toggleToPets(): void {
   const win = ensurePetsWindow()
+  // 每次切到 pets 都重新从 DB 应用共享位置：
+  // 避免“窗口已存在”的路径下错过 live2d 拖动后的最新位置
+  applySharedCenterPosition(win, 'pet-shared')
   win.show()
   win.moveTop()
   if (windowRefs.main.current)

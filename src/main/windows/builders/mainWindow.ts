@@ -33,9 +33,8 @@ export function buildMainWindow(): BrowserWindow {
     },
   })
 
-  win.on('ready-to-show', () => {
-    win.show()
-  })
+  // 主窗显示由调用方（toggleToMain 等）显式驱动，避免 ready-to-show 异步触发导致
+  // 在 mini/chat/live2d/pets 模式下首次 ensureMainWindow 时主窗闪现。
 
   // 处理窗口关闭事件
   win.on('close', (event) => {
