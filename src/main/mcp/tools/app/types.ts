@@ -14,6 +14,12 @@ export interface ProcessInfo {
   cpu?: number
   /** 内存使用 (MB) */
   memory?: number
+  /** 窗口标题（Windows tasklist /V 提供） */
+  windowTitle?: string
+  /** 用户名（Windows tasklist /V 提供） */
+  userName?: string
+  /** 该可执行文件的进程实例数（去重合并后） */
+  instances?: number
 }
 
 /** 应用信息 */

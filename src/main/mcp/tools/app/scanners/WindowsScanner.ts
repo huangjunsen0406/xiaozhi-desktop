@@ -4,6 +4,7 @@ import type { AppInfo } from '../types'
  * 扫描开始菜单、Program Files 等目录
  */
 import * as fs from 'node:fs'
+import { promises as fsp } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 
@@ -109,36 +110,38 @@ export class WindowsScanner {
       return
 
     try {
-      const files = fs.readdirSync(directory)
+      const files = await fsp.readdir(directory)
 
-      for (const file of files) {
-        const filePath = path.join(directory, file)
+      // 并行处理子项；单个失败不影响其他
+      await Promise.all(
+        files.map(async (file) => {
+          const filePath = path.join(directory, file)
 
-        try {
-          const stat = fs.statSync(filePath)
+          try {
+            const stat = await fsp.stat(filePath)
 
-          if (stat.isDirectory()) {
-            // 递归扫描子目录
-            await this.scanDirectoryRecursive(filePath, apps, type, depth + 1)
+            if (stat.isDirectory()) {
+              // 递归扫描子目录
+              await this.scanDirectoryRecursive(filePath, apps, type, depth + 1)
+            }
+            else if (file.endsWith('.lnk')) {
+              // 快捷方式文件
+              const appName = file.replace('.lnk', '')
+              const cleanName = this.cleanAppName(appName)
+
+              apps.push({
+                name: cleanName,
+                displayName: appName,
+                path: filePath,
+                type,
+              })
+            }
           }
-          else if (file.endsWith('.lnk')) {
-            // 快捷方式文件
-            const appName = file.replace('.lnk', '')
-            const cleanName = this.cleanAppName(appName)
-
-            apps.push({
-              name: cleanName,
-              displayName: appName,
-              path: filePath,
-              type,
-            })
+          catch {
+            // 跳过无法访问的文件
           }
-        }
-        catch {
-          // 跳过无法访问的文件
-          continue
-        }
-      }
+        }),
+      )
     }
     catch (error) {
       logger.error(`递归扫描失败 (${directory}):`, error)
@@ -160,35 +163,37 @@ export class WindowsScanner {
         return []
       }
 
-      const folders = fs.readdirSync(directory)
+      const folders = await fsp.readdir(directory)
 
-      for (const folder of folders) {
-        const folderPath = path.join(directory, folder)
+      // 并行扫描每个一级子目录；单个失败不影响整体
+      await Promise.all(
+        folders.map(async (folder) => {
+          const folderPath = path.join(directory, folder)
 
-        try {
-          const stat = fs.statSync(folderPath)
-          if (!stat.isDirectory())
-            continue
+          try {
+            const stat = await fsp.stat(folderPath)
+            if (!stat.isDirectory())
+              return
 
-          // 查找 .exe 文件
-          const exeFiles = this.findExeFiles(folderPath)
-          for (const exePath of exeFiles) {
-            const exeName = path.basename(exePath, '.exe')
-            const cleanName = this.cleanAppName(exeName)
+            // 查找 .exe 文件
+            const exeFiles = await this.findExeFiles(folderPath)
+            for (const exePath of exeFiles) {
+              const exeName = path.basename(exePath, '.exe')
+              const cleanName = this.cleanAppName(exeName)
 
-            apps.push({
-              name: cleanName,
-              displayName: exeName,
-              path: exePath,
-              type,
-            })
+              apps.push({
+                name: cleanName,
+                displayName: exeName,
+                path: exePath,
+                type,
+              })
+            }
           }
-        }
-        catch {
-          // 跳过无法访问的文件夹
-          continue
-        }
-      }
+          catch {
+            // 跳过无法访问的文件夹
+          }
+        }),
+      )
 
       logger.info(`${directory}: 找到 ${apps.length} 个应用`)
     }
@@ -202,11 +207,11 @@ export class WindowsScanner {
   /**
    * 查找目录下的 .exe 文件（仅第一层）
    */
-  private static findExeFiles(directory: string): string[] {
+  private static async findExeFiles(directory: string): Promise<string[]> {
     const exeFiles: string[] = []
 
     try {
-      const files = fs.readdirSync(directory)
+      const files = await fsp.readdir(directory)
 
       for (const file of files) {
         if (file.endsWith('.exe')) {

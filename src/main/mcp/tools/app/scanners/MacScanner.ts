@@ -4,6 +4,7 @@ import type { AppInfo } from '../types'
  * 扫描 /Applications 和 ~/Applications 目录
  */
 import * as fs from 'node:fs'
+import { promises as fsp } from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
@@ -59,7 +60,7 @@ export class MacScanner {
         return []
       }
 
-      const files = fs.readdirSync(directory)
+      const files = await fsp.readdir(directory)
 
       for (const file of files) {
         if (file.endsWith('.app')) {

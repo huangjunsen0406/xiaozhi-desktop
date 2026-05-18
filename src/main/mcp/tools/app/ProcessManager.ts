@@ -43,6 +43,14 @@ export class ProcessManager {
       if (!includeSystemProcesses) {
         processes = this.filterUserApplications(processes, platform)
         logger.info(`过滤后剩余 ${processes.length} 个用户应用`)
+
+        // Windows: tasklist /V 会把每个进程实例单独列一条（如上百条 chrome.exe）
+        // 在 list_running 路径上按 image name 去重并合并，避免回包过于啰嗦。
+        // killByName 走 includeSystemProcesses=true 不走这里，不会漏 kill。
+        if (platform === 'win32') {
+          processes = this.dedupeByName(processes)
+          logger.info(`Windows 按 image name 去重后剩余 ${processes.length} 条`)
+        }
       }
 
       return processes
@@ -124,7 +132,53 @@ export class ProcessManager {
     }
   }
 
-  // ========== Unix/Linux/macOS 实现 ==========
+  // ========== 公共过滤辅助 ==========
+
+  /**
+   * 按 image name 去重合并进程
+   *
+   * 同名进程（如多条 chrome.exe）合并为一条：
+   * - pid 取该组中最小的 pid（通常是父/最早进程）
+   * - cpu / memory 累加
+   * - windowTitle / userName 取第一个非空值
+   * - instances 记录该组进程数
+   */
+  private static dedupeByName(processes: ProcessInfo[]): ProcessInfo[] {
+    const grouped = new Map<string, ProcessInfo>()
+
+    for (const proc of processes) {
+      const key = proc.name.toLowerCase()
+      const existing = grouped.get(key)
+
+      if (!existing) {
+        grouped.set(key, {
+          ...proc,
+          instances: 1,
+        })
+        continue
+      }
+
+      // 合并到已存在的条目
+      existing.instances = (existing.instances ?? 1) + 1
+      if (proc.pid < existing.pid) {
+        existing.pid = proc.pid
+      }
+      if (typeof proc.cpu === 'number') {
+        existing.cpu = (existing.cpu ?? 0) + proc.cpu
+      }
+      if (typeof proc.memory === 'number') {
+        existing.memory = (existing.memory ?? 0) + proc.memory
+      }
+      if (!existing.windowTitle && proc.windowTitle) {
+        existing.windowTitle = proc.windowTitle
+      }
+      if (!existing.userName && proc.userName) {
+        existing.userName = proc.userName
+      }
+    }
+
+    return Array.from(grouped.values())
+  }
 
   /**
    * 过滤用户应用程序（排除系统进程）
@@ -285,13 +339,13 @@ export class ProcessManager {
         return false
       }
 
-      // Windows: 保留用户应用程序
+      // Windows: 保留用户应用程序（黑名单法）
       if (platform === 'win32') {
-        // 必须包含 .exe
+        // 基础健全性检查：必须是 exe
         if (!lowerCommand.includes('.exe'))
           return false
 
-        // 排除 Windows 系统进程路径
+        // 排除 Windows 系统进程路径（仅当 command 真包含路径时生效）
         const windowsSystemPaths = [
           'c:\\windows\\system32\\',
           'c:\\windows\\syswow64\\',
@@ -303,7 +357,7 @@ export class ProcessManager {
             return false
         }
 
-        // 排除常见系统进程
+        // 排除常见系统进程（名称黑名单）
         const windowsSystemProcesses = [
           'svchost.exe',
           'dwm.exe',
@@ -321,6 +375,18 @@ export class ProcessManager {
           'TextInputHost.exe',
           'SecurityHealthSystray.exe',
           'SecurityHealthService.exe',
+          // 增补常见系统进程
+          'fontdrvhost.exe',
+          'conhost.exe',
+          'WmiPrvSE.exe',
+          'SearchHost.exe',
+          'Widgets.exe',
+          'smartscreen.exe',
+          'ApplicationFrameHost.exe',
+          'backgroundTaskHost.exe',
+          'audiodg.exe',
+          'spoolsv.exe',
+          'ctfmon.exe',
         ]
 
         for (const sysProc of windowsSystemProcesses) {
@@ -328,20 +394,17 @@ export class ProcessManager {
             return false
         }
 
-        // 只保留用户应用路径
-        if (lowerCommand.includes('\\program files\\')
-          || lowerCommand.includes('\\program files (x86)\\')
-          || lowerCommand.includes('\\users\\')
-          || lowerCommand.includes('\\appdata\\')) {
-          return true
-        }
-
-        return false
+        // 不再要求 command 必须包含 \program files\ / \users\ / \appdata\
+        // tasklist 默认不输出路径，依赖路径白名单会把所有用户应用过滤光。
+        // 通过黑名单的 .exe 都保留。
+        return true
       }
 
       return true
     })
   }
+
+  // ========== Unix/Linux/macOS 实现 ==========
 
   /**
    * Unix 系统：列出运行中的进程
@@ -441,8 +504,9 @@ export class ProcessManager {
    */
   private static async listRunningWindows(filter?: string): Promise<ProcessInfo[]> {
     try {
-      // 使用 tasklist 命令
-      const { stdout } = await execAsync('tasklist /FO CSV /NH')
+      // 使用 tasklist /V 命令以获取 Window Title / User Name 等扩展信息
+      // 注意：tasklist 本身不输出可执行文件路径，command 字段仍为 image name
+      const { stdout } = await execAsync('tasklist /V /FO CSV /NH')
       return this.parseTasklist(stdout, filter)
     }
     catch (error) {
@@ -471,6 +535,12 @@ export class ProcessManager {
 
   /**
    * 解析 tasklist CSV 输出
+   *
+   * 支持两种格式：
+   * - `tasklist /FO CSV /NH`（5 列）：Image Name, PID, Session Name, Session#, Mem Usage
+   * - `tasklist /V /FO CSV /NH`（9 列）：额外包含 Status, User Name, CPU Time, Window Title
+   *
+   * 自动按列数选择解析路径，向后兼容。
    */
   private static parseTasklist(output: string, filter?: string): ProcessInfo[] {
     const processes: ProcessInfo[] = []
@@ -482,17 +552,18 @@ export class ProcessManager {
         continue
 
       try {
-        // CSV 格式：
-        // "Image Name","PID","Session Name","Session#","Mem Usage"
-        // "chrome.exe","1234","Console","1","123,456 K"
-
-        // 移除引号并分割
-        const parts = trimmed.split('","').map(part => part.replace(/"/g, ''))
+        // CSV 解析：移除两端引号后用 "," 分割，能稳定处理列内的逗号（如 mem usage "123,456 K"）
+        const stripped = trimmed.replace(/^"|"$/g, '')
+        const parts = stripped.split('","')
         if (parts.length < 2)
           continue
 
         const name = parts[0]
         const pid = Number.parseInt(parts[1], 10)
+        if (Number.isNaN(pid))
+          continue
+
+        // command 字段：tasklist 不输出可执行文件路径，仍只能用 image name
         const command = name
 
         // 解析内存（如果有）
@@ -502,6 +573,21 @@ export class ProcessManager {
           const memKB = Number.parseInt(memStr, 10)
           if (!Number.isNaN(memKB)) {
             memory = memKB / 1024 // 转换为 MB
+          }
+        }
+
+        // /V 输出额外字段：列数 >= 9 时提取 Window Title / User Name
+        let windowTitle: string | undefined
+        let userName: string | undefined
+        if (parts.length >= 9) {
+          // parts[5] = Status, parts[6] = User Name, parts[7] = CPU Time, parts[8] = Window Title
+          const rawUser = parts[6]?.trim()
+          if (rawUser && rawUser !== 'N/A') {
+            userName = rawUser
+          }
+          const rawTitle = parts[8]?.trim()
+          if (rawTitle && rawTitle !== 'N/A') {
+            windowTitle = rawTitle
           }
         }
 
@@ -520,6 +606,8 @@ export class ProcessManager {
           name,
           command,
           memory,
+          windowTitle,
+          userName,
         })
       }
       catch {

@@ -81,7 +81,11 @@ Examples:
       const chatPlugin = container.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(result.base64, 'screenshot')
 
-      return await analyzeImage(result.base64, question || '请描述这张截图的内容')
+      return await analyzeImage(
+        result.base64,
+        question || '请描述这张截图的内容',
+        result.mime,
+      )
     }
     catch (error) {
       logger.error('截图失败:', error)

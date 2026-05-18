@@ -2,14 +2,19 @@
  * 应用管理工具定义
  */
 
+import type { AppInfo } from './types'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
+import { TimeoutError, withTimeout } from '../util/withTimeout'
 import { AppLauncher } from './AppLauncher'
 import { AppScanner } from './AppScanner'
 import { ProcessManager } from './ProcessManager'
 
 const logger = getLogger('AppTools')
+
+/** scan_installed / list_running 单次调用最长允许耗时，避免永久挂死 */
+const APP_TOOL_TIMEOUT_MS = 30_000
 
 /**
  * 启动应用
@@ -92,7 +97,11 @@ Returns detailed information about running applications including process IDs wh
 
       logger.info(`列出运行中的应用, 过滤: ${filterName}`)
 
-      const processes = await ProcessManager.listRunning(filterName)
+      const processes = await withTimeout(
+        ProcessManager.listRunning(filterName),
+        APP_TOOL_TIMEOUT_MS,
+        'list_running',
+      )
 
       logger.info(`找到 ${processes.length} 个进程`)
 
@@ -112,6 +121,16 @@ Returns detailed information about running applications including process IDs wh
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
+      if (error instanceof TimeoutError) {
+        logger.warn('list_running 超时（30秒）')
+        const timeoutResult = {
+          success: false,
+          total_count: 0,
+          applications: [],
+          message: '扫描超时（30秒）',
+        }
+        return JSON.stringify(timeoutResult, null, 2)
+      }
       logger.error('列出运行应用失败:', error)
       const errorResult = {
         success: false,
@@ -221,14 +240,22 @@ Returns JSON with application details including name (for launching), displayNam
 
       logger.info(`扫描已安装应用, 强制刷新: ${forceRefresh}, 搜索: ${searchQuery}`)
 
-      let apps
+      let apps: AppInfo[]
 
       if (searchQuery) {
-        apps = await AppScanner.search(searchQuery)
+        apps = await withTimeout(
+          AppScanner.search(searchQuery),
+          APP_TOOL_TIMEOUT_MS,
+          'scan_installed:search',
+        )
         logger.info(`搜索到 ${apps.length} 个匹配的应用`)
       }
       else {
-        apps = await AppScanner.scanInstalled(forceRefresh)
+        apps = await withTimeout(
+          AppScanner.scanInstalled(forceRefresh),
+          APP_TOOL_TIMEOUT_MS,
+          'scan_installed',
+        )
         logger.info(`扫描到 ${apps.length} 个已安装应用`)
       }
 
@@ -250,6 +277,17 @@ Returns JSON with application details including name (for launching), displayNam
       return JSON.stringify(result, null, 2)
     }
     catch (error) {
+      if (error instanceof TimeoutError) {
+        logger.warn('scan_installed 超时（30秒）')
+        const timeoutResult = {
+          success: false,
+          total_count: 0,
+          platform: AppScanner.getPlatform(),
+          applications: [],
+          message: '扫描超时（30秒）',
+        }
+        return JSON.stringify(timeoutResult, null, 2)
+      }
       logger.error('扫描应用失败:', error)
       const errorResult = {
         success: false,

@@ -12,10 +12,23 @@ import { getMcpContext } from '../McpContext'
 const logger = getLogger('VisionAnalyze')
 
 /**
+ * 图片上传 / data URL 使用的 MIME 类型
+ */
+export type VisionMime = 'image/jpeg' | 'image/png'
+
+/**
  * 分析图片的公共方法
  * 封装 localVL / MCPVision / 未配置三种分支
+ *
+ * @param base64Image 图片 base64
+ * @param question 用户问题
+ * @param mime 图片真实 MIME，默认 image/jpeg（兼容摄像头侧旧调用）
  */
-export async function analyzeImage(base64Image: string, question: string): Promise<string> {
+export async function analyzeImage(
+  base64Image: string,
+  question: string,
+  mime: VisionMime = 'image/jpeg',
+): Promise<string> {
   const mcpContext = getMcpContext()
   const visionConfig = mcpContext.getVisionConfig()
 
@@ -26,14 +39,14 @@ export async function analyzeImage(base64Image: string, question: string): Promi
 
   if (useLocalVision && cameraConfig.vlApiKey && cameraConfig.vlUrl) {
     logger.info('使用本地 VL API 分析图片')
-    return await analyzeImageWithLocalVL(base64Image, question, cameraConfig)
+    return await analyzeImageWithLocalVL(base64Image, question, cameraConfig, mime)
   }
   else if (visionConfig.url && visionConfig.token) {
     logger.info('使用 MCP vision API 分析图片')
     return await analyzeImageWithMCPVision(base64Image, question, {
       url: visionConfig.url,
       token: visionConfig.token,
-    })
+    }, mime)
   }
   else {
     logger.warn('未配置 vision API')
@@ -51,6 +64,7 @@ async function analyzeImageWithLocalVL(
   base64Image: string,
   question: string,
   config: { vlUrl: string, vlApiKey: string, vlModel: string },
+  mime: VisionMime,
 ): Promise<string> {
   try {
     const client = new OpenAI({
@@ -66,7 +80,7 @@ async function analyzeImageWithLocalVL(
           {
             type: 'image_url',
             image_url: {
-              url: `data:image/jpeg;base64,${base64Image}`,
+              url: `data:${mime};base64,${base64Image}`,
             },
           },
           {
@@ -115,14 +129,17 @@ async function analyzeImageWithMCPVision(
   base64Image: string,
   question: string,
   config: { url: string, token: string },
+  mime: VisionMime,
 ): Promise<string> {
   try {
     const imageBuffer = Buffer.from(base64Image, 'base64')
 
+    const filename = mime === 'image/png' ? 'screenshot.png' : 'screenshot.jpg'
+
     const formData = new FormData()
     formData.append('question', question)
-    const blob = new Blob([Uint8Array.from(imageBuffer)], { type: 'image/jpeg' })
-    formData.append('file', blob, 'screenshot.jpg')
+    const blob = new Blob([Uint8Array.from(imageBuffer)], { type: mime })
+    formData.append('file', blob, filename)
 
     const headers: Record<string, string> = {}
 

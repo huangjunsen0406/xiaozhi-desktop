@@ -4,6 +4,7 @@ import type { AppInfo } from '../types'
  * 扫描 .desktop 文件
  */
 import * as fs from 'node:fs'
+import { promises as fsp } from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
@@ -67,17 +68,26 @@ export class LinuxScanner {
         return []
       }
 
-      const files = fs.readdirSync(directory)
+      const files = await fsp.readdir(directory)
 
-      for (const file of files) {
-        if (file.endsWith('.desktop')) {
+      // 并行解析每个 .desktop 文件；单个失败不影响整体
+      const results = await Promise.all(
+        files.map(async (file) => {
+          if (!file.endsWith('.desktop'))
+            return null
           const filePath = path.join(directory, file)
-          const appInfo = await this.parseDesktopFile(filePath, type)
-
-          if (appInfo) {
-            apps.push(appInfo)
+          try {
+            return await this.parseDesktopFile(filePath, type)
           }
-        }
+          catch {
+            return null
+          }
+        }),
+      )
+
+      for (const info of results) {
+        if (info)
+          apps.push(info)
       }
 
       logger.info(`${directory}: 找到 ${apps.length} 个应用`)
@@ -97,7 +107,7 @@ export class LinuxScanner {
     type: 'application' | 'user_application',
   ): Promise<AppInfo | null> {
     try {
-      const content = fs.readFileSync(filePath, 'utf-8')
+      const content = await fsp.readFile(filePath, 'utf-8')
       const lines = content.split('\n')
 
       let name = ''

@@ -5,10 +5,17 @@
 
 import { Buffer } from 'node:buffer'
 import { Monitor } from 'node-screenshots'
+import sharp from 'sharp'
 
 import { getLogger } from '../../../utils/logger'
 
 const logger = getLogger('ScreenshotTool')
+
+/**
+ * 截图压缩参数
+ */
+const COMPRESS_MAX_DIMENSION = 1920
+const COMPRESS_JPEG_QUALITY = 80
 
 export interface ScreenshotOptions {
   /**
@@ -31,6 +38,12 @@ export interface ScreenshotResult {
   base64?: string
   width?: number
   height?: number
+  /**
+   * 图片实际编码格式（用于上游 vision API 选择正确 MIME / 文件名）
+   * 默认 image/jpeg（压缩成功后）
+   * 压缩失败回退时为 image/png
+   */
+  mime?: 'image/jpeg' | 'image/png'
   message?: string
 }
 
@@ -86,19 +99,54 @@ export class ScreenshotTool {
 
       // 转换为 PNG（Electron 环境传 true）
       const pngBuffer = await image.toPng(true)
+      const originalBytes = pngBuffer.length
 
-      // 转换为 Node.js Buffer
-      const data = Buffer.from(pngBuffer)
-      const base64 = data.toString('base64')
+      // 尝试用 sharp 压缩为 JPEG（最长边 1920，quality=80）
+      // 失败时回退原始 PNG，保证截图功能不至于完全不能用
+      let finalBuffer: Buffer
+      let mime: 'image/jpeg' | 'image/png'
+      try {
+        const jpegBuffer = await sharp(pngBuffer)
+          .resize({
+            width: COMPRESS_MAX_DIMENSION,
+            height: COMPRESS_MAX_DIMENSION,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality: COMPRESS_JPEG_QUALITY })
+          .toBuffer()
+        finalBuffer = Buffer.from(jpegBuffer)
+        mime = 'image/jpeg'
+        const ratio = originalBytes > 0
+          ? `${((finalBuffer.length / originalBytes) * 100).toFixed(1)}%`
+          : 'n/a'
+        logger.debug('截图压缩', {
+          originalBytes,
+          compressedBytes: finalBuffer.length,
+          ratio,
+          mime,
+        })
+      }
+      catch (error) {
+        logger.warn('sharp 压缩失败，回退原始 PNG', error)
+        finalBuffer = Buffer.from(pngBuffer)
+        mime = 'image/png'
+      }
 
-      logger.info(`Screenshot captured: ${targetMonitor.width}x${targetMonitor.height}, ${data.length} bytes`)
+      const base64 = finalBuffer.toString('base64')
+
+      logger.info(
+        `Screenshot captured: ${targetMonitor.width}x${targetMonitor.height}, `
+        + `${finalBuffer.length} bytes, mime=${mime}`,
+      )
 
       return {
         success: true,
-        data,
+        data: finalBuffer,
         base64,
         width: targetMonitor.width,
         height: targetMonitor.height,
+        mime,
       }
     }
     catch (error) {
