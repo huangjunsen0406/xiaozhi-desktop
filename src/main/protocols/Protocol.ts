@@ -27,6 +27,7 @@ export interface HelloMessage {
   version: number
   features: {
     mcp: boolean
+    aec?: boolean
   }
   transport: 'websocket' | 'udp'
   audio_params: AudioParams

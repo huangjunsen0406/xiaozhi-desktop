@@ -351,11 +351,12 @@ export class WebSocketProtocol extends Protocol {
       version: 1,
       features: {
         mcp: true,
+        aec: true,
       },
       transport: 'websocket',
       audio_params: {
         format: 'opus',
-        sample_rate: AudioConfig.inputSampleRate,
+        sample_rate: AudioConfig.outputSampleRate,
         channels: AudioConfig.channels,
         frame_duration: AudioConfig.frameDuration,
       },

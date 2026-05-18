@@ -21,7 +21,7 @@ enum AudioState {
   ERROR = 'error',
 }
 
-type CommandType = 'initialize' | 'switchDevices' | 'updateConfig' | 'cleanup'
+type CommandType = 'initialize' | 'switchDevices' | 'updateConfig' | 'reinitialize' | 'cleanup'
 
 interface Command {
   type: CommandType
@@ -81,6 +81,9 @@ class AudioCommandQueue {
         break
       case 'updateConfig':
         await doUpdateConfig()
+        break
+      case 'reinitialize':
+        await doReinitialize()
         break
       case 'cleanup':
         await doCleanup()
@@ -231,6 +234,53 @@ async function doUpdateConfig(): Promise<void> {
 }
 
 /**
+ * 执行完整重建（采样率/帧长度/声道数变化时）
+ * 完全销毁并重建 AudioContext，确保新参数完整生效
+ */
+async function doReinitialize(): Promise<void> {
+  // 未初始化，跳过重建
+  if (currentState === AudioState.UNINITIALIZED || currentState === AudioState.ERROR) {
+    console.log('音频系统未初始化，跳过重建')
+    return
+  }
+
+  try {
+    console.log('开始完整重建音频系统...')
+
+    // 1. 停止采集并销毁所有资源
+    if (currentState === AudioState.CAPTURING) {
+      capture.stop()
+    }
+    await capture.dispose()
+    await playback.dispose()
+    console.log('旧音频资源已销毁')
+
+    // 2. 重新获取设备配置
+    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
+
+    // 3. 重新初始化采集器
+    await capture.initialize(inputDeviceId)
+    currentInputDeviceId = inputDeviceId
+    console.log('采集器重建完成')
+
+    // 4. 重新初始化播放器
+    await playback.initialize(outputDeviceId)
+    currentOutputDeviceId = outputDeviceId
+    console.log('播放器重建完成')
+
+    // 5. 重新开始采集
+    await capture.start()
+    updateState(AudioState.CAPTURING)
+    console.log('音频系统重建完成，已恢复采集')
+  }
+  catch (error) {
+    console.error('音频系统重建失败', error)
+    updateState(AudioState.ERROR)
+    throw error
+  }
+}
+
+/**
  * 执行清理
  */
 async function doCleanup(): Promise<void> {
@@ -265,6 +315,10 @@ window.api.onAudioCommand((command: string, _data?: Record<string, unknown>) => 
     case 'updateConfig':
       // 用户在设置中更改了音频配置（采样率、帧长度等）
       commandQueue.enqueue('updateConfig', 1)
+      break
+    case 'reinitialize':
+      // 音频参数变化，需要完整重建 AudioContext
+      commandQueue.enqueue('reinitialize', 0)
       break
     case 'cleanup':
       // 应用即将退出，清理资源

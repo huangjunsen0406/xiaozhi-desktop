@@ -2,6 +2,7 @@ import type { AudioConfig } from '@shared/types'
 import { BrowserWindow } from 'electron'
 import { AudioConfig as AudioConfigInstance } from '../audio/AudioConfig'
 import { OpusCodec } from '../audio/OpusCodec'
+import { getServiceContainer } from '../core/ServiceContainer'
 import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { SystemVolumeController } from '../utils/SystemVolumeController'
@@ -103,7 +104,7 @@ export function registerAudioIpc(): void {
           logger.info('✓ OpusCodec 已根据新配置重建')
         }
 
-        // 通知后台音频窗口更新配置
+        // 通知后台音频窗口完整重建 AudioContext
         const windows = BrowserWindow.getAllWindows()
         let notified = false
 
@@ -113,16 +114,25 @@ export function registerAudioIpc(): void {
           // 判断是否是后台音频窗口（通过 URL 判断）
           const url = win.webContents.getURL()
           if (url.includes('audio.html') || url.includes('#/audio')) {
-            win.webContents.send('audio:command', 'updateConfig')
+            win.webContents.send('audio:command', 'reinitialize')
             notified = true
           }
         })
 
         if (notified) {
-          logger.info('✓ 已通知后台音频窗口更新配置')
+          logger.info('✓ 已通知后台音频窗口重建 AudioContext')
         }
         else {
           logger.warn('未找到后台音频窗口，配置将在下次初始化时生效')
+        }
+
+        // 触发协议重连，让新 hello 携带新的音频参数
+        try {
+          const container = getServiceContainer()
+          await container.reconnectProtocol()
+        }
+        catch (error) {
+          logger.error('音频参数变化后协议重连失败（不影响音频重建）:', error)
         }
       }
 

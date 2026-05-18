@@ -500,6 +500,28 @@ export class ServiceContainer {
   }
 
   /**
+   * 重连协议
+   *
+   * 刷新协议内存配置，断开当前连接并重新连接。
+   * 用于音频参数或系统选项变更后，确保新 hello 携带最新配置。
+   * 仅在当前有活跃连接时才执行断开重连。
+   */
+  async reconnectProtocol(): Promise<void> {
+    if (!this.protocolManager.isAudioChannelOpened()) {
+      logger.info('当前无活跃协议连接，跳过重连')
+      return
+    }
+
+    logger.info('触发协议重连...')
+
+    this.protocolManager.reloadConfig()
+    await this.protocolManager.closeAudioChannel()
+    await this.protocolManager.openAudioChannel()
+
+    logger.info('协议重连完成')
+  }
+
+  /**
    * 设置后台音频窗口到 AudioPlugin
    */
   setAudioPluginBackgroundWindow(window: BrowserWindow): void {

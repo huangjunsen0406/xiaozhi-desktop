@@ -22,8 +22,6 @@ export interface AudioConfig {
   inputSampleRate?: ValidSampleRate
   outputSampleRate?: ValidSampleRate
   channels?: number
-  maxInputChannels?: number
-  maxOutputChannels?: number
   frameDuration?: number
 }
 

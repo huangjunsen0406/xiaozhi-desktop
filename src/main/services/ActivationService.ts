@@ -2,7 +2,7 @@ import type { ActivationData } from '@shared/types'
 import type { AxiosError } from 'axios'
 import axios from 'axios'
 import { getLogger } from '../utils/logger'
-import { showActivation } from '../windows/windowManager'
+import { hideActivation, showActivation } from '../windows/windowManager'
 
 import { getConfigManager } from './configManagerDB'
 import { DeviceFingerprintManager } from './deviceFingerprintDB'
@@ -107,6 +107,9 @@ export class ActivationService {
 
       if (result.needActivationUI) {
         showActivation()
+      }
+      else {
+        hideActivation()
       }
 
       return result

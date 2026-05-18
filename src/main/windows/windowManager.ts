@@ -604,6 +604,13 @@ export function showActivation(): void {
   win.moveTop()
 }
 
+export function hideActivation(): void {
+  const win = windowRefs.activation.current
+  if (win && !win.isDestroyed()) {
+    win.hide()
+  }
+}
+
 export function getMainWindow(): BrowserWindow | null {
   return windowRefs.main.current
 }

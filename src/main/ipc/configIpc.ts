@@ -124,9 +124,32 @@ export function registerConfigIpc(): void {
     try {
       logger.info('批量更新配置', config)
 
+      // 连接相关的字段列表
+      const connectionKeys = [
+        'ota_version_url',
+        'device_id',
+        'websocket_url',
+        'websocket_access_token',
+        'mqtt_endpoint',
+        'mqtt_client_id',
+        'mqtt_username',
+        'mqtt_password',
+        'mqtt_publish_topic',
+        'mqtt_subscribe_topic',
+        'authorization_url',
+      ]
+
       // 检查是否修改了 OTA URL
       const otaUrlChanged = config.ota_version_url !== undefined
         && config.ota_version_url !== configManager.getOtaVersionUrl()
+
+      // 获取修改前的配置，用于比较是否真正发生了变化
+      const currentConfig = configManager.getAll() as Record<string, unknown>
+
+      // 检查是否有任何连接相关字段的值实际发生了变化
+      const needsReconnect = connectionKeys.some(
+        key => config[key] !== undefined && config[key] !== (currentConfig[key] ?? ''),
+      )
 
       // 直接使用扁平格式更新
       const updates: Record<string, string | null> = {}
@@ -168,91 +191,128 @@ export function registerConfigIpc(): void {
 
       logger.info('配置更新成功')
 
-      // 如果 OTA URL 被修改，触发刷新
-      if (otaUrlChanged) {
-        logger.info('OTA URL 已修改，触发刷新配置')
-        try {
-          const activationService = getActivationService()
+      // 如果有连接相关字段被修改，触发 OTA 刷新 + 激活检查 + 协议重连
+      if (needsReconnect) {
+        logger.info('检测到连接相关配置变更，触发刷新和重连')
 
-          // 重新获取 OTA 配置
-          const deviceFingerprint = activationService.getDeviceFingerprint()
-          if (deviceFingerprint) {
-            const otaUrl = configManager.getOtaVersionUrl()
-            const deviceId = configManager.getDeviceId()
-            const clientId = configManager.getClientId()
-            const activationVersion = configManager.getActivationVersion()
+        // 如果 OTA URL 被修改，重新获取 OTA 配置
+        if (otaUrlChanged) {
+          logger.info('OTA URL 已修改，触发刷新配置')
+          try {
+            const activationService = getActivationService()
 
-            if (otaUrl && deviceId) {
-              const headers: Record<string, string> = {
-                'Device-Id': deviceId,
-                'Client-Id': clientId || '',
-                'Content-Type': 'application/json',
-                'Accept-Language': 'zh-CN',
-              }
+            // 重新获取 OTA 配置
+            const deviceFingerprint = activationService.getDeviceFingerprint()
+            if (deviceFingerprint) {
+              const otaUrl = configManager.getOtaVersionUrl()
+              const deviceId = configManager.getDeviceId()
+              const clientId = configManager.getClientId()
+              const activationVersion = configManager.getActivationVersion()
 
-              if (activationVersion === 'v2') {
-                headers['Activation-Version'] = '2'
-              }
-
-              const hmacKey = deviceFingerprint.getHmacKey()
-              const payload = {
-                application: {
-                  version: '2.0.0',
-                  elf_sha256: hmacKey || 'unknown',
-                },
-                board: {
-                  type: 'desktop',
-                  name: 'xiaozhi-desktop',
-                  ip: '127.0.0.1',
-                  mac: deviceId,
-                },
-              }
-
-              logger.info(`请求 OTA 配置: ${otaUrl}`)
-              const response = await axios.post(otaUrl, payload, {
-                headers,
-                timeout: 10000,
-              })
-
-              if (response.status === 200 && response.data) {
-                const data = response.data
-
-                // 更新 MQTT 配置
-                if (data.mqtt) {
-                  configManager.setMqttInfo(data.mqtt)
-                  logger.info('MQTT 配置已刷新')
+              if (otaUrl && deviceId) {
+                const headers: Record<string, string> = {
+                  'Device-Id': deviceId,
+                  'Client-Id': clientId || '',
+                  'Content-Type': 'application/json',
+                  'Accept-Language': 'zh-CN',
                 }
 
-                // 更新 WebSocket 配置
-                if (data.websocket) {
-                  if (data.websocket.url) {
-                    configManager.setWebsocketUrl(data.websocket.url)
-                    logger.info(`WebSocket URL 已刷新: ${data.websocket.url}`)
+                if (activationVersion === 'v2') {
+                  headers['Activation-Version'] = '2'
+                }
+
+                const hmacKey = deviceFingerprint.getHmacKey()
+                const payload = {
+                  application: {
+                    version: '2.0.0',
+                    elf_sha256: hmacKey || 'unknown',
+                  },
+                  board: {
+                    type: 'desktop',
+                    name: 'xiaozhi-desktop',
+                    ip: '127.0.0.1',
+                    mac: deviceId,
+                  },
+                }
+
+                logger.info(`请求 OTA 配置: ${otaUrl}`)
+                const response = await axios.post(otaUrl, payload, {
+                  headers,
+                  timeout: 10000,
+                })
+
+                if (response.status === 200 && response.data) {
+                  const data = response.data
+
+                  // 更新 MQTT 配置
+                  if (data.mqtt) {
+                    configManager.setMqttInfo(data.mqtt)
+                    logger.info('MQTT 配置已刷新')
                   }
-                  if (data.websocket.token) {
-                    configManager.setWebsocketAccessToken(data.websocket.token)
-                    logger.info('WebSocket Token 已刷新')
+
+                  // 更新 WebSocket 配置
+                  if (data.websocket) {
+                    if (data.websocket.url) {
+                      configManager.setWebsocketUrl(data.websocket.url)
+                      logger.info(`WebSocket URL 已刷新: ${data.websocket.url}`)
+                    }
+                    if (data.websocket.token) {
+                      configManager.setWebsocketAccessToken(data.websocket.token)
+                      logger.info('WebSocket Token 已刷新')
+                    }
                   }
-                }
 
-                logger.info('OTA 配置刷新成功')
-
-                // 刷新协议配置，让新的 WebSocket/MQTT 配置生效
-                try {
-                  const container = getServiceContainer()
-                  container.reloadProtocolConfig()
-                  logger.info('协议配置已刷新')
-                }
-                catch (reloadError) {
-                  logger.error('刷新协议配置失败', reloadError)
+                  logger.info('OTA 配置刷新成功')
                 }
               }
             }
           }
+          catch (refreshError) {
+            logger.error('刷新 OTA 配置失败', refreshError)
+            // 不影响后续激活检查和重连
+          }
         }
-        catch (refreshError) {
-          logger.error('刷新 OTA 配置失败', refreshError)
-          // 不影响配置保存，只记录错误
+
+        // 取消进行中的激活重试（避免旧设备的激活循环继续运行）
+        const activationService = getActivationService()
+        activationService.cancelActivation()
+
+        // 先断开旧连接（清除"聆听中"等残留状态）
+        const container = getServiceContainer()
+        try {
+          if (container.protocolManager.isAudioChannelOpened()) {
+            await container.protocolManager.closeAudioChannel()
+            logger.info('旧协议连接已断开')
+          }
+        }
+        catch (disconnectError) {
+          logger.error('断开旧连接失败', disconnectError)
+        }
+
+        // 激活状态检查（内部调用 fetchOtaConfig 更新 DB 中的 MQTT/WS 配置）
+        let needActivation = false
+        try {
+          const result = await activationService.checkActivationStatus()
+          needActivation = result.needActivationUI
+          logger.info('激活状态检查完成', result.message)
+        }
+        catch (activationError) {
+          logger.error('激活状态检查失败', activationError)
+        }
+
+        // 仅在不需要激活时才重连（reloadConfig 在此刻调用，确保读到 OTA 刷新后的最新配置）
+        if (!needActivation) {
+          try {
+            container.protocolManager.reloadConfig()
+            await container.protocolManager.openAudioChannel()
+            logger.info('协议重连完成')
+          }
+          catch (reconnectError) {
+            logger.error('协议重连失败', reconnectError)
+          }
+        }
+        else {
+          logger.info('设备需要激活，跳过协议重连')
         }
       }
 

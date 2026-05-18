@@ -31,8 +31,6 @@ const enableRealtimeConversation = ref(false) // 实时对话模式开关
 const inputSampleRate = ref(16000)
 const outputSampleRate = ref(24000)
 const channels = ref(1)
-const maxInputChannels = ref(2)
-const maxOutputChannels = ref(2)
 const frameDuration = ref(20)
 
 // 选项配置
@@ -101,8 +99,6 @@ async function loadConfig(): Promise<void> {
     inputSampleRate.value = config.inputSampleRate || 16000
     outputSampleRate.value = config.outputSampleRate || 24000
     channels.value = config.channels || 1
-    maxInputChannels.value = config.maxInputChannels || 2
-    maxOutputChannels.value = config.maxOutputChannels || 2
     frameDuration.value = config.frameDuration || 20
 
     // 从配置加载并匹配设备（使用当前组件的 composable 实例）
@@ -148,8 +144,6 @@ async function handleSave(): Promise<void> {
       inputSampleRate: inputSampleRate.value as AudioConfig['inputSampleRate'],
       outputSampleRate: outputSampleRate.value as AudioConfig['outputSampleRate'],
       channels: channels.value,
-      maxInputChannels: maxInputChannels.value,
-      maxOutputChannels: maxOutputChannels.value,
       frameDuration: frameDuration.value,
     }
 
@@ -174,14 +168,15 @@ async function handleSave(): Promise<void> {
 
     console.log('音频配置已保存:', config)
 
-    // 检查是否修改了采样率或帧长度
+    // 检查是否修改了采样率、声道数或帧长度（需要完整重建 AudioContext + 协议重连）
     const needsReinitialization
       = config.inputSampleRate !== previousConfig.inputSampleRate
         || config.outputSampleRate !== previousConfig.outputSampleRate
+        || config.channels !== previousConfig.channels
         || config.frameDuration !== previousConfig.frameDuration
 
     if (needsReinitialization) {
-      message.success('音频设置已保存并自动应用', { duration: 3000 })
+      message.success('音频设置已保存，正在重新初始化音频和重连...', { duration: 3000 })
     }
     else {
       message.success('音频设置已保存')
@@ -316,22 +311,6 @@ defineExpose({ handleSave, handleCustomButton })
     <NFormItem label="声道数">
       <NSelect
         v-model:value="channels"
-        :options="channelOptions"
-        style="width: 300px"
-      />
-    </NFormItem>
-
-    <NFormItem label="最大输入声道">
-      <NSelect
-        v-model:value="maxInputChannels"
-        :options="channelOptions"
-        style="width: 300px"
-      />
-    </NFormItem>
-
-    <NFormItem label="最大输出声道">
-      <NSelect
-        v-model:value="maxOutputChannels"
         :options="channelOptions"
         style="width: 300px"
       />

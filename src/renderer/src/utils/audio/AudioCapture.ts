@@ -42,6 +42,13 @@ export class AudioCapture {
         sampleRate: this.sampleRate,
       })
 
+      this.audioContext.onstatechange = () => {
+        if (this.audioContext?.state === 'suspended') {
+          console.warn('[AEC] AudioContext(capture) suspended，尝试恢复...')
+          this.audioContext.resume().catch(e => console.error('[AEC] resume 失败:', e))
+        }
+      }
+
       // 获取实际采样率（浏览器可能不支持请求的采样率）
       const actualSampleRate = this.audioContext.sampleRate
 
@@ -123,6 +130,15 @@ export class AudioCapture {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
       })
+
+      // track 意外结束时自动重连（蓝牙切换、设备断连等）
+      const track = this.stream.getAudioTracks()[0]
+      if (track) {
+        track.onended = () => {
+          console.warn('[AEC] 麦克风 track 意外结束，尝试重新采集...')
+          this.start(this.deviceId).catch(e => console.error('[AEC] 重新采集失败:', e))
+        }
+      }
 
       console.log('麦克风权限已获取')
 

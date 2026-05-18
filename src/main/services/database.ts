@@ -559,11 +559,10 @@ export class DatabaseManager {
     const result = this.db.prepare(`
       INSERT INTO audio_config (
         enable_noise_reduction, enable_echo_cancellation, conversation_mode,
-        input_sample_rate, output_sample_rate, channels,
-        max_input_channels, max_output_channels, frame_duration
+        input_sample_rate, output_sample_rate, channels, frame_duration
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(1, 1, 'auto', 16000, 24000, 1, 2, 2, 20)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(1, 1, 'auto', 16000, 24000, 1, 20)
 
     return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioConfig
   }

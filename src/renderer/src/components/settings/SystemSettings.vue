@@ -70,12 +70,30 @@ async function handleSave() {
     throw new Error(err)
 
   try {
+    // 检查是否有连接相关字段发生变化
+    const connectionKeys = [
+      'ota_version_url',
+      'device_id',
+      'websocket_url',
+      'websocket_access_token',
+      'mqtt_endpoint',
+      'mqtt_client_id',
+      'mqtt_username',
+      'mqtt_password',
+      'mqtt_publish_topic',
+      'mqtt_subscribe_topic',
+      'authorization_url',
+    ] as const
+    const hasConnectionChange = connectionKeys.some(
+      key => toRaw(form)[key] !== persisted.value[key],
+    )
+
     await window.api.systemUpdateConfig(toRaw(form))
     persisted.value = cloneDeep(toRaw(form))
     // eslint-disable-next-line vue/custom-event-name-casing
     emit('dirty-change', false)
     console.log('系统设置已保存', form)
-    message.success('系统设置已保存')
+    message.success(hasConnectionChange ? '已保存并重新连接' : '系统设置已保存')
   }
   catch (error) {
     console.error('保存配置失败:', error)

@@ -46,6 +46,7 @@ export class AudioPlayback {
       this.audioContext = new AudioContext({
         sampleRate: this.sampleRate,
       })
+      this.installStateWatch(this.audioContext)
 
       console.log(`AudioContext 创建成功: ${this.audioContext.sampleRate}Hz`)
 
@@ -76,6 +77,15 @@ export class AudioPlayback {
     catch (error) {
       console.error('AudioPlayback 初始化失败:', error)
       throw error
+    }
+  }
+
+  private installStateWatch(ctx: AudioContext): void {
+    ctx.onstatechange = () => {
+      if (ctx.state === 'suspended') {
+        console.warn('[AEC] AudioContext(playback) suspended，尝试恢复...')
+        ctx.resume().catch(e => console.error('[AEC] resume 失败:', e))
+      }
     }
   }
 
@@ -249,6 +259,7 @@ export class AudioPlayback {
       this.audioContext.close().catch(() => {})
       // 创建新的 AudioContext 以备后续播放
       this.audioContext = new AudioContext({ sampleRate: this.sampleRate })
+      this.installStateWatch(this.audioContext)
       // 恢复输出设备设置
       if (this.deviceId && this.deviceId !== 'default' && 'setSinkId' in this.audioContext) {
         // @ts-expect-error setSinkId 是实验性 API

@@ -62,8 +62,6 @@ export interface DbAudioConfig {
   input_sample_rate: number
   output_sample_rate: number
   channels: number
-  max_input_channels: number
-  max_output_channels: number
   frame_duration: number
   created_at: number
   updated_at: number
