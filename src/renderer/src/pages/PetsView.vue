@@ -174,10 +174,10 @@ function handleMouseMove(e: MouseEvent): void {
   }
   isHovered = onCanvas
   if (onCanvas) {
-    window.api?.setIgnoreMouseEvents(false)
+    window.api?.setPetsIgnoreMouseEvents(false)
   }
   else {
-    window.api?.setIgnoreMouseEvents(true)
+    window.api?.setPetsIgnoreMouseEvents(true)
   }
 }
 

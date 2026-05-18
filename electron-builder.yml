@@ -1,5 +1,5 @@
 appId: com.xiaozhi.desktop
-productName: xiaozhi-desktop
+productName: 小智
 directories:
   buildResources: build
   output: release

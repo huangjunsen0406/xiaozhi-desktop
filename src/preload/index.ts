@@ -18,6 +18,7 @@ const api = {
   showActivation: windowApi.showActivation,
   toggleSettings: windowApi.toggleSettings,
   setIgnoreMouseEvents: windowApi.setIgnoreMouseEvents,
+  setPetsIgnoreMouseEvents: windowApi.setPetsIgnoreMouseEvents,
   dragStart: windowApi.dragStart,
   dragMove: windowApi.dragMove,
   dragEnd: windowApi.dragEnd,

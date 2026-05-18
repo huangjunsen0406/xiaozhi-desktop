@@ -56,6 +56,7 @@ export interface RendererApi {
   showActivation: () => void
   toggleSettings: () => void
   setIgnoreMouseEvents: (ignore: boolean) => void
+  setPetsIgnoreMouseEvents: (ignore: boolean) => void
   dragStart: () => void
   dragMove: () => void
   dragEnd: () => void

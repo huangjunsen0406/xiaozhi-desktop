@@ -16,8 +16,9 @@ export const windowApi = {
   // 设置窗口
   toggleSettings: (): void => ipcRenderer.send('window:toggle-settings'),
 
-  // Live2D 窗口控制
+  // Live2D/Pets 窗口穿透控制
   setIgnoreMouseEvents: (ignore: boolean): void => ipcRenderer.send('live2d:set-ignore-mouse', ignore),
+  setPetsIgnoreMouseEvents: (ignore: boolean): void => ipcRenderer.send('pets:set-ignore-mouse', ignore),
 
   // 原生全局坐标拖动（跨屏无偏移）
   dragStart: (): void => ipcRenderer.send('window:drag-start'),

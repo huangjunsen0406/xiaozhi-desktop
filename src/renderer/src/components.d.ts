@@ -25,7 +25,6 @@ declare module 'vue' {
     IconCarbonPhone: typeof import('~icons/carbon/phone')['default']
     IconCarbonPhoneBlockFilled: typeof import('~icons/carbon/phone-block-filled')['default']
     IconCarbonSendAlt: typeof import('~icons/carbon/send-alt')['default']
-    IconCarbonSettings: typeof import('~icons/carbon/settings')['default']
     IconCarbonSidePanelClose: typeof import('~icons/carbon/side-panel-close')['default']
     IconCarbonSidePanelOpen: typeof import('~icons/carbon/side-panel-open')['default']
     ModelSettings: typeof import('./components/settings/ModelSettings.vue')['default']

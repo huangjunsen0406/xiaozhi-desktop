@@ -39,56 +39,50 @@ async function toggleCall() {
     console.error('切换通话状态失败', error)
   }
 }
-
-// 打开设置
-function toggleSettings() {
-  window.api.toggleSettings()
-}
 </script>
 
 <template>
   <div class="relative flex flex-col w-full h-screen bg-white dark:bg-gray-900 overflow-hidden">
-    <!-- 顶部拖拽区域 + 设置按钮 -->
+    <!-- 顶部拖拽区域 -->
     <div class="flex items-center justify-between h-8 px-2 shrink-0" style="-webkit-app-region: drag">
       <!-- macOS 红绿灯占位 -->
       <div v-if="isMac" class="w-16" />
       <div v-else class="flex-1" />
-
-      <!-- 右上角设置按钮 -->
-      <button
-        class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
-        style="-webkit-app-region: no-drag"
-        type="button"
-        aria-label="设置"
-        @click="toggleSettings"
-      >
-        <icon-carbon-settings class="w-4 h-4" />
-      </button>
     </div>
 
-    <div class="relative flex flex-col items-center justify-center flex-1 gap-4 p-5 overflow-hidden" style="-webkit-app-region: no-drag">
+    <div class="relative flex flex-col items-center flex-1 p-5 overflow-hidden" style="-webkit-app-region: no-drag">
+      <!-- 占位，把主体内容往下推 -->
+      <div class="h-16" />
+
       <!-- 表情头像 -->
       <img
         :src="emotion.imageUrl.value"
         :alt="emotion.emotion.value"
-        class="w-[72px] h-[72px] rounded-[28px] object-cover mt-12 transition-opacity duration-300"
+        class="w-[72px] h-[72px] rounded-[28px] object-cover transition-opacity duration-300"
       >
 
-      <!-- 标题 - 显示 AI 回复或提示文本 -->
-      <div
-        class="text-base text-gray-700 dark:text-gray-300 text-center px-4 max-w-md"
-      >
-        <NMarquee v-if="appStore.currentText">
-          {{ appStore.currentText }}
-        </NMarquee>
-        <template v-else-if="appStore.isCalling && !appStore.currentText">
-          请开始说话
-        </template>
+      <!-- 绝对定位的文本区域，不参与 flex 布局挤压 -->
+      <div class="absolute top-[210px] w-full px-8 flex justify-center pointer-events-none">
+        <div class="text-base text-gray-700 dark:text-gray-300 text-center max-w-md h-6 flex items-center justify-center">
+          <NMarquee v-if="appStore.currentText" class="pointer-events-auto">
+            {{ appStore.currentText }}
+          </NMarquee>
+          <span v-else-if="appStore.isCalling && !appStore.currentText">
+            请开始说话
+          </span>
+        </div>
       </div>
 
-      <!-- Dots 组件 + 按钮组：固定相距 100px -->
-      <div class="flex flex-col items-center gap-y-[100px] mt-12">
+      <!-- 绝对定位的 Dots 组件，不参与 flex 布局挤压 -->
+      <div class="absolute top-[250px] w-full flex justify-center pointer-events-none">
         <Dots :is-show="appStore.isCalling && !appStore.currentText" />
+      </div>
+
+      <!-- 占据剩余空间，将底部按钮推到固定位置 -->
+      <div class="flex-1" />
+
+      <!-- 底部按钮区域 -->
+      <div class="flex flex-col items-center mb-8">
         <div class="flex items-center gap-2" style="-webkit-app-region: no-drag">
           <!-- 电话按钮：点击拨打/挂断 -->
           <NButton quaternary circle @click="toggleCall">
