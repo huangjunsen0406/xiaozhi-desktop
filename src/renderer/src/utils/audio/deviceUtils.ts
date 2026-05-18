@@ -42,6 +42,8 @@ export async function getDeviceIdByName(
   }
 }
 
+let permissionGranted = false
+
 /**
  * 从配置获取设备ID
  * 会自动匹配设备名称到设备ID
@@ -51,9 +53,12 @@ export async function getDeviceIdsFromConfig(): Promise<{
   outputDeviceId?: string
 }> {
   try {
-    // 请求麦克风权限以便枚举设备(需要权限才能看到设备标签)
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    stream.getTracks().forEach(track => track.stop())
+    // 仅首次请求麦克风权限（避免干扰正在采集的流）
+    if (!permissionGranted) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(track => track.stop())
+      permissionGranted = true
+    }
 
     // 获取音频配置
     const audioConfig = await window.api.audioGetConfig()

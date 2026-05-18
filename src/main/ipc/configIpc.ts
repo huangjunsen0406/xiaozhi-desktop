@@ -273,11 +273,11 @@ export function registerConfigIpc(): void {
           }
         }
 
-        // 取消进行中的激活重试（避免旧设备的激活循环继续运行）
+        // 取消进行中的激活重试
         const activationService = getActivationService()
         activationService.cancelActivation()
 
-        // 先断开旧连接（清除"聆听中"等残留状态）
+        // 断开当前连接（不自动重连，用户手动唤醒时会建新连接）
         const container = getServiceContainer()
         try {
           if (container.protocolManager.isAudioChannelOpened()) {
@@ -289,31 +289,17 @@ export function registerConfigIpc(): void {
           logger.error('断开旧连接失败', disconnectError)
         }
 
-        // 激活状态检查（内部调用 fetchOtaConfig 更新 DB 中的 MQTT/WS 配置）
-        let needActivation = false
+        // 激活状态检查（内部调用 fetchOtaConfig 刷新 MQTT/WS 配置到 DB）
         try {
           const result = await activationService.checkActivationStatus()
-          needActivation = result.needActivationUI
           logger.info('激活状态检查完成', result.message)
         }
         catch (activationError) {
           logger.error('激活状态检查失败', activationError)
         }
 
-        // 仅在不需要激活时才重连（reloadConfig 在此刻调用，确保读到 OTA 刷新后的最新配置）
-        if (!needActivation) {
-          try {
-            container.protocolManager.reloadConfig()
-            await container.protocolManager.openAudioChannel()
-            logger.info('协议重连完成')
-          }
-          catch (reconnectError) {
-            logger.error('协议重连失败', reconnectError)
-          }
-        }
-        else {
-          logger.info('设备需要激活，跳过协议重连')
-        }
+        // 刷新协议内存配置（下次连接时使用新配置）
+        container.protocolManager.reloadConfig()
       }
 
       return { success: true }

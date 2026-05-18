@@ -93,7 +93,7 @@ async function handleSave() {
     // eslint-disable-next-line vue/custom-event-name-casing
     emit('dirty-change', false)
     console.log('系统设置已保存', form)
-    message.success(hasConnectionChange ? '已保存并重新连接' : '系统设置已保存')
+    message.success(hasConnectionChange ? '已保存，连接已断开，请重新唤醒' : '系统设置已保存')
   }
   catch (error) {
     console.error('保存配置失败:', error)
