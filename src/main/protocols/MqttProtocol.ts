@@ -314,7 +314,7 @@ export class MqttProtocol extends Protocol {
       transport: 'udp',
       audio_params: {
         format: 'opus',
-        sample_rate: audioConfig.outputSampleRate,
+        sample_rate: audioConfig.inputSampleRate,
         channels: audioConfig.channels,
         frame_duration: audioConfig.frameDuration,
       },

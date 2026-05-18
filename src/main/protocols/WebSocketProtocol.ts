@@ -356,7 +356,7 @@ export class WebSocketProtocol extends Protocol {
       transport: 'websocket',
       audio_params: {
         format: 'opus',
-        sample_rate: AudioConfig.outputSampleRate,
+        sample_rate: AudioConfig.inputSampleRate,
         channels: AudioConfig.channels,
         frame_duration: AudioConfig.frameDuration,
       },
