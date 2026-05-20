@@ -22,8 +22,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 三平台构建 + 上传公仓 Release
-  build-and-release:
+  # 公仓 Release（先创建空 Release，后续 build job 上传文件）
+  create-public-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Public Repo Release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: huangjunsen0406/xiaozhi-desktop-release
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+
+  # 三平台构建 + 上传安装包到公仓 Release
+  build-and-upload:
+    needs: create-public-release
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
@@ -71,18 +83,14 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: pnpm run build:linux
 
-      - name: Upload to Public Release Repository
+      - name: Upload assets to Public Release
         uses: softprops/action-gh-release@v2
         with:
           repository: huangjunsen0406/xiaozhi-desktop-release
           token: ${{ secrets.PUBLIC_REPO_PAT }}
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
           files: |
             release/*.exe
-            release/*.zip
             release/*.dmg
             release/*.AppImage
             release/*.deb
-            release/*.yml
-            release/*.blockmap
