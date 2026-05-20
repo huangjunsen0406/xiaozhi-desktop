@@ -1,22 +1,35 @@
-name: Build/release Electron app
+name: Build and Release
 
 on:
   push:
     tags:
-      - v*.*.*
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  # 1) 三平台构建并上传构建产物（作为 workflow artifact）
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  # 私仓 Release（仅 release notes，不含安装包）
+  create-private-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
 
+      - name: Create Private Repo Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "小智桌面 ${{ github.ref_name }}"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 三平台构建 + 上传公仓 Release
+  build-and-release:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
 
-    env:
-      PYTHON: python
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Check out Git repository
@@ -25,16 +38,10 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      - name: Setup Python for node-gyp (macOS)
-        if: matrix.os == 'macos-latest'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Setup Python for node-gyp (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Setup Python for node-gyp
+        if: matrix.os != 'ubuntu-latest'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -44,7 +51,7 @@ jobs:
         with:
           version: 9
 
-      - name: Override supported architectures (only install current platform native deps)
+      - name: Override supported architectures
         shell: bash
         run: |
           echo "supportedArchitectures.os=current" >> .npmrc
@@ -53,49 +60,25 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build for Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: pnpm run build:linux
+      - name: Build for Windows
+        if: matrix.os == 'windows-latest'
+        run: pnpm run build:win
 
       - name: Build for macOS
         if: matrix.os == 'macos-latest'
         run: pnpm run build:mac
 
-      - name: Build for Windows
-        if: matrix.os == 'windows-latest'
-        run: pnpm run build:win
+      - name: Build for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm run build:linux
 
-      # 这里把 release 目录整个打成 artifact
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: xiaozhi-desktop-${{ matrix.os }}
-          # 上传整个目录结构：release/** （和 electron-builder 输出一致）
-          path: release/**
-          if-no-files-found: error
-
-  # 2) 下载所有 artifact，合并到 release/ 目录里，然后一次性创建 Release
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download all artifacts
-        # 把所有 artifact 解压到同一个 release/ 目录
-        uses: actions/download-artifact@v4
-        with:
-          pattern: xiaozhi-desktop-* # 匹配上面三个 artifact
-          path: release # 统一解到 release/
-          merge-multiple: true # 多个 artifact 合并到一个目录
-
-      # 可选：调试用，确认文件都在
-      - name: List files
-        run: ls -R release
-
-      - name: Create GitHub Release
+      - name: Upload to Public Release Repository
         uses: softprops/action-gh-release@v2
         with:
+          repository: huangjunsen0406/xiaozhi-desktop-release
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+          name: "小智桌面 ${{ github.ref_name }}"
           generate_release_notes: true
           files: |
             release/*.exe
@@ -103,9 +86,5 @@ jobs:
             release/*.dmg
             release/*.AppImage
             release/*.deb
-            release/*.rpm
-            release/*.tar.gz
             release/*.yml
             release/*.blockmap
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
