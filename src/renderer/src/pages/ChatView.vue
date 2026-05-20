@@ -330,7 +330,7 @@ function handleKeydown(event: KeyboardEvent) {
         <div v-if="appStore.isCurrentSessionToday || appStore.messages.length === 0" class="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-3xl shadow-sm hover:shadow-md transition-shadow duration-200">
           <textarea
             v-model="inputValue"
-            placeholder="发消息或输入 / 选择技能"
+            placeholder="发消息或输入"
             class="w-full min-h-[56px] max-h-[200px] py-4 px-5 bg-transparent border-none outline-none resize-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400"
             rows="1"
             @keydown="handleKeydown"

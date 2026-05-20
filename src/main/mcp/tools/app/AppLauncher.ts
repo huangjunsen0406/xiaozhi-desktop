@@ -7,6 +7,7 @@ import { exec, spawn } from 'node:child_process'
 import * as os from 'node:os'
 import { promisify } from 'node:util'
 import { getLogger } from '../../../utils/logger'
+import { AppScanner } from './AppScanner'
 
 const execAsync = promisify(exec)
 const logger = getLogger('AppLauncher')
@@ -90,20 +91,40 @@ export class AppLauncher {
 
   /**
    * Windows: 使用 start 命令启动应用
+   * 优先通过 AppScanner 扫描缓存匹配应用路径启动，匹配不到时 fallback 到 cmd /c start
    */
   private static async launchWindows(appName: string): Promise<LaunchResult> {
     try {
-      // Windows 使用 start 命令（非阻塞）
+      // 先通过 AppScanner 查找匹配的已安装应用
+      try {
+        const matchedApps = await AppScanner.search(appName)
+        if (matchedApps.length > 0) {
+          const matched = matchedApps[0]
+          logger.info(`Windows: 通过扫描结果匹配到应用: ${matched.displayName}, 路径: ${matched.path}`)
+
+          const child = spawn('cmd', ['/c', 'start', '', matched.path], {
+            detached: true,
+            stdio: 'ignore',
+            shell: true,
+          })
+          child.unref()
+
+          return { success: true, message: `成功启动应用: ${matched.displayName}` }
+        }
+      }
+      catch (error) {
+        logger.warn(`Windows: AppScanner 搜索失败，使用 fallback: ${error}`)
+      }
+
+      // Fallback: 直接使用 cmd /c start 启动
+      logger.info(`Windows: 未匹配到扫描结果，使用 fallback 启动: ${appName}`)
       const child = spawn('cmd', ['/c', 'start', '', appName], {
         detached: true,
         stdio: 'ignore',
         shell: true,
       })
-
-      // 分离子进程，避免父进程等待
       child.unref()
 
-      logger.info(`Windows: 成功启动应用: ${appName}`)
       return { success: true, message: `成功启动应用: ${appName}` }
     }
     catch (error) {
