@@ -222,6 +222,8 @@ app.whenReady().then(async () => {
     else {
       logger.info('激活状态检查完成', result.message)
     }
+    // OTA 可能更新了 websocket_url，通知 ProtocolManager 刷新内存配置
+    container.reloadProtocolConfig()
   }).catch((error) => {
     logger.error('激活状态检查出错（已忽略）', error)
   })

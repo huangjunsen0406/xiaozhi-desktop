@@ -195,50 +195,86 @@ export class ActivationService {
 
     this.logger.info(`获取 OTA 配置: ${otaUrl}`)
 
-    try {
-      const response = await axios.post(otaUrl, payload, {
-        headers,
-        timeout: 10000,
-      })
+    const maxAttempts = 3
+    let lastError: Error | unknown = null
 
-      this.logger.info('OTA 配置响应:', response)
-
-      if (response.status !== 200) {
-        throw new Error(`OTA 服务器返回错误: ${response.status}`)
-      }
-
-      // 更新配置
-      const data = response.data
-      if (data.mqtt) {
-        this.configManager.setMqttInfo(data.mqtt)
-        this.logger.info(`  • MQTT Endpoint: ${data.mqtt.endpoint}`)
-      }
-      if (data.websocket) {
-        if (data.websocket.url) {
-          this.configManager.setWebsocketUrl(data.websocket.url)
-          this.logger.info(`  • WebSocket URL: ${data.websocket.url}`)
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (attempt > 1) {
+          const delayMs = (attempt - 1) * 2000
+          this.logger.info(`OTA 第 ${attempt}/${maxAttempts} 次重试，等待 ${delayMs}ms`)
+          await this.delay(delayMs)
         }
-        if (data.websocket.token) {
-          this.configManager.setWebsocketAccessToken(data.websocket.token)
+
+        const response = await axios.post(otaUrl, payload, {
+          headers,
+          timeout: 10000,
+        })
+
+        this.logger.info('OTA 配置响应:', response)
+
+        if (response.status !== 200) {
+          throw new Error(`OTA 服务器返回错误: ${response.status}`)
+        }
+
+        // 更新配置
+        const data = response.data
+        if (data.mqtt) {
+          this.configManager.setMqttInfo(data.mqtt)
+          this.logger.info(`  • MQTT Endpoint: ${data.mqtt.endpoint}`)
+        }
+        if (data.websocket) {
+          if (data.websocket.url) {
+            this.configManager.setWebsocketUrl(data.websocket.url)
+            this.logger.info(`  • WebSocket URL: ${data.websocket.url}`)
+          }
+          if (data.websocket.token) {
+            this.configManager.setWebsocketAccessToken(data.websocket.token)
+          }
+        }
+
+        return data
+      }
+      catch (error) {
+        lastError = error
+
+        if (axios.isAxiosError(error)) {
+          if (error.code === 'ECONNABORTED') {
+            this.logger.warn(`OTA 请求超时 (第 ${attempt}/${maxAttempts} 次)`)
+          }
+          else if (error.response) {
+            this.logger.warn(`OTA 服务器错误: HTTP ${error.response.status} (第 ${attempt}/${maxAttempts} 次)`)
+          }
+          else if (error.request) {
+            this.logger.warn(`无法连接到 OTA 服务器 (第 ${attempt}/${maxAttempts} 次)`)
+          }
+          else {
+            this.logger.warn(`OTA 请求失败: ${error.message} (第 ${attempt}/${maxAttempts} 次)`)
+          }
+        }
+        else {
+          this.logger.warn(`OTA 请求异常 (第 ${attempt}/${maxAttempts} 次)`, error)
+        }
+
+        if (attempt === maxAttempts) {
+          this.logger.error(`OTA 请求已达最大重试次数 (${maxAttempts})，放弃重试`)
         }
       }
-
-      return data
     }
-    catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNABORTED') {
-          throw new Error('OTA 请求超时')
-        }
-        else if (error.response) {
-          throw new Error(`OTA 服务器错误: HTTP ${error.response.status}`)
-        }
-        else if (error.request) {
-          throw new Error('无法连接到 OTA 服务器')
-        }
+
+    // 所有重试均失败，抛出最后一次的错误
+    if (axios.isAxiosError(lastError)) {
+      if (lastError.code === 'ECONNABORTED') {
+        throw new Error('OTA 请求超时')
       }
-      throw error
+      else if (lastError.response) {
+        throw new Error(`OTA 服务器错误: HTTP ${lastError.response.status}`)
+      }
+      else if (lastError.request) {
+        throw new Error('无法连接到 OTA 服务器')
+      }
     }
+    throw lastError
   }
 
   private analyzeActivationStatus(otaConfig: { activation?: { challenge: string, code: string, message?: string } }): ActivationResult {
