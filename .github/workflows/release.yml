@@ -91,7 +91,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm run clean && pnpm run build && electron-builder ${{ matrix.build_cmd }} --publish=never
+        run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never
 
       - name: Upload assets to Public Release
         uses: softprops/action-gh-release@v2
