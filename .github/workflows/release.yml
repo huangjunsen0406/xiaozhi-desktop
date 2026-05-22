@@ -43,7 +43,7 @@ jobs:
           - os: macos-latest
             arch: arm64
             build_cmd: --mac --arm64
-          - os: macos-latest
+          - os: macos-13
             arch: x64
             build_cmd: --mac --x64
           - os: windows-latest
