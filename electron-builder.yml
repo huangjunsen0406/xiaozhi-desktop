@@ -45,8 +45,6 @@ win:
     - '!node_modules/@img/sharp-libvips-linux-*/**/*'
   target:
     - target: nsis
-      arch:
-        - x64
 nsis:
   artifactName: ${name}-${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
@@ -68,11 +66,6 @@ mac:
     - '!node_modules/@img/sharp-win32-*/**/*'
     - '!node_modules/@img/sharp-linux-*/**/*'
     - '!node_modules/@img/sharp-libvips-linux-*/**/*'
-  # 只构建当前架构（避免 DMG 文件名冲突）
-  # 如需构建其他架构：
-  #   - arm64: pnpm run build && electron-builder --mac --arm64
-  #   - x64:   pnpm run build && electron-builder --mac --x64
-  #   - universal: pnpm run build && electron-builder --mac --universal
   target:
     - dmg
     - zip
@@ -89,7 +82,6 @@ mac:
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 linux:
-  # 只构建当前架构（避免文件名冲突）
   icon: build/icon.png
   # 排除其他平台的原生模块包（减小包体积）
   files:
@@ -111,6 +103,8 @@ linux:
     Categories: Utility;
     Icon: xiaozhi-desktop
 appImage:
+  artifactName: ${name}-${version}-${arch}.${ext}
+deb:
   artifactName: ${name}-${version}-${arch}.${ext}
 # 使用预编译的平台特定包（sherpa-onnx-darwin-*, sherpa-onnx-win-*），无需重新编译
 npmRebuild: false

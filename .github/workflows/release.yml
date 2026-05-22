@@ -33,12 +33,31 @@ jobs:
           token: ${{ secrets.PUBLIC_REPO_PAT }}
           tag_name: ${{ github.ref_name }}
 
-  # 三平台构建 + 上传安装包到公仓 Release
+  # 多平台多架构构建 + 上传安装包到公仓 Release
   build-and-upload:
     needs: create-public-release
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            arch: arm64
+            build_cmd: --mac --arm64
+          - os: macos-latest
+            arch: x64
+            build_cmd: --mac --x64
+          - os: windows-latest
+            arch: x64
+            build_cmd: --win --x64
+          - os: windows-latest
+            arch: ia32
+            build_cmd: --win --ia32
+          - os: ubuntu-latest
+            arch: x64
+            build_cmd: --linux --x64
+          - os: ubuntu-latest
+            arch: arm64
+            build_cmd: --linux --arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -66,22 +85,13 @@ jobs:
         shell: bash
         run: |
           echo "supportedArchitectures.os=current" >> .npmrc
-          echo "supportedArchitectures.cpu=current" >> .npmrc
+          echo "supportedArchitectures.cpu=${{ matrix.arch }}" >> .npmrc
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build for Windows
-        if: matrix.os == 'windows-latest'
-        run: pnpm run build:win
-
-      - name: Build for macOS
-        if: matrix.os == 'macos-latest'
-        run: pnpm run build:mac
-
-      - name: Build for Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: pnpm run build:linux
+      - name: Build
+        run: pnpm run clean && pnpm run build && electron-builder ${{ matrix.build_cmd }} --publish=never
 
       - name: Upload assets to Public Release
         uses: softprops/action-gh-release@v2
