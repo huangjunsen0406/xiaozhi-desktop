@@ -89,6 +89,8 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          npm_config_arch: ${{ matrix.arch }}
 
       - name: Build
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never
