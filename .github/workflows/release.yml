@@ -77,8 +77,8 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev libxt-dev libxinerama-dev libxkbcommon-x11-dev libxrandr-dev libxkbfile-dev ruby-dev
 
-      - name: Install fpm for deb packaging (arm64)
-        if: matrix.os == 'ubuntu-24.04-arm'
+      - name: Install fpm for deb packaging
+        if: runner.os == 'Linux'
         run: sudo gem install fpm
 
       - name: Install pnpm
@@ -100,7 +100,7 @@ jobs:
       - name: Build
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never
         env:
-          USE_SYSTEM_FPM: ${{ matrix.os == 'ubuntu-24.04-arm' && 'true' || '' }}
+          USE_SYSTEM_FPM: ${{ runner.os == 'Linux' && 'true' || 'false' }}
 
       - name: Upload assets to Public Release
         uses: softprops/action-gh-release@v2
