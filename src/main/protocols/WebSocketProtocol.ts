@@ -125,7 +125,7 @@ export class WebSocketProtocol extends Protocol {
       // 创建 WebSocket 连接
       this.ws = new WebSocket(this.websocketUrl, {
         headers,
-        handshakeTimeout: 10000,
+        handshakeTimeout: 20000,
       })
 
       // 设置事件监听器
@@ -137,7 +137,7 @@ export class WebSocketProtocol extends Protocol {
         this.connectionTimeout = setTimeout(() => {
           this.clearConnectionTimers()
           reject(new Error('连接超时'))
-        }, 10000)
+        }, 20000)
 
         this.ws!.once('open', async () => {
           // 清理连接超时定时器
@@ -156,7 +156,7 @@ export class WebSocketProtocol extends Protocol {
               this.helloTimeout = setTimeout(() => {
                 this.helloTimeout = null
                 rejectHello(new Error('等待服务器 hello 响应超时'))
-              }, 10000)
+              }, 20000)
 
               // 轮询检查（保留兼容性，但减少频率）
               this.helloCheckInterval = setInterval(() => {

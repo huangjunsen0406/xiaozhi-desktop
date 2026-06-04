@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useAppStore } from '../stores/app'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
+const appStore = useAppStore()
 
 // 精灵图参数
 const COLS = 8 // 列数
@@ -146,6 +148,25 @@ async function handlePetChange(_petId: string): Promise<void> {
 }
 
 /**
+ * 双击窗口区域切换通话状态
+ */
+async function toggleCall() {
+  try {
+    if (appStore.deviceState !== 'idle') {
+      console.log('[Pets] 挂断电话')
+      await appStore.stopAutoConversation()
+    }
+    else {
+      console.log('[Pets] 拨打电话')
+      await appStore.startAutoConversation()
+    }
+  }
+  catch (error) {
+    console.error('[Pets] 切换通话状态失败', error)
+  }
+}
+
+/**
  * 鼠标移动处理（穿透控制）
  */
 function handleMouseMove(e: MouseEvent): void {
@@ -211,6 +232,7 @@ onMounted(() => {
   if (containerRef.value) {
     containerRef.value.addEventListener('mousedown', handleMouseDown)
     containerRef.value.addEventListener('mousemove', handleMouseMove)
+    containerRef.value.addEventListener('dblclick', toggleCall)
   }
 
   // 监听宠物切换事件
@@ -224,6 +246,7 @@ onUnmounted(() => {
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
     containerRef.value.removeEventListener('mousemove', handleMouseMove)
+    containerRef.value.removeEventListener('dblclick', toggleCall)
   }
   if (removeChangedListener) {
     removeChangedListener()

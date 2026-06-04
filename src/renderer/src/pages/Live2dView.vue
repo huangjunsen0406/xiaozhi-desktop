@@ -3,6 +3,7 @@ import * as pixiFnPatch from '@pixi/unsafe-eval'
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import * as PIXI from 'pixi.js'
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useAppStore } from '../stores/app'
 
 // @ts-expect-error - PIXI 需要挂载到 window
 window.PIXI = PIXI
@@ -11,6 +12,7 @@ pixiFnPatch.install(PIXI)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 const canvasSize = { width: 200, height: 400 }
+const appStore = useAppStore()
 
 // 默认模型（首次加载或配置为空时使用）
 const DEFAULT_MODEL = 'Hiyori'
@@ -131,6 +133,7 @@ onUnmounted(() => {
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousemove', handleMouseMove)
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
+    containerRef.value.removeEventListener('dblclick', toggleCall)
   }
   if (app) {
     app.destroy(true)
@@ -187,6 +190,7 @@ onMounted(async () => {
     if (containerRef.value) {
       containerRef.value.addEventListener('mousemove', handleMouseMove)
       containerRef.value.addEventListener('mousedown', handleMouseDown)
+      containerRef.value.addEventListener('dblclick', toggleCall)
     }
 
     // 启动口型同步
@@ -230,6 +234,25 @@ function setupModel(model: Live2DModel): void {
   // 模型 bbox 底部对齐到 canvas 底，故 bbox 顶到 canvas 顶的距离 = canvasH - bboxH。
   const headOffsetY = Math.max(0, canvasSize.height - newBounds.height)
   window.electron?.ipcRenderer.send('bubble:set-anchor-offset', headOffsetY)
+}
+
+/**
+ * 双击窗口区域切换通话状态
+ */
+async function toggleCall() {
+  try {
+    if (appStore.deviceState !== 'idle') {
+      console.log('[Live2D] 挂断电话')
+      await appStore.stopAutoConversation()
+    }
+    else {
+      console.log('[Live2D] 拨打电话')
+      await appStore.startAutoConversation()
+    }
+  }
+  catch (error) {
+    console.error('[Live2D] 切换通话状态失败', error)
+  }
 }
 
 function isMouseOnModel(e: MouseEvent): boolean {
