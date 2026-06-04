@@ -199,6 +199,12 @@ export class WebSocketProtocol extends Protocol {
           this.clearConnectionTimers()
           reject(error)
         })
+
+        // 处理握手期间连接关闭（如服务端主动断开）
+        this.ws!.once('close', (code, reason) => {
+          this.clearConnectionTimers()
+          reject(new Error(`连接在握手期间关闭: ${code} ${reason?.toString()}`))
+        })
       })
     }
     catch (error) {
@@ -230,6 +236,11 @@ export class WebSocketProtocol extends Protocol {
     this.closeHandler = (code: number, reason: Buffer) => {
       if (!this.isClosing) {
         logger.info('连接已关闭', { code, reason: reason.toString() })
+        // 如果连接尚未建立成功，说明 close 事件已在 connect() 的 once 中处理
+        if (!this.connected) {
+          logger.debug('连接建立前关闭，跳过 handleConnectionLoss（已在 connect 中 reject）')
+          return
+        }
         this.handleConnectionLoss(`连接关闭: ${code} ${reason.toString()}`)
       }
     }
@@ -351,7 +362,6 @@ export class WebSocketProtocol extends Protocol {
       version: 1,
       features: {
         mcp: true,
-        aec: true,
       },
       transport: 'websocket',
       audio_params: {

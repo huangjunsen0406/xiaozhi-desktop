@@ -142,7 +142,8 @@ export class EventBus {
     if (!list || list.length === 0)
       return
 
-    logger.debug(`触发事件 ${event}, ${list.length} 个处理器`)
+    if (!['audio:decoded', 'audio:incoming'].includes(event))
+      logger.debug(`触发事件 ${event}, ${list.length} 个处理器`)
 
     // 复制列表，防止处理器中修改导致迭代异常
     const handlers = [...list]
