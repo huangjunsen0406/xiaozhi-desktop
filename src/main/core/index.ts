@@ -13,6 +13,7 @@ export type { PluginCommands, PluginContext } from './interfaces'
 
 // 协议管理器
 export { ProtocolManager } from './ProtocolManager'
+export type { IncomingAudioHandler } from './ProtocolManager'
 
 // 资源池
 export { ResourcePool } from './ResourcePool'

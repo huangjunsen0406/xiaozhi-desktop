@@ -17,8 +17,11 @@ const logger = getLogger('MCP')
 
 /**
  * MCP Server 实现
- * 单例模式，管理所有 MCP 工具
+ *
+ * 由 ServiceContainer / pluginWiring 创建并持有，注入 McpPlugin。
  * 参考: https://modelcontextprotocol.io/specification/2024-11-05
+ *
+ * 兼容：`getInstance()` 仍可作为过渡桥接（测试/遗留调用），业务路径应走容器注入。
  */
 export class McpServer {
   private static instance: McpServer | null = null
@@ -30,11 +33,47 @@ export class McpServer {
 
   private constructor() {}
 
+  /**
+   * 创建新的 McpServer 实例（容器 / pluginWiring 使用）
+   *
+   * 同时更新模块级桥接引用，便于过渡期 getInstance() 与容器实例一致。
+   */
+  static create(): McpServer {
+    const server = new McpServer()
+    McpServer.instance = server
+    return server
+  }
+
+  /**
+   * @deprecated 业务路径请通过 ServiceContainer / 构造注入获取。
+   * 过渡桥接：返回 create() 写入的实例；若尚未创建则惰性创建。
+   */
   static getInstance(): McpServer {
     if (!McpServer.instance) {
       McpServer.instance = new McpServer()
     }
     return McpServer.instance
+  }
+
+  /**
+   * 重置单例桥接（仅测试用）
+   */
+  static resetInstance(): void {
+    McpServer.instance = null
+  }
+
+  /**
+   * 释放回调与工具列表（资源池 unbind 时调用）
+   */
+  detach(): void {
+    this.sendCallback = null
+    this.imageBroadcastCallback = null
+    this.themeBroadcastCallback = null
+    this.tools = []
+    this.visionConfig = {}
+    if (McpServer.instance === this) {
+      McpServer.instance = null
+    }
   }
 
   /**

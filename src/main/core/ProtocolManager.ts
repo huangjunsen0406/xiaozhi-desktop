@@ -10,7 +10,9 @@
  * - 管理连接锁（防止并发连接）
  * - 暴露统一的发送方法（音频、文本、MCP、唤醒词等）
  * - 暴露状态查询（音频通道是否打开）
- * - 处理 TTS 状态转换逻辑（incoming JSON 中的状态变更）
+ * - 入站音频直连 handler（生产路径）+ EventBus fallback
+ *
+ * 注意：TTS 状态迁移已迁至 ConversationSession，本类只广播 INCOMING_JSON。
  */
 
 import type { ListeningMode } from '@shared/types'
@@ -18,16 +20,16 @@ import type { Buffer } from 'node:buffer'
 import type { AbortReason, Protocol } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
 import type { EventBus } from './EventBus'
-import type { StateManager } from './StateManager'
 import type { TaskManager } from './TaskManager'
-import { DeviceStateValue, ListeningModeValue } from '@shared/types'
 import { MqttProtocol } from '../protocols/MqttProtocol'
 import { WebSocketProtocol } from '../protocols/WebSocketProtocol'
-import { isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Events } from './EventBus'
 
 const logger = getLogger('ProtocolManager')
+
+/** 入站音频直连处理器 */
+export type IncomingAudioHandler = (data: Buffer) => void | Promise<void>
 
 /**
  * 协议管理器
@@ -45,15 +47,17 @@ export class ProtocolManager {
   /** 事件总线引用 */
   private eventBus: EventBus
 
-  /** 状态管理器引用 */
-  private stateManager: StateManager
-
   /** 任务管理器引用 */
   private taskManager: TaskManager
 
-  constructor(eventBus: EventBus, stateManager: StateManager, taskManager: TaskManager) {
+  /**
+   * 入站音频直连 handler（生产路径）
+   * 设置后绕过 EventBus，减少 TTS 延迟；未设置时 fallback 到 EventBus
+   */
+  private incomingAudioHandler: IncomingAudioHandler | null = null
+
+  constructor(eventBus: EventBus, taskManager: TaskManager) {
     this.eventBus = eventBus
-    this.stateManager = stateManager
     this.taskManager = taskManager
   }
 
@@ -84,30 +88,41 @@ export class ProtocolManager {
       this.protocol = null
     }
     this.connectLock = null
+    this.incomingAudioHandler = null
   }
 
-  // ========== 回调设置（协议事件 → EventBus） ==========
+  // ========== 音频直连 ==========
+
+  /**
+   * 设置入站音频直连 handler
+   *
+   * 生产路径由 pluginWiring 在 AudioPlugin setup 后注入，
+   * 绕过 EventBus 减少 per-frame 开销。传 null 清除。
+   */
+  setAudioHandler(handler: IncomingAudioHandler | null): void {
+    this.incomingAudioHandler = handler
+    logger.debug(handler ? '入站音频直连 handler 已设置' : '入站音频直连 handler 已清除')
+  }
+
+  // ========== 回调设置（协议事件 → EventBus / 直连） ==========
 
   /**
    * 设置协议回调
    *
    * 将协议底层事件转发到 EventBus，实现协议层与业务层解耦。
+   * 入站音频优先走直连 handler。
    */
   private setupCallbacks(): void {
     if (!this.protocol)
       return
 
-    // 网络错误 → 重置状态 + 广播事件
+    // 网络错误 → 广播事件（状态复位由 ConversationSession 订阅处理）
     this.protocol.onNetworkError((error) => {
       logger.error('网络错误:', error)
-      this.stateManager.setKeepListening(false)
-      this.stateManager.setDeviceState(DeviceStateValue.IDLE).catch((err) => {
-        logger.error('重置设备状态失败:', err)
-      })
       this.eventBus.emit(Events.NETWORK_ERROR, error).catch(() => {})
     })
 
-    // 收到 JSON 消息 → 处理状态转换 + 广播
+    // 收到 JSON 消息 → 广播（TTS 状态迁移由 ConversationSession 订阅处理）
     this.protocol.onIncomingJson((data) => {
       this.taskManager.spawn(
         this.handleIncomingJson(data),
@@ -115,77 +130,54 @@ export class ProtocolManager {
       ).catch(() => {})
     })
 
-    // 收到音频数据 → 广播
+    // 收到音频数据 → 直连 handler 优先，否则 EventBus fallback
     this.protocol.onIncomingAudio((data) => {
-      this.eventBus.emit(Events.INCOMING_AUDIO, data).catch(() => {})
+      if (this.incomingAudioHandler) {
+        try {
+          const result = this.incomingAudioHandler(data)
+          if (result && typeof (result as Promise<void>).then === 'function') {
+            ;(result as Promise<void>).catch((error) => {
+              logger.error('入站音频直连 handler 失败', error)
+            })
+          }
+        }
+        catch (error) {
+          logger.error('入站音频直连 handler 同步失败', error)
+        }
+      }
+      else {
+        this.eventBus.emit(Events.INCOMING_AUDIO, data).catch(() => {})
+      }
     })
 
-    // 音频通道打开 → 广播 + 设置状态
+    // 音频通道打开 → 广播（状态由 ConversationSession 订阅处理）
     this.protocol.onAudioChannelOpened(async () => {
       logger.info('音频通道已打开')
       await this.eventBus.emit(Events.AUDIO_CHANNEL_OPENED)
-      await this.stateManager.setDeviceState(DeviceStateValue.LISTENING)
     })
 
-    // 音频通道关闭 → 广播 + 设置状态
+    // 音频通道关闭 → 广播（状态由 ConversationSession 订阅处理）
     this.protocol.onAudioChannelClosed(async () => {
       logger.info('音频通道已关闭')
       await this.eventBus.emit(Events.AUDIO_CHANNEL_CLOSED)
-      await this.stateManager.setDeviceState(DeviceStateValue.IDLE)
     })
   }
 
-  // ========== JSON 消息处理（TTS 状态转换） ==========
+  // ========== JSON 消息处理 ==========
 
   /**
    * 处理接收到的 JSON 消息
    *
-   * 负责 TTS 状态转换逻辑和事件广播。
+   * 仅负责日志与事件广播；TTS 状态迁移已迁至 ConversationSession。
    */
   private async handleIncomingJson(jsonData: JsonMessage): Promise<void> {
     try {
       logger.info(`收到 JSON 消息: type=${jsonData.type}`, jsonData)
-
-      // 处理 TTS 消息的状态转换
-      if (isTtsMessage(jsonData)) {
-        const { state } = jsonData
-        const sm = this.stateManager
-
-        if (state === 'start') {
-          if (sm.isKeepListening() && sm.getListeningMode() === ListeningModeValue.REALTIME) {
-            await sm.setDeviceState(DeviceStateValue.LISTENING)
-          }
-          else {
-            await sm.setDeviceState(DeviceStateValue.SPEAKING)
-          }
-        }
-        else if (state === 'stop') {
-          if (sm.isKeepListening()) {
-            await this.restartListening()
-          }
-          else if (!sm.isListening()) {
-            await sm.setDeviceState(DeviceStateValue.IDLE)
-          }
-        }
-      }
-
-      // 广播给插件
+      // 广播给插件与 ConversationSession
       await this.eventBus.emit(Events.INCOMING_JSON, jsonData)
     }
     catch (error) {
       logger.error('处理 JSON 消息失败:', error)
-    }
-  }
-
-  /**
-   * 重新开始监听（TTS 停止后自动恢复）
-   */
-  private async restartListening(): Promise<void> {
-    const sm = this.stateManager
-    const needSendStartListening = sm.getListeningMode() !== ListeningModeValue.REALTIME
-    await sm.setDeviceState(DeviceStateValue.LISTENING)
-    if (needSendStartListening) {
-      await this.protocol?.sendStartListening(sm.getListeningMode())
     }
   }
 

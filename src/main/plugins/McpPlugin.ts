@@ -1,8 +1,8 @@
 import type { PluginCommands, PluginContext } from '../core'
+import type { McpServer } from '../mcp/McpServer'
 import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Events } from '../core'
-import { McpServer } from '../mcp/McpServer'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -15,6 +15,8 @@ const logger = getLogger('McpPlugin')
  *
  * 不直接持有 protocol 引用，通过 cmd.sendMcpMessage 发送消息，
  * 实现与协议层完全解耦。
+ *
+ * McpServer 由容器/pluginWiring 创建并注入，不再依赖业务路径 getInstance()。
  */
 export class McpPlugin extends Plugin {
   readonly name = 'McpPlugin'
@@ -24,12 +26,20 @@ export class McpPlugin extends Plugin {
 
   readonly metadata = {
     name: 'McpPlugin',
-    version: '1.0.0',
+    version: '1.1.0',
     description: 'MCP (Model Context Protocol) 插件，负责工具注册和调用',
     author: 'Junsen',
   }
 
   private mcpServer: McpServer | null = null
+
+  /**
+   * @param server 容器持有的 McpServer 实例（必传；由 pluginWiring 注入）
+   */
+  constructor(server: McpServer) {
+    super()
+    this.mcpServer = server
+  }
 
   /**
    * 插件初始化
@@ -40,8 +50,9 @@ export class McpPlugin extends Plugin {
     logger.info('初始化...')
 
     try {
-      // 获取 McpServer 单例
-      this.mcpServer = McpServer.getInstance()
+      if (!this.mcpServer) {
+        throw new Error('McpServer 未注入')
+      }
 
       // 设置发送回调：通过 PluginCommands 接口发送 MCP 响应
       const sendCallback = async (message: string): Promise<void> => {
@@ -126,7 +137,7 @@ export class McpPlugin extends Plugin {
   async shutdown(): Promise<void> {
     logger.info('正在关闭...')
 
-    // 清除回调引用
+    // 清除回调引用（不销毁容器持有的 server 实例本身）
     if (this.mcpServer) {
       this.mcpServer.setSendCallback(async () => {})
       this.mcpServer = null

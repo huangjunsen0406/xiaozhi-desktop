@@ -65,9 +65,9 @@ export class AudioPlugin extends Plugin {
       }
       ipcMain.on('audio:pcm', this.pcmHandler)
 
-      // 订阅音频接收事件
+      // 订阅音频接收事件（EventBus fallback；生产路径由 protocol.setAudioHandler 直连）
       ctx.eventBus.on(Events.INCOMING_AUDIO, (data) => {
-        this.handleOpusFromNetwork(data as Buffer)
+        this.onIncomingAudio(data as Buffer)
       })
 
       // 订阅设备状态变更事件
@@ -191,6 +191,15 @@ export class AudioPlugin extends Plugin {
       // 2. 通知音频监听器（始终执行，即使不发送到服务器）
       this.notifyAudioListeners(pcmData)
     }
+  }
+
+  /**
+   * 入站 Opus 音频入口（直连 handler / EventBus fallback 共用）
+   *
+   * 由 ProtocolManager.setAudioHandler 直连调用，或 EventBus INCOMING_AUDIO 触发。
+   */
+  onIncomingAudio(opusFrame: Buffer): void {
+    this.handleOpusFromNetwork(opusFrame)
   }
 
   /**

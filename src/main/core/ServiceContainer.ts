@@ -6,25 +6,29 @@
  *
  * 同时作为应用的公共 API 入口，替代原 Application God Object。
  * 所有 IPC 和外部模块通过 ServiceContainer 访问应用能力。
+ *
+ * v2.1 对齐：会话逻辑委托 ConversationSession；插件装配委托 pluginWiring；
+ * McpServer 由容器持有并注入。
  */
 
 import type { AppStateSnapshot, DeviceState, ListeningMode } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
+import type { ConversationSession } from '../bootstrap/ConversationSession'
+import type { McpServer } from '../mcp/McpServer'
+import type { AudioPlugin } from '../plugins/AudioPlugin'
+import type { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import type { AbortReason, Protocol } from '../protocols/Protocol'
+import type { ShortcutManager } from '../services/ShortcutManager'
 import type { PluginCommands, PluginContext } from './interfaces'
-import { DeviceStateValue, ListeningModeValue } from '@shared/types'
-import { getAudioConfig } from '../ipc/audioIpc'
-import { AudioPlugin } from '../plugins/AudioPlugin'
-import { ChatPlugin } from '../plugins/ChatPlugin'
-import { Live2DPlugin } from '../plugins/Live2DPlugin'
-import { McpPlugin } from '../plugins/McpPlugin'
+import { ConversationSession as ConversationSessionImpl } from '../bootstrap/ConversationSession'
+import {
+  registerCleanupResources,
+  setAudioPluginBackgroundWindow,
+  setupPlugins,
+  setupShortcutManager,
+} from '../bootstrap/pluginWiring'
 import { PluginManager } from '../plugins/PluginManager'
-import { UIPlugin } from '../plugins/UIPlugin'
-import { WakeWordPlugin } from '../plugins/WakeWordPlugin'
-import { AbortReason as AbortReasonEnum } from '../protocols/Protocol'
-import { DatabaseManager } from '../services/database'
-import { ShortcutManager } from '../services/ShortcutManager'
 import { getLogger } from '../utils/logger'
 import { EventBus } from './EventBus'
 import { ProtocolManager } from './ProtocolManager'
@@ -81,7 +85,7 @@ class PluginContextAdapter implements PluginContext {
  * PluginCommands 适配器
  *
  * 将 ServiceContainer 的操作能力通过窄接口暴露给插件。
- * 所有协议操作直接委托给 ProtocolManager，不再绕经 ProtocolDelegate。
+ * 会话操作委托 ConversationSession；协议发送委托 ProtocolManager。
  */
 class PluginCommandsAdapter implements PluginCommands {
   constructor(
@@ -89,37 +93,15 @@ class PluginCommandsAdapter implements PluginCommands {
   ) {}
 
   async startListening(mode: ListeningMode): Promise<void> {
-    const sm = this.container.stateManager
-    const pm = this.container.protocolManager
-
-    // 设置监听模式和持续监听标志
-    sm.setListeningMode(mode)
-    sm.setKeepListening(mode === ListeningModeValue.REALTIME || mode === ListeningModeValue.AUTO)
-    await sm.setDeviceState(DeviceStateValue.CONNECTING)
-
-    // 先关闭旧连接（确保每次对话使用新 session）
-    if (pm.isAudioChannelOpened()) {
-      await pm.closeAudioChannel()
-    }
-
-    // 建立新连接
-    const connected = await pm.openAudioChannel()
-    if (!connected) {
-      sm.setKeepListening(false)
-      await sm.setDeviceState(DeviceStateValue.IDLE)
-      return
-    }
-
-    await pm.sendStartListening(mode)
-    await sm.setDeviceState(DeviceStateValue.LISTENING)
+    await this.container.session.startListening(mode)
   }
 
   async stopListening(): Promise<void> {
-    await this.container.protocolManager.sendStopListening()
+    await this.container.session.stopListening()
   }
 
   async abortSpeaking(reason: string): Promise<void> {
-    await this.container.protocolManager.sendAbort(reason as AbortReason)
+    await this.container.session.abortSpeaking(reason as AbortReason)
   }
 
   async sendAudio(data: Buffer): Promise<void> {
@@ -127,14 +109,12 @@ class PluginCommandsAdapter implements PluginCommands {
   }
 
   async sendText(text: string): Promise<void> {
-    // 发送文本前确保协议已连接
-    const connected = await this.container.protocolManager.openAudioChannel()
-    if (!connected) return
-    await this.container.protocolManager.sendText(text)
+    // 与 ServiceContainer.sendText 对齐：打断说话 + 确保连接 + wake_word_detected 路径
+    await this.container.session.sendText(text)
   }
 
   async connectProtocol(): Promise<boolean> {
-    return this.container.protocolManager.openAudioChannel()
+    return this.container.session.connectProtocol()
   }
 
   async sendMcpMessage(message: string): Promise<void> {
@@ -142,7 +122,7 @@ class PluginCommandsAdapter implements PluginCommands {
   }
 
   async sendWakeWordDetected(text: string): Promise<void> {
-    await this.container.protocolManager.sendWakeWordDetected(text)
+    await this.container.session.sendWakeWordDetected(text)
   }
 
   spawn<T>(promise: Promise<T>, name: string): Promise<T> {
@@ -154,7 +134,7 @@ class PluginCommandsAdapter implements PluginCommands {
  * 服务容器
  *
  * 整合所有核心服务，作为应用的中央协调者。
- * 持有 ProtocolManager，插件通过适配器间接使用协议能力。
+ * 持有 ProtocolManager 与 ConversationSession；插件通过适配器间接使用。
  * 同时提供公共 API 供 IPC 和外部模块使用。
  */
 export class ServiceContainer {
@@ -175,8 +155,14 @@ export class ServiceContainer {
   /** 协议管理器 */
   readonly protocolManager: ProtocolManager
 
+  /** 会话控制器（听/说/TTS） */
+  readonly session: ConversationSession
+
   /** 插件管理器 */
   private plugins = new PluginManager()
+
+  /** 容器持有的 McpServer（由 pluginWiring 创建） */
+  mcpServer: McpServer | null = null
 
   /** 音频插件引用 */
   private audioPlugin: AudioPlugin | null = null
@@ -201,7 +187,12 @@ export class ServiceContainer {
     this.stateManager = new StateManager(this.eventBus)
     this.taskManager = new TaskManager()
     this.resourcePool = new ResourcePool()
-    this.protocolManager = new ProtocolManager(this.eventBus, this.stateManager, this.taskManager)
+    this.protocolManager = new ProtocolManager(this.eventBus, this.taskManager)
+    this.session = new ConversationSessionImpl(
+      this.stateManager,
+      this.protocolManager,
+      this.taskManager,
+    )
   }
 
   /**
@@ -214,12 +205,19 @@ export class ServiceContainer {
     return ServiceContainer.instance
   }
 
+  /**
+   * 重置单例（仅测试用）
+   */
+  static resetInstance(): void {
+    ServiceContainer.instance = null
+  }
+
   // ========== 生命周期 ==========
 
   /**
    * 初始化应用
    *
-   * 初始化协议、注册并设置插件、注册快捷键、注册资源。
+   * 初始化协议、绑定会话事件、注册并设置插件、注册快捷键、注册资源。
    *
    * @param protocolType 协议类型
    */
@@ -229,46 +227,21 @@ export class ServiceContainer {
     // 通过 ProtocolManager 初始化协议
     this.protocolManager.initialize(protocolType)
 
-    // 注册插件
-    this.audioPlugin = new AudioPlugin()
-    this.wakeWordPlugin = new WakeWordPlugin()
-    this.plugins.register(
-      this.audioPlugin,
-      new Live2DPlugin(),
-      new McpPlugin(),
-      new ChatPlugin(),
-      this.wakeWordPlugin,
-      new UIPlugin(),
-    )
+    // 绑定会话事件（TTS / 通道 / 网络错误）
+    this.session.bindEvents(this.eventBus)
 
-    // 初始化插件（拓扑排序 + 依赖注入）
+    // 注册并 setup 插件（含 McpServer 注入、音频直连）
     const ctx = this.createPluginContext()
     const cmd = this.createPluginCommands()
-    await this.plugins.setupAll(ctx, cmd)
+    const { audioPlugin, wakeWordPlugin } = await setupPlugins(this, ctx, cmd)
+    this.audioPlugin = audioPlugin
+    this.wakeWordPlugin = wakeWordPlugin
 
     // 初始化快捷键
-    const db = DatabaseManager.getInstance()
-    this.shortcutManager = new ShortcutManager(db, this)
-    await this.shortcutManager.registerAll()
+    this.shortcutManager = await setupShortcutManager(this)
 
     // 注册资源到资源池（逆序释放）
-    this.resourcePool.register('shortcutManager', () => {
-      this.shortcutManager?.destroy()
-      this.shortcutManager = null
-    })
-    this.resourcePool.register('plugins', async () => {
-      await this.plugins.stopAll()
-      await this.plugins.shutdownAll()
-    })
-    this.resourcePool.register('protocol', async () => {
-      await this.protocolManager.shutdown()
-    })
-    this.resourcePool.register('tasks', async () => {
-      await this.taskManager.cancelAll(3000)
-    })
-    this.resourcePool.register('eventBus', () => {
-      this.eventBus.clear()
-    })
+    registerCleanupResources(this, this.shortcutManager)
 
     logger.info('初始化完成')
   }
@@ -299,6 +272,8 @@ export class ServiceContainer {
     await this.resourcePool.shutdown()
     this.audioPlugin = null
     this.wakeWordPlugin = null
+    this.shortcutManager = null
+    this.mcpServer = null
     logger.info('ServiceContainer 关闭完成')
   }
 
@@ -308,120 +283,63 @@ export class ServiceContainer {
    * 连接协议
    */
   async connectProtocol(): Promise<boolean> {
-    return this.protocolManager.openAudioChannel()
+    return this.session.connectProtocol()
   }
 
   /**
    * 手动开始监听
    */
   async startListeningManual(): Promise<void> {
-    const sm = this.stateManager
-    const pm = this.protocolManager
-    const ok = await this.connectProtocol()
-    if (!ok)
-      return
-    sm.setListeningMode(ListeningModeValue.MANUAL)
-    sm.setKeepListening(false)
-    if (sm.isSpeaking()) {
-      await pm.sendAbort(AbortReasonEnum.USER_INTERRUPTED)
-      await sm.setDeviceState(DeviceStateValue.IDLE)
-    }
-    await pm.sendStartListening(ListeningModeValue.MANUAL)
-    await sm.setDeviceState(DeviceStateValue.LISTENING)
+    await this.session.startListeningManual()
   }
 
   /**
    * 手动停止监听
    */
   async stopListeningManual(): Promise<void> {
-    await this.protocolManager.sendStopListening()
-    await this.stateManager.setDeviceState(DeviceStateValue.IDLE)
+    await this.session.stopListeningManual()
   }
 
   /**
    * 开始自动对话
    */
   async startAutoConversation(): Promise<void> {
-    const sm = this.stateManager
-    const pm = this.protocolManager
-    const audioConfig = getAudioConfig()
-    const conversationMode = audioConfig.conversationMode || 'auto'
-    const mode: ListeningMode = conversationMode === 'realtime'
-      ? ListeningModeValue.REALTIME
-      : ListeningModeValue.AUTO
-
-    sm.setListeningMode(mode)
-    sm.setKeepListening(true)
-    await sm.setDeviceState(DeviceStateValue.CONNECTING)
-
-    const ok = await this.connectProtocol()
-    if (!ok) {
-      sm.setKeepListening(false)
-      await sm.setDeviceState(DeviceStateValue.IDLE)
-      return
-    }
-    await pm.sendStartListening(mode)
-    await sm.setDeviceState(DeviceStateValue.LISTENING)
+    await this.session.startAutoConversation()
   }
 
   /**
    * 停止自动对话
    */
   async stopAutoConversation(): Promise<void> {
-    const sm = this.stateManager
-    const pm = this.protocolManager
-    sm.setKeepListening(false)
-    if (sm.isSpeaking()) {
-      await pm.sendAbort(AbortReasonEnum.USER_INTERRUPTED)
-    }
-    await pm.sendStopListening()
-    await pm.closeAudioChannel()
-    await sm.setDeviceState(DeviceStateValue.IDLE)
+    await this.session.stopAutoConversation()
   }
 
   /**
    * 中止语音输出
    */
   async abortSpeaking(reason: AbortReason): Promise<void> {
-    const sm = this.stateManager
-    if (sm.isAborted())
-      return
-    sm.setAborted(true)
-    await this.protocolManager.sendAbort(reason)
-    await sm.setDeviceState(DeviceStateValue.IDLE)
+    await this.session.abortSpeaking(reason)
   }
 
   /**
    * 发送文本消息
    */
   async sendText(text: string): Promise<void> {
-    const sm = this.stateManager
-    if (sm.isSpeaking()) {
-      await this.abortSpeaking(AbortReasonEnum.USER_INTERRUPTED)
-    }
-    const ok = await this.connectProtocol()
-    if (!ok)
-      return
-    await this.protocolManager.sendWakeWordDetected(text)
+    await this.session.sendText(text)
   }
 
   /**
    * 发送唤醒词检测
    */
   async sendWakeWordDetected(text: string): Promise<void> {
-    const ok = await this.connectProtocol()
-    if (!ok)
-      return
-    await this.protocolManager.sendWakeWordDetected(text)
+    await this.session.sendWakeWordDetected(text)
   }
 
   /**
    * 打断语音输出并停止对话
    */
   async interruptSpeaking(): Promise<void> {
-    if (this.stateManager.isSpeaking()) {
-      await this.stopAutoConversation()
-    }
+    await this.session.interruptSpeaking()
   }
 
   // ========== 只读访问器 ==========
@@ -476,6 +394,13 @@ export class ServiceContainer {
   }
 
   /**
+   * 获取容器持有的 McpServer
+   */
+  getMcpServer(): McpServer | null {
+    return this.mcpServer
+  }
+
+  /**
    * 是否应该采集音频
    */
   shouldCaptureAudio(): boolean {
@@ -509,26 +434,19 @@ export class ServiceContainer {
   async reconnectProtocol(): Promise<void> {
     if (!this.protocolManager.isAudioChannelOpened()) {
       logger.info('当前无活跃协议连接，跳过重连')
+      // 仍刷新内存配置，下次连接生效
+      this.protocolManager.reloadConfig()
       return
     }
 
-    logger.info('触发协议重连...')
-
-    this.protocolManager.reloadConfig()
-    await this.protocolManager.closeAudioChannel()
-    await this.protocolManager.openAudioChannel()
-
-    logger.info('协议重连完成')
+    await this.session.reconnectKeepingIdle()
   }
 
   /**
    * 设置后台音频窗口到 AudioPlugin
    */
   setAudioPluginBackgroundWindow(window: BrowserWindow): void {
-    if (this.audioPlugin) {
-      this.audioPlugin.setBackgroundAudioWindow(window)
-      logger.info('AudioPlugin 窗口引用已设置')
-    }
+    setAudioPluginBackgroundWindow(this.audioPlugin, window)
   }
 
   // ========== 适配器工厂 ==========
