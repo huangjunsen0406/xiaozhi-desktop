@@ -27,6 +27,7 @@ export interface HelloMessage {
   version: number
   features: {
     mcp: boolean
+    /** @deprecated 服务端已废弃，客户端不再发送 */
     aec?: boolean
   }
   transport: 'websocket' | 'udp'

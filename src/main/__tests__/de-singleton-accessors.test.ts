@@ -38,4 +38,13 @@ describe('de-singleton accessors (throw before init)', () => {
       /DeviceFingerprint not initialized/,
     )
   })
+
+  it('getAudioRuntime throws when not initialized', async () => {
+    const { resetAudioRuntime, getAudioRuntime } = await import('../audio/AudioRuntime')
+    resetAudioRuntime()
+    assert.throws(
+      () => getAudioRuntime(),
+      /AudioRuntime not initialized/,
+    )
+  })
 })

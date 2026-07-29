@@ -9,7 +9,7 @@ import { Buffer } from 'node:buffer'
 import crypto from 'node:crypto'
 import dgram from 'node:dgram'
 import * as mqtt from 'mqtt'
-import { getAudioConfig } from '../ipc/audioIpc'
+import { getAudioRuntime } from '../audio/AudioRuntime'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
@@ -302,23 +302,15 @@ export class MqttProtocol extends Protocol {
   }
 
   private createHelloMessage() {
-    const audioConfig = getAudioConfig()
-    const aecEnabled = audioConfig.enableEchoCancellation !== false
-
+    // features.aec 服务端已废弃，不再上报；audio_params 仅来自 AudioRuntime
     return {
       type: 'hello',
       version: 3,
       features: {
         mcp: true,
-        aec: aecEnabled,
       },
       transport: 'udp',
-      audio_params: {
-        format: 'opus',
-        sample_rate: audioConfig.inputSampleRate,
-        channels: audioConfig.channels,
-        frame_duration: audioConfig.frameDuration,
-      },
+      audio_params: getAudioRuntime().getUplinkParams(),
     }
   }
 

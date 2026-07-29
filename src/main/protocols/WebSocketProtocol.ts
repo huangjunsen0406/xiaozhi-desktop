@@ -1,8 +1,7 @@
 import type { ConnectionInfo, HelloMessage } from './Protocol'
 import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
-import { AudioConfig } from '../audio/AudioConfig'
-import { getAudioConfig } from '../ipc/audioIpc'
+import { getAudioRuntime } from '../audio/AudioRuntime'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
@@ -371,23 +370,16 @@ export class WebSocketProtocol extends Protocol {
    * 发送 hello 消息
    */
   private async sendHelloMessage(): Promise<void> {
-    const audioConfig = getAudioConfig()
-    const aecEnabled = audioConfig.enableEchoCancellation !== false
-
+    // features.aec 服务端已废弃，不再上报；audio_params 仅来自 AudioRuntime
+    // 本地 AEC 仍由 Chromium/设置页控制，不进入 hello
     const helloMessage: HelloMessage = {
       type: 'hello',
       version: 1,
       features: {
         mcp: true,
-        aec: aecEnabled,
       },
       transport: 'websocket',
-      audio_params: {
-        format: 'opus',
-        sample_rate: AudioConfig.inputSampleRate,
-        channels: AudioConfig.channels,
-        frame_duration: AudioConfig.frameDuration,
-      },
+      audio_params: getAudioRuntime().getUplinkParams(),
     }
 
     logger.debug('发送 hello 消息', helloMessage)

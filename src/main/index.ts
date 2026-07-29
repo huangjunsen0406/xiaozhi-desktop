@@ -4,6 +4,7 @@ import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage, session } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
+import { initializeAudioRuntime } from './audio/AudioRuntime'
 import { createServiceContainer, getServiceContainer } from './core/ServiceContainer'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { ActivationService } from './services/ActivationService'
@@ -133,12 +134,13 @@ app.whenReady().then(async () => {
   }
 
   // 进程级资源显式初始化（禁止懒 getInstance）
-  // 顺序：paths → db → config/fingerprint → activation → IPC → container
+  // 顺序：paths → db → audioRuntime → config/fingerprint → activation → IPC → container
   initializeDatabase()
+  initializeAudioRuntime()
   initializeConfigManager()
   initializeDeviceFingerprint()
   const activationService = ActivationService.create()
-  logger.info('Database / Config / DeviceFingerprint / Activation 已显式初始化')
+  logger.info('Database / AudioRuntime / Config / DeviceFingerprint / Activation 已显式初始化')
 
   // 检查并处理企业版代理问题
   if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {

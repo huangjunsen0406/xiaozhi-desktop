@@ -14,7 +14,7 @@ import type { AbortReason } from '../protocols/Protocol'
 import type { JsonMessage } from '../types/protocol'
 import { DeviceStateValue, ListeningModeValue } from '@shared/types'
 import { Events } from '../core/EventBus'
-import { getAudioConfig } from '../ipc/audioIpc'
+import { getAudioSettings } from '../ipc/audioIpc'
 import { AbortReason as AbortReasonEnum } from '../protocols/Protocol'
 import { isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
@@ -261,8 +261,9 @@ export class ConversationSession {
   }
 
   async startAutoConversation(): Promise<void> {
-    const audioConfig = getAudioConfig()
-    const conversationMode = audioConfig.conversationMode || 'auto'
+    // conversationMode 属于 Settings 偏好，不走 Runtime / hello
+    const audioSettings = getAudioSettings()
+    const conversationMode = audioSettings.conversationMode || 'auto'
     const mode: ListeningMode = conversationMode === 'realtime'
       ? ListeningModeValue.REALTIME
       : ListeningModeValue.AUTO
