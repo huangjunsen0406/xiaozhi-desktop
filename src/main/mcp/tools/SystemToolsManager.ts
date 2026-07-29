@@ -1,4 +1,5 @@
 import type { PropertyList, PropertyType, ToolCallback } from '../types'
+import type { MusicPlayer } from './music/MusicPlayer'
 import { getLogger } from '../../utils/logger'
 import { getAllTools } from './index'
 import { MusicToolsManager } from './music'
@@ -12,25 +13,21 @@ type AddToolFn = (name: string, description: string, properties: PropertyList, c
  * 系统工具管理器
  * 负责编排 MCP 工具注册：
  * - 从函数式注册表获取所有已注册的工具
- * - 注册音乐工具（通过 MusicToolsManager）
+ * - 注册音乐工具（通过注入的 MusicPlayer / MusicToolsManager）
+ *
+ * 无静态懒单例：由 McpServer.addCommonTools 创建。
  */
 export class SystemToolsManager {
-  private static instance: SystemToolsManager | null = null
   private initialized = false
 
   private addTool!: AddToolFn
   private PropertyList!: typeof PropertyList
   private PropertyType!: typeof PropertyType
+  private musicPlayer: MusicPlayer | null
 
-  private constructor() {
+  constructor(musicPlayer: MusicPlayer | null = null) {
+    this.musicPlayer = musicPlayer
     logger.info('系统工具管理器初始化')
-  }
-
-  static getInstance(): SystemToolsManager {
-    if (!SystemToolsManager.instance) {
-      SystemToolsManager.instance = new SystemToolsManager()
-    }
-    return SystemToolsManager.instance
   }
 
   /**
@@ -56,7 +53,7 @@ export class SystemToolsManager {
       }
       logger.info(`从注册表注册了 ${tools.length} 个工具`)
 
-      // 注册音乐工具（通过 MusicToolsManager，保持现有逻辑）
+      // 注册音乐工具（通过注入的 MusicPlayer）
       this.registerMusicTools()
 
       this.initialized = true
@@ -72,7 +69,11 @@ export class SystemToolsManager {
    * 注册音乐播放工具
    */
   private registerMusicTools(): void {
-    const musicManager = MusicToolsManager.getInstance()
+    if (!this.musicPlayer) {
+      logger.warn('MusicPlayer 未注入，跳过音乐工具注册')
+      return
+    }
+    const musicManager = new MusicToolsManager(this.musicPlayer)
     musicManager.register(this.addTool, this.PropertyList, this.PropertyType)
     logger.info('注册音乐工具成功')
   }

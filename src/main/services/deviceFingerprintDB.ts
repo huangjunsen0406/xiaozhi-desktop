@@ -1,25 +1,56 @@
 import type { DbDeviceInfo } from '../types/database'
+import type { DatabaseManager } from './database'
 import { createHmac, randomBytes, randomUUID } from 'node:crypto'
 import { networkInterfaces } from 'node:os'
 import { getLogger } from '../utils/logger'
-import { DatabaseManager } from './database'
+import { getDatabase } from './database'
+
+/**
+ * 进程级设备指纹（显式初始化，禁止懒 getInstance）
+ *
+ * 启动：initializeDatabase → initializeDeviceFingerprint → getDeviceFingerprint
+ */
+let _deviceFingerprint: DeviceFingerprintManager | null = null
+
+/**
+ * 显式初始化设备指纹（依赖已 initializeDatabase）
+ */
+export function initializeDeviceFingerprint(db?: DatabaseManager): DeviceFingerprintManager {
+  if (_deviceFingerprint) {
+    return _deviceFingerprint
+  }
+  _deviceFingerprint = new DeviceFingerprintManager(db ?? getDatabase())
+  return _deviceFingerprint
+}
+
+/**
+ * 获取已初始化的设备指纹；未初始化则抛错
+ */
+export function getDeviceFingerprint(): DeviceFingerprintManager {
+  if (!_deviceFingerprint) {
+    throw new Error(
+      'DeviceFingerprint not initialized. Call initializeDeviceFingerprint() during app bootstrap before getDeviceFingerprint().',
+    )
+  }
+  return _deviceFingerprint
+}
+
+/**
+ * 重置设备指纹引用（仅测试用）
+ */
+export function resetDeviceFingerprint(): void {
+  _deviceFingerprint = null
+}
 
 export class DeviceFingerprintManager {
-  private static instance: DeviceFingerprintManager | null = null
   private db: DatabaseManager
   private deviceCache: DbDeviceInfo | null = null
   private logger = getLogger('DeviceFingerprint')
 
-  private constructor() {
-    this.db = DatabaseManager.getInstance()
+  /** Created by initializeDeviceFingerprint(); use getDeviceFingerprint() in business code. */
+  constructor(db: DatabaseManager) {
+    this.db = db
     this.ensureDeviceInfo()
-  }
-
-  static getInstance(): DeviceFingerprintManager {
-    if (!DeviceFingerprintManager.instance) {
-      DeviceFingerprintManager.instance = new DeviceFingerprintManager()
-    }
-    return DeviceFingerprintManager.instance
   }
 
   private ensureDeviceInfo(): void {

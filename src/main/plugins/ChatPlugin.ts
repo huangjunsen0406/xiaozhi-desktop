@@ -3,7 +3,7 @@ import type { JsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Buffer } from 'node:buffer'
 import { Events } from '../core'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -88,7 +88,7 @@ export class ChatPlugin extends Plugin {
    * 确保会话存在（不存在则创建）
    */
   private async ensureSessionExists(sessionId: string): Promise<void> {
-    const db = DatabaseManager.getInstance()
+    const db = getDatabase()
 
     // 检查会话是否已存在
     const existingSession = db.getChatSession(sessionId)
@@ -132,7 +132,7 @@ export class ChatPlugin extends Plugin {
       logger.info(`检测到日期变化，切换会话: ${this.currentSessionId} -> ${todaySessionId}`)
 
       // 检查会话是否已存在
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const existingSession = db.getChatSession(todaySessionId)
       const isNewSession = !existingSession
 
@@ -211,7 +211,7 @@ export class ChatPlugin extends Plugin {
       // 确保使用今天的会话
       await this.checkAndSwitchSession()
 
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const result = db.addChatMessage({
         session_id: this.currentSessionId,
         role: 'user',
@@ -255,7 +255,7 @@ export class ChatPlugin extends Plugin {
       await this.checkAndSwitchSession()
 
       // 直接插入数据库
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const result = db.addChatMessage({
         session_id: this.currentSessionId,
         role: 'assistant',
@@ -281,7 +281,7 @@ export class ChatPlugin extends Plugin {
       if (this.messageAccumulator.pendingImageData) {
         await this.checkAndSwitchSession()
 
-        const db = DatabaseManager.getInstance()
+        const db = getDatabase()
         const imageResult = db.addChatMessage({
           session_id: this.currentSessionId,
           role: 'assistant',
@@ -320,7 +320,7 @@ export class ChatPlugin extends Plugin {
       // 确保使用今天的会话
       await this.checkAndSwitchSession()
 
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const result = db.addChatMessage({
         session_id: this.currentSessionId,
         role: 'assistant',

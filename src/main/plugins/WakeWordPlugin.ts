@@ -4,7 +4,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { Events } from '../core'
 import { AbortReason } from '../protocols/Protocol'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { WakeWordDetector } from '../wake-word/WakeWordDetector'
 
@@ -55,7 +55,7 @@ export class WakeWordPlugin extends Plugin {
       logger.info('模型路径:', modelsPath)
 
       // 从数据库读取配置
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const config = db.getFormattedWakeWordConfig()
 
       logger.info('唤醒词配置:', config)
@@ -112,7 +112,7 @@ export class WakeWordPlugin extends Plugin {
 
     try {
       // 从数据库读取最新配置
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const config = db.getFormattedWakeWordConfig()
 
       logger.info('新配置:', config)

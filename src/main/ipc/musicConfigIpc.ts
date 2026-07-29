@@ -3,13 +3,13 @@
  */
 import type { MusicConfig } from '@shared/types'
 import { ipcMain } from 'electron'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('MusicConfigIpc')
 
 export function registerMusicConfigIpc(): void {
-  const db = DatabaseManager.getInstance()
+  const db = getDatabase()
 
   /**
    * 获取音乐配置

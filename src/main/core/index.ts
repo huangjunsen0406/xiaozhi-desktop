@@ -19,7 +19,7 @@ export type { IncomingAudioHandler } from './ProtocolManager'
 export { ResourcePool } from './ResourcePool'
 
 // 服务容器
-export { getServiceContainer, ServiceContainer } from './ServiceContainer'
+export { createServiceContainer, getServiceContainer, ServiceContainer } from './ServiceContainer'
 
 // 状态管理器
 export { StateManager } from './StateManager'

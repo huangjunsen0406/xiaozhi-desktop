@@ -8,7 +8,11 @@
  * 所有 IPC 和外部模块通过 ServiceContainer 访问应用能力。
  *
  * v2.1 对齐：会话逻辑委托 ConversationSession；插件装配委托 pluginWiring；
- * McpServer 由容器持有并注入。
+ * McpServer / MusicPlayer 由容器持有并注入。
+ *
+ * **进程唯一根（有意保留）**：允许一个进程级 container，但必须
+ * `createServiceContainer()` 显式创建后，`getServiceContainer()` 才可用；
+ * 禁止业务路径 `new` 或懒创建第二实例。测试用 `resetInstance()`。
  */
 
 import type { AppStateSnapshot, DeviceState, ListeningMode } from '@shared/types'
@@ -16,6 +20,7 @@ import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
 import type { ConversationSession } from '../bootstrap/ConversationSession'
 import type { McpServer } from '../mcp/McpServer'
+import type { MusicPlayer } from '../mcp/tools/music/MusicPlayer'
 import type { AudioPlugin } from '../plugins/AudioPlugin'
 import type { WakeWordPlugin } from '../plugins/WakeWordPlugin'
 import type { AbortReason, Protocol } from '../protocols/Protocol'
@@ -130,6 +135,9 @@ class PluginCommandsAdapter implements PluginCommands {
   }
 }
 
+/** 进程唯一根引用（create 后可用；非懒创建） */
+let _serviceContainer: ServiceContainer | null = null
+
 /**
  * 服务容器
  *
@@ -137,9 +145,8 @@ class PluginCommandsAdapter implements PluginCommands {
  * 持有 ProtocolManager 与 ConversationSession；插件通过适配器间接使用。
  * 同时提供公共 API 供 IPC 和外部模块使用。
  */
-export class ServiceContainer {
-  private static instance: ServiceContainer | null = null
 
+export class ServiceContainer {
   /** 事件总线 */
   readonly eventBus: EventBus
 
@@ -163,6 +170,9 @@ export class ServiceContainer {
 
   /** 容器持有的 McpServer（由 pluginWiring 创建） */
   mcpServer: McpServer | null = null
+
+  /** 容器持有的 MusicPlayer（由 pluginWiring bindSharedServices 创建） */
+  musicPlayer: MusicPlayer | null = null
 
   /** 音频插件引用 */
   private audioPlugin: AudioPlugin | null = null
@@ -196,20 +206,21 @@ export class ServiceContainer {
   }
 
   /**
-   * 获取 ServiceContainer 单例
+   * 显式创建进程唯一 ServiceContainer（启动路径）
    */
-  static getInstance(): ServiceContainer {
-    if (!ServiceContainer.instance) {
-      ServiceContainer.instance = new ServiceContainer()
+  static create(): ServiceContainer {
+    if (_serviceContainer) {
+      return _serviceContainer
     }
-    return ServiceContainer.instance
+    _serviceContainer = new ServiceContainer()
+    return _serviceContainer
   }
 
   /**
-   * 重置单例（仅测试用）
+   * 重置进程根（仅测试用）
    */
   static resetInstance(): void {
-    ServiceContainer.instance = null
+    _serviceContainer = null
   }
 
   // ========== 生命周期 ==========
@@ -274,6 +285,7 @@ export class ServiceContainer {
     this.wakeWordPlugin = null
     this.shortcutManager = null
     this.mcpServer = null
+    this.musicPlayer = null
     logger.info('ServiceContainer 关闭完成')
   }
 
@@ -401,6 +413,13 @@ export class ServiceContainer {
   }
 
   /**
+   * 获取容器持有的 MusicPlayer
+   */
+  getMusicPlayer(): MusicPlayer | null {
+    return this.musicPlayer
+  }
+
+  /**
    * 是否应该采集音频
    */
   shouldCaptureAudio(): boolean {
@@ -477,8 +496,22 @@ export class ServiceContainer {
 }
 
 /**
- * 获取 ServiceContainer 单例
+ * 显式创建进程唯一 ServiceContainer
+ */
+export function createServiceContainer(): ServiceContainer {
+  return ServiceContainer.create()
+}
+
+/**
+ * 获取已 create 的 ServiceContainer；未 create 则抛错
+ *
+ * 有意保留的进程根访问器（非懒创建）。
  */
 export function getServiceContainer(): ServiceContainer {
-  return ServiceContainer.getInstance()
+  if (!_serviceContainer) {
+    throw new Error(
+      'ServiceContainer not initialized. Call createServiceContainer() during app bootstrap before getServiceContainer().',
+    )
+  }
+  return _serviceContainer
 }

@@ -48,21 +48,16 @@ export interface ScreenshotResult {
 }
 
 /**
- * 截图工具类
+ * 截图工具类（由 McpServer / McpToolRuntime 持有，禁止懒 getInstance）
  */
 export class ScreenshotTool {
-  private static instance: ScreenshotTool | null = null
-
   private constructor() {}
 
   /**
-   * 获取单例实例
+   * 显式创建实例
    */
-  public static getInstance(): ScreenshotTool {
-    if (!ScreenshotTool.instance) {
-      ScreenshotTool.instance = new ScreenshotTool()
-    }
-    return ScreenshotTool.instance
+  public static create(): ScreenshotTool {
+    return new ScreenshotTool()
   }
 
   /**

@@ -1,3 +1,4 @@
+import type { MusicPlayer } from './tools/music/MusicPlayer'
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
@@ -8,9 +9,11 @@ import type {
 } from './types'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
-import { setMcpContext } from './McpContext'
+import { resetMcpContext, setMcpContext, setMcpToolRuntime } from './McpContext'
 import { getCameraInstance } from './tools/camera'
+import { ScreenshotTool } from './tools/screenshot/ScreenshotTool'
 import { SystemToolsManager } from './tools/SystemToolsManager'
+import { TimerService } from './tools/timer/TimerService'
 import { PropertyList, PropertyType } from './types'
 
 const logger = getLogger('MCP')
@@ -21,45 +24,31 @@ const logger = getLogger('MCP')
  * 由 ServiceContainer / pluginWiring 创建并持有，注入 McpPlugin。
  * 参考: https://modelcontextprotocol.io/specification/2024-11-05
  *
- * 兼容：`getInstance()` 仍可作为过渡桥接（测试/遗留调用），业务路径应走容器注入。
+ * 无 getInstance 懒单例；仅 create() + 容器持有。
  */
 export class McpServer {
-  private static instance: McpServer | null = null
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
   private visionConfig: { url?: string, token?: string } = {} // 存储 vision 配置供截图工具使用
   private imageBroadcastCallback: ((imageBase64: string, sourceType: 'screenshot' | 'camera') => void) | null = null
   private themeBroadcastCallback: ((theme: 'light' | 'dark' | 'auto') => void) | null = null
+  /** 容器注入的 MusicPlayer（addCommonTools 时使用） */
+  private musicPlayer: MusicPlayer | null = null
 
   private constructor() {}
 
   /**
    * 创建新的 McpServer 实例（容器 / pluginWiring 使用）
-   *
-   * 同时更新模块级桥接引用，便于过渡期 getInstance() 与容器实例一致。
    */
   static create(): McpServer {
-    const server = new McpServer()
-    McpServer.instance = server
-    return server
+    return new McpServer()
   }
 
   /**
-   * @deprecated 业务路径请通过 ServiceContainer / 构造注入获取。
-   * 过渡桥接：返回 create() 写入的实例；若尚未创建则惰性创建。
+   * 注入共享 MusicPlayer（bindSharedServices 后调用）
    */
-  static getInstance(): McpServer {
-    if (!McpServer.instance) {
-      McpServer.instance = new McpServer()
-    }
-    return McpServer.instance
-  }
-
-  /**
-   * 重置单例桥接（仅测试用）
-   */
-  static resetInstance(): void {
-    McpServer.instance = null
+  setMusicPlayer(player: MusicPlayer | null): void {
+    this.musicPlayer = player
   }
 
   /**
@@ -71,9 +60,8 @@ export class McpServer {
     this.themeBroadcastCallback = null
     this.tools = []
     this.visionConfig = {}
-    if (McpServer.instance === this) {
-      McpServer.instance = null
-    }
+    this.musicPlayer = null
+    resetMcpContext()
   }
 
   /**
@@ -136,25 +124,29 @@ export class McpServer {
     logger.info('添加通用工具...')
 
     try {
-      // 注入 McpContext，供 SystemToolsManager / TimerService 使用（打破循环依赖）
+      // 注入 McpContext，供工具使用（打破循环依赖）
       setMcpContext(this)
+
+      // 创建并注入 timer / screenshot 运行时（无静态单例）
+      const timerService = TimerService.create()
+      const screenshotTool = ScreenshotTool.create()
+      setMcpToolRuntime({
+        musicPlayer: this.musicPlayer,
+        timerService,
+        screenshotTool,
+      })
 
       // 备份原有工具列表
       const originalTools = [...this.tools]
       this.tools = []
 
-      // 注册系统工具（常用工具将被优先添加）
-      const systemManager = SystemToolsManager.getInstance()
+      // 注册系统工具（常用工具将被优先添加）；注入 MusicPlayer
+      const systemManager = new SystemToolsManager(this.musicPlayer)
       await systemManager.init(
         this.addTool.bind(this),
         PropertyList,
         PropertyType,
       )
-
-      // TODO: 注册其他工具管理器
-      // CalendarManager.getInstance().init(this.addTool.bind(this), PropertyList, PropertyType)
-      // TimerManager.getInstance().init(this.addTool.bind(this), PropertyList, PropertyType)
-      // MusicManager.getInstance().init(this.addTool.bind(this), PropertyList, PropertyType)
 
       // 将原有工具恢复到列表末尾
       this.tools.push(...originalTools)

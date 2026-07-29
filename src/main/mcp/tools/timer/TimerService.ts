@@ -124,10 +124,9 @@ class TimerTask {
 }
 
 /**
- * 倒计时器服务
+ * 倒计时器服务（由 McpServer / McpToolRuntime 持有，禁止懒 getInstance）
  */
 export class TimerService {
-  private static instance: TimerService | null = null
   private timers = new Map<number, TimerTask>()
   private nextTimerId = 0
   private readonly DEFAULT_DELAY = 5
@@ -137,13 +136,10 @@ export class TimerService {
   }
 
   /**
-   * 获取单例实例
+   * 显式创建实例
    */
-  static getInstance(): TimerService {
-    if (!TimerService.instance) {
-      TimerService.instance = new TimerService()
-    }
-    return TimerService.instance
+  static create(): TimerService {
+    return new TimerService()
   }
 
   /**

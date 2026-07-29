@@ -3,9 +3,9 @@
  */
 
 import { getLogger } from '../../../utils/logger'
+import { getTimerServiceFromRuntime } from '../../McpContext'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
-import { TimerService } from './TimerService'
 
 const logger = getLogger('TimerTools')
 
@@ -60,7 +60,7 @@ Examples:
 
       logger.info(`启动倒计时 - 命令: ${command}, 延迟: ${delay}秒`)
 
-      const timerService = TimerService.getInstance()
+      const timerService = getTimerServiceFromRuntime()
       const result = await timerService.startCountdown(command, delay, description)
 
       logger.info('倒计时启动结果:', result)
@@ -105,7 +105,7 @@ Examples:
 
       logger.info(`取消倒计时 ${timerId}`)
 
-      const timerService = TimerService.getInstance()
+      const timerService = getTimerServiceFromRuntime()
       const result = await timerService.cancelCountdown(timerId)
 
       logger.info('倒计时取消结果:', result)
@@ -144,7 +144,7 @@ Examples:
     try {
       logger.info('获取活动倒计时列表')
 
-      const timerService = TimerService.getInstance()
+      const timerService = getTimerServiceFromRuntime()
       const result = await timerService.getActiveTimers()
 
       logger.info(`当前活动倒计时数量: ${result.totalActiveTimers}`)

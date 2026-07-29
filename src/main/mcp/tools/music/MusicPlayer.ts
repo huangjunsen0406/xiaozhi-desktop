@@ -21,7 +21,7 @@ import type {
   SetVolumeResult,
   StopMusicResult,
 } from './types'
-import { DatabaseManager } from '../../../services/database'
+import { getDatabase } from '../../../services/database'
 import { getLogger } from '../../../utils/logger'
 import { ensureBackgroundAudioWindow } from '../../../windows/windowManager'
 
@@ -57,11 +57,9 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 /**
- * 音乐播放器服务（单例）
+ * 音乐播放器服务（容器持有，显式 create，禁止懒 getInstance）
  */
 export class MusicPlayer {
-  private static instance: MusicPlayer | null = null
-
   // 当前播放状态
   private currentState: PlaybackState = 'idle'
   private currentFile: string | null = null
@@ -77,13 +75,10 @@ export class MusicPlayer {
   }
 
   /**
-   * 获取单例实例
+   * 显式创建实例（由 container / pluginWiring 持有）
    */
-  static getInstance(): MusicPlayer {
-    if (!MusicPlayer.instance) {
-      MusicPlayer.instance = new MusicPlayer()
-    }
-    return MusicPlayer.instance
+  static create(): MusicPlayer {
+    return new MusicPlayer()
   }
 
   /**
@@ -91,7 +86,7 @@ export class MusicPlayer {
    */
   private getMusicConfig(): MusicConfig {
     try {
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const dbConfig = db.getMusicConfig()
       if (!dbConfig) {
         return { ...DEFAULT_MUSIC_CONFIG }

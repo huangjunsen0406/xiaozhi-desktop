@@ -5,14 +5,14 @@
 import type { DbChatMessage } from '../types/database'
 import { Buffer } from 'node:buffer'
 import { ipcMain } from 'electron'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('ChatIpc')
 
 export function registerChatIpc(): void {
-  const db = DatabaseManager.getInstance()
+  const db = getDatabase()
 
   /**
    * 获取会话列表

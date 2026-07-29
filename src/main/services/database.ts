@@ -26,12 +26,56 @@ import { getDatabasePath } from '../utils/paths'
  */
 export const CONFIG_VERSION = 1
 
+/**
+ * 进程级数据库资源（显式初始化，禁止懒 getInstance 创建）
+ *
+ * 启动顺序：paths migrate → initializeDatabase() → getDatabase()
+ * 测试：resetDatabase()
+ */
+let _database: DatabaseManager | null = null
+
+/**
+ * 显式初始化进程数据库（仅启动时调用一次）
+ */
+export function initializeDatabase(): DatabaseManager {
+  if (_database) {
+    return _database
+  }
+  _database = new DatabaseManager()
+  return _database
+}
+
+/**
+ * 获取已初始化的数据库；未 initializeDatabase 则抛错
+ */
+export function getDatabase(): DatabaseManager {
+  if (!_database) {
+    throw new Error('Database not initialized. Call initializeDatabase() during app bootstrap before getDatabase().')
+  }
+  return _database
+}
+
+/**
+ * 重置进程数据库引用（仅测试用；不关闭底层连接由调用方负责）
+ */
+export function resetDatabase(): void {
+  if (_database) {
+    try {
+      _database.close()
+    }
+    catch {
+      // ignore close errors during test reset
+    }
+  }
+  _database = null
+}
+
 export class DatabaseManager {
-  private static instance: DatabaseManager | null = null
   private db: Database.Database
   private logger = getLogger('Database') // 移到类内部
 
-  private constructor() {
+  /** Created by initializeDatabase(); use getDatabase() in business code. */
+  constructor() {
     // 统一使用 paths API（默认仍为 userData/data，升级无感）
     const dbPath = getDatabasePath()
     const dbDir = dirname(dbPath)
@@ -45,13 +89,6 @@ export class DatabaseManager {
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
     this.initializeTables()
-  }
-
-  static getInstance(): DatabaseManager {
-    if (!DatabaseManager.instance) {
-      DatabaseManager.instance = new DatabaseManager()
-    }
-    return DatabaseManager.instance
   }
 
   private initializeTables(): void {

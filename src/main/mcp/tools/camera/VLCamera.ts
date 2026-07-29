@@ -7,7 +7,6 @@ import { BaseCamera } from './BaseCamera'
 const logger = getLogger('VLCamera')
 
 export class VLCamera extends BaseCamera {
-  private static instance: VLCamera | null = null
   private client: OpenAI
   private model: string
 
@@ -26,20 +25,16 @@ export class VLCamera extends BaseCamera {
     logger.info(`初始化 VL 摄像头，模型: ${model}`)
   }
 
-  static getInstance(
+  /**
+   * 显式创建（由 camera 工厂持有 current）
+   */
+  static create(
     apiKey: string,
     baseUrl: string,
     model: string,
     config?: Partial<CameraToolConfig>,
   ): VLCamera {
-    if (!VLCamera.instance) {
-      VLCamera.instance = new VLCamera(apiKey, baseUrl, model, config)
-    }
-    return VLCamera.instance
-  }
-
-  static resetInstance(): void {
-    VLCamera.instance = null
+    return new VLCamera(apiKey, baseUrl, model, config)
   }
 
   async analyze(question: string): Promise<AnalyzeResult> {

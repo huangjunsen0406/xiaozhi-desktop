@@ -1,6 +1,8 @@
 /**
  * Camera 工具统一入口
  * 根据配置返回对应的摄像头实现
+ *
+ * 工厂模块级 current 实例；配置变更时重建。无 class 静态懒单例。
  */
 import type { BaseCamera } from './BaseCamera'
 import { getLogger } from '../../../utils/logger'
@@ -28,6 +30,7 @@ interface CameraOptions {
   clientId?: string
 }
 
+let currentCamera: BaseCamera | null = null
 let lastCameraType: 'vl' | 'web' | null = null
 let lastVlConfig: { apiKey: string, url: string, model: string } | null = null
 
@@ -43,24 +46,25 @@ export function getCameraInstance(options: CameraOptions): BaseCamera {
       || lastVlConfig?.url !== options.vlUrl
       || lastVlConfig?.model !== model
 
-    if (configChanged) {
-      VLCamera.resetInstance()
+    if (configChanged || !(currentCamera instanceof VLCamera)) {
+      currentCamera = VLCamera.create(options.vlApiKey, options.vlUrl, model)
       logger.info(`使用 VL Camera，URL: ${options.vlUrl}`)
     }
 
     lastCameraType = 'vl'
     lastVlConfig = { apiKey: options.vlApiKey, url: options.vlUrl, model }
 
-    return VLCamera.getInstance(options.vlApiKey, options.vlUrl, model)
+    return currentCamera
   }
 
-  if (lastCameraType !== 'web') {
+  if (lastCameraType !== 'web' || !(currentCamera instanceof WebCamera)) {
     logger.info('VL 配置未找到，使用 WebCamera 实现')
+    currentCamera = WebCamera.create()
   }
   lastCameraType = 'web'
   lastVlConfig = null
 
-  const camera = WebCamera.getInstance()
+  const camera = currentCamera as WebCamera
 
   if (options.explainUrl) {
     camera.setExplainUrl(options.explainUrl)
@@ -79,6 +83,15 @@ export function getCameraInstance(options: CameraOptions): BaseCamera {
   }
 
   return camera
+}
+
+/**
+ * 重置工厂当前实例（测试用）
+ */
+export function resetCameraInstance(): void {
+  currentCamera = null
+  lastCameraType = null
+  lastVlConfig = null
 }
 
 /**

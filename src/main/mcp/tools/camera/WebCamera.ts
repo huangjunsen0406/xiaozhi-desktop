@@ -11,7 +11,6 @@ import { BaseCamera } from './BaseCamera'
 const logger = getLogger('WebCamera')
 
 export class WebCamera extends BaseCamera {
-  private static instance: WebCamera | null = null
   private explainUrl = ''
   private explainToken = ''
   private deviceId = ''
@@ -22,11 +21,11 @@ export class WebCamera extends BaseCamera {
     logger.info('初始化 Web 摄像头')
   }
 
-  static getInstance(config?: Partial<CameraToolConfig>): WebCamera {
-    if (!WebCamera.instance) {
-      WebCamera.instance = new WebCamera(config)
-    }
-    return WebCamera.instance
+  /**
+   * 显式创建（由 camera 工厂持有 current）
+   */
+  static create(config?: Partial<CameraToolConfig>): WebCamera {
+    return new WebCamera(config)
   }
 
   /**

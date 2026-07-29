@@ -5,7 +5,7 @@
 
 import { Buffer } from 'node:buffer'
 import OpenAI from 'openai'
-import { DatabaseManager } from '../../services/database'
+import { getDatabase } from '../../services/database'
 import { getLogger } from '../../utils/logger'
 import { getMcpContext } from '../McpContext'
 
@@ -32,7 +32,7 @@ export async function analyzeImage(
   const mcpContext = getMcpContext()
   const visionConfig = mcpContext.getVisionConfig()
 
-  const db = DatabaseManager.getInstance()
+  const db = getDatabase()
   const cameraConfig = db.getFormattedCameraConfig()
 
   const useLocalVision = cameraConfig.useLocalVision
@@ -143,7 +143,7 @@ async function analyzeImageWithMCPVision(
 
     const headers: Record<string, string> = {}
 
-    const db = DatabaseManager.getInstance()
+    const db = getDatabase()
     const cameraConfig = db.getFormattedCameraConfig()
     if (cameraConfig.deviceId)
       headers['Device-Id'] = cameraConfig.deviceId

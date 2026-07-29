@@ -1,15 +1,52 @@
 import type { MqttInfo } from '@shared/types'
+import type { DatabaseManager } from './database'
 import { v4 as uuidv4 } from 'uuid'
 import { getLogger } from '../utils/logger'
-import { DatabaseManager } from './database'
-import { DeviceFingerprintManager } from './deviceFingerprintDB'
+import { getDatabase } from './database'
+import { getDeviceFingerprint } from './deviceFingerprintDB'
 
 export type { MqttInfo }
 
+/**
+ * 进程级配置管理器（显式初始化，禁止懒 getInstance）
+ *
+ * 启动：initializeDatabase → initializeConfigManager → getConfigManager
+ */
+let _configManager: ConfigManager | null = null
+
+/**
+ * 显式初始化配置管理器（依赖已 initializeDatabase）
+ */
+export function initializeConfigManager(db?: DatabaseManager): ConfigManager {
+  if (_configManager) {
+    return _configManager
+  }
+  _configManager = new ConfigManager(db ?? getDatabase())
+  return _configManager
+}
+
+/**
+ * 获取已初始化的配置管理器；未初始化则抛错
+ */
+export function getConfigManager(): ConfigManager {
+  if (!_configManager) {
+    throw new Error(
+      'ConfigManager not initialized. Call initializeConfigManager() during app bootstrap before getConfigManager().',
+    )
+  }
+  return _configManager
+}
+
+/**
+ * 重置配置管理器引用（仅测试用）
+ */
+export function resetConfigManager(): void {
+  _configManager = null
+}
+
 export class ConfigManager {
-  private static instance: ConfigManager | null = null
   private db: DatabaseManager
-  private logger = getLogger('ConfigManagerDB') // 移到类内部
+  private logger = getLogger('ConfigManagerDB')
 
   private static DEFAULT_CONFIG = {
     OTA_VERSION_URL: 'https://api.tenclass.net/xiaozhi/ota/',
@@ -17,16 +54,10 @@ export class ConfigManager {
     AUTHORIZATION_URL: 'https://xiaozhi.me/',
   }
 
-  private constructor() {
-    this.db = DatabaseManager.getInstance()
+  /** Created by initializeConfigManager(); use getConfigManager() in business code. */
+  constructor(db: DatabaseManager) {
+    this.db = db
     this.initializeDefaultConfig()
-  }
-
-  static getInstance(): ConfigManager {
-    if (!ConfigManager.instance) {
-      ConfigManager.instance = new ConfigManager()
-    }
-    return ConfigManager.instance
   }
 
   private initializeDefaultConfig(): void {
@@ -45,7 +76,7 @@ export class ConfigManager {
   }
 
   async initializeDeviceIdAsync(): Promise<void> {
-    const deviceFingerprint = DeviceFingerprintManager.getInstance()
+    const deviceFingerprint = getDeviceFingerprint()
     const macAddress = deviceFingerprint.getMacAddressFromEfuse()
     const currentDeviceId = this.getDeviceId().trim()
 
@@ -218,8 +249,4 @@ export class ConfigManager {
       return false
     }
   }
-}
-
-export function getConfigManager(): ConfigManager {
-  return ConfigManager.getInstance()
 }

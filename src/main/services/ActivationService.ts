@@ -1,11 +1,13 @@
 import type { ActivationData } from '@shared/types'
 import type { AxiosError } from 'axios'
+import type { ConfigManager } from './configManagerDB'
+import type { DeviceFingerprintManager } from './deviceFingerprintDB'
 import axios from 'axios'
+
 import { getLogger } from '../utils/logger'
 import { hideActivation, showActivation } from '../windows/windowManager'
-
 import { getConfigManager } from './configManagerDB'
-import { DeviceFingerprintManager } from './deviceFingerprintDB'
+import { getDeviceFingerprint } from './deviceFingerprintDB'
 
 /**
  * 激活结果接口（本地扩展）
@@ -18,16 +20,21 @@ export interface ActivationResult {
 }
 
 /**
+ * 进程级激活服务（显式 create，禁止懒 getInstance）
+ *
+ * 启动：db/config/fingerprint init → ActivationService.create() → getActivationService()
+ */
+let _activationService: ActivationService | null = null
+
+/**
  * 统一激活服务
  * 整合所有激活相关功能（合并自 systemInitializer、activationManager、activationHandler）
  */
 export class ActivationService {
-  private static instance: ActivationService | null = null
-
   private deviceFingerprint!: DeviceFingerprintManager
-  private configManager: ReturnType<typeof getConfigManager>
+  private configManager: ConfigManager
   private initialized = false
-  private logger = getLogger('ActivationService') // 移到类内部
+  private logger = getLogger('ActivationService')
 
   // 激活流程控制
   private isActivating = false
@@ -36,15 +43,26 @@ export class ActivationService {
   // 激活数据缓存
   private cachedActivationData: ActivationData | null = null
 
-  private constructor() {
-    this.configManager = getConfigManager()
+  private constructor(configManager: ConfigManager) {
+    this.configManager = configManager
   }
 
-  static getInstance(): ActivationService {
-    if (!ActivationService.instance) {
-      ActivationService.instance = new ActivationService()
+  /**
+   * 显式创建激活服务（容器/启动路径使用）
+   */
+  static create(configManager?: ConfigManager): ActivationService {
+    if (_activationService) {
+      return _activationService
     }
-    return ActivationService.instance
+    _activationService = new ActivationService(configManager ?? getConfigManager())
+    return _activationService
+  }
+
+  /**
+   * 重置进程引用（仅测试用）
+   */
+  static resetInstance(): void {
+    _activationService = null
   }
 
   /**
@@ -128,7 +146,7 @@ export class ActivationService {
 
   private initializeDeviceFingerprint(): void {
     if (!this.initialized) {
-      this.deviceFingerprint = DeviceFingerprintManager.getInstance()
+      this.deviceFingerprint = getDeviceFingerprint()
       this.initialized = true
 
       const [serialNumber, hmacKey, isActivated] = this.deviceFingerprint.ensureDeviceIdentity()
@@ -490,6 +508,14 @@ export class ActivationService {
   }
 }
 
+/**
+ * 获取已 create 的激活服务；未 create 则抛错
+ */
 export function getActivationService(): ActivationService {
-  return ActivationService.getInstance()
+  if (!_activationService) {
+    throw new Error(
+      'ActivationService not initialized. Call ActivationService.create() during app bootstrap before getActivationService().',
+    )
+  }
+  return _activationService
 }

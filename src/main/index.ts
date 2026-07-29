@@ -4,9 +4,12 @@ import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage, session } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
-import { getServiceContainer } from './core/ServiceContainer'
+import { createServiceContainer, getServiceContainer } from './core/ServiceContainer'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
-import { getActivationService } from './services/ActivationService'
+import { ActivationService } from './services/ActivationService'
+import { initializeConfigManager } from './services/configManagerDB'
+import { initializeDatabase } from './services/database'
+import { initializeDeviceFingerprint } from './services/deviceFingerprintDB'
 
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
@@ -129,6 +132,14 @@ app.whenReady().then(async () => {
     logger.warn('PATHS 启动迁移跳过/失败', error)
   }
 
+  // 进程级资源显式初始化（禁止懒 getInstance）
+  // 顺序：paths → db → config/fingerprint → activation → IPC → container
+  initializeDatabase()
+  initializeConfigManager()
+  initializeDeviceFingerprint()
+  const activationService = ActivationService.create()
+  logger.info('Database / Config / DeviceFingerprint / Activation 已显式初始化')
+
   // 检查并处理企业版代理问题
   if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
     logger.warn('检测到系统代理配置:', {
@@ -162,6 +173,7 @@ app.whenReady().then(async () => {
     window.on('closed', ensureDockVisible)
   })
 
+  // IPC 注册在 db/config/activation create 之后（handler 依赖 get* 访问器）
   registerBasicIpcChannels()
   registerTray()
   Menu.setApplicationMenu(buildAppMenu())
@@ -176,8 +188,7 @@ app.whenReady().then(async () => {
 
   ensureDockVisible()
 
-  // 初始化激活服务
-  const activationService = getActivationService()
+  // 初始化激活基础信息
   const initResult = await activationService.initializeBasic()
 
   if (!initResult.success) {
@@ -188,8 +199,8 @@ app.whenReady().then(async () => {
   logger.info('创建后台音频窗口...')
   const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
-  // 初始化 ServiceContainer
-  const container = getServiceContainer()
+  // 显式创建并初始化 ServiceContainer（进程唯一根）
+  const container = createServiceContainer()
   await container.initialize('websocket')
 
   // 设置音频插件的后台窗口

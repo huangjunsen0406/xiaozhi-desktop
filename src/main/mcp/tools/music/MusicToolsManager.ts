@@ -1,12 +1,12 @@
 /**
  * 音乐工具管理器
- * 负责注册音乐相关的 MCP 工具
+ * 负责注册音乐相关的 MCP 工具（注入 MusicPlayer，无静态单例）
  */
 
 import type { PropertyList, PropertyType } from '../../types'
-import { getLogger } from '../../../utils/logger'
+import type { MusicPlayer } from './MusicPlayer'
 
-import { MusicPlayer } from './MusicPlayer'
+import { getLogger } from '../../../utils/logger'
 
 const logger = getLogger('MusicToolsManager')
 
@@ -14,19 +14,11 @@ const logger = getLogger('MusicToolsManager')
  * 音乐工具管理器
  */
 export class MusicToolsManager {
-  private static instance: MusicToolsManager | null = null
   private musicPlayer: MusicPlayer
 
-  private constructor() {
-    this.musicPlayer = MusicPlayer.getInstance()
+  constructor(musicPlayer: MusicPlayer) {
+    this.musicPlayer = musicPlayer
     logger.info('音乐工具管理器初始化')
-  }
-
-  static getInstance(): MusicToolsManager {
-    if (!MusicToolsManager.instance) {
-      MusicToolsManager.instance = new MusicToolsManager()
-    }
-    return MusicToolsManager.instance
   }
 
   /**

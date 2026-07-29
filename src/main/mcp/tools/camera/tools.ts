@@ -5,7 +5,7 @@
 import type { ChatPlugin } from '../../../plugins/ChatPlugin'
 
 import { getServiceContainer } from '../../../core/ServiceContainer'
-import { DatabaseManager } from '../../../services/database'
+import { getDatabase } from '../../../services/database'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
@@ -54,7 +54,7 @@ Examples:
 
       logger.info(`拍照, 问题: ${question}`)
 
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const cameraConfig = db.getFormattedCameraConfig()
 
       const cameraOptions = {

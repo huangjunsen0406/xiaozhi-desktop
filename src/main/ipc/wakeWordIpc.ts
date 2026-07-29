@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { ipcMain } from 'electron'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { BpeConverter } from '../utils/BpeConverter'
 import { getLogger } from '../utils/logger'
 import { PinyinConverter } from '../utils/PinyinConverter'
@@ -14,7 +14,7 @@ const logger = getLogger('WakeWordIpc')
  * 注册唤醒词相关的 IPC 通道
  */
 export function registerWakeWordIpc(context: IpcContext): void {
-  const db = DatabaseManager.getInstance()
+  const db = getDatabase()
 
   /**
    * 获取唤醒词配置

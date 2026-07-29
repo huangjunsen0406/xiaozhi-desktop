@@ -6,10 +6,10 @@ import type { ChatPlugin } from '../../../plugins/ChatPlugin'
 
 import { getServiceContainer } from '../../../core/ServiceContainer'
 import { getLogger } from '../../../utils/logger'
+import { getScreenshotToolFromRuntime } from '../../McpContext'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
 import { analyzeImage } from '../visionAnalyze'
-import { ScreenshotTool } from './ScreenshotTool'
 
 const logger = getLogger('ScreenshotTools')
 
@@ -63,7 +63,7 @@ Examples:
 
       logger.info(`截图, 问题: ${question}, 显示器: ${display}`)
 
-      const screenshotTool = ScreenshotTool.getInstance()
+      const screenshotTool = getScreenshotToolFromRuntime()
 
       const result = await screenshotTool.capture({ display })
 

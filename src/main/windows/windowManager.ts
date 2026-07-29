@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import process from 'node:process'
 import { ipcMain, screen } from 'electron'
 import { hide as hideHover } from '../hover/controller'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { getDisplayModeFile } from '../utils/paths'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildBubbleWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
@@ -144,7 +144,7 @@ function createWindowEnsurer(
  * - 监听 move 事件 debounce 300ms 写回 DB
  */
 function setupPositionMemory(win: BrowserWindow, key: string): void {
-  const db = DatabaseManager.getInstance()
+  const db = getDatabase()
   try {
     const saved = db.getWindowPosition(key)
     if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
@@ -170,7 +170,7 @@ function setupPositionMemory(win: BrowserWindow, key: string): void {
       return
     const [x, y] = win.getPosition()
     try {
-      DatabaseManager.getInstance().setWindowPosition(key, x, y)
+      getDatabase().setWindowPosition(key, x, y)
     }
     catch (error) {
       logger.warn(`保存窗口位置失败 (${key})`, error)
@@ -201,7 +201,7 @@ function applySharedCenterPosition(win: BrowserWindow, key: string): boolean {
   if (win.isDestroyed())
     return false
   try {
-    const saved = DatabaseManager.getInstance().getWindowPosition(key)
+    const saved = getDatabase().getWindowPosition(key)
     if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
       const [w, h] = win.getSize()
       win.setPosition(Math.round(saved.x - w / 2), Math.round(saved.y - h / 2))
@@ -231,7 +231,7 @@ function setupSharedCenterPosition(win: BrowserWindow, key: string): void {
       const cx = Math.round(seed.x + w / 2)
       const cy = Math.round(seed.y + h / 2)
       try {
-        DatabaseManager.getInstance().setWindowPosition(key, cx, cy)
+        getDatabase().setWindowPosition(key, cx, cy)
       }
       catch (error) {
         logger.warn(`保存共享窗口位置种子失败 (${key})`, error)
@@ -249,7 +249,7 @@ function setupSharedCenterPosition(win: BrowserWindow, key: string): void {
     const cx = Math.round(x + w / 2)
     const cy = Math.round(y + h / 2)
     try {
-      DatabaseManager.getInstance().setWindowPosition(key, cx, cy)
+      getDatabase().setWindowPosition(key, cx, cy)
     }
     catch (error) {
       logger.warn(`保存共享窗口位置失败 (${key})`, error)

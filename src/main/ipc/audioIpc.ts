@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 import { AudioConfig as AudioConfigInstance } from '../audio/AudioConfig'
 import { OpusCodec } from '../audio/OpusCodec'
 import { getServiceContainer } from '../core/ServiceContainer'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { SystemVolumeController } from '../utils/SystemVolumeController'
 import { createIpcHandler, failure, success } from './middleware'
@@ -12,9 +12,6 @@ const logger = getLogger('AudioIpc')
 
 // Opus 编解码器实例
 let opusCodec: OpusCodec | null = null
-
-// 数据库实例
-const db = DatabaseManager.getInstance()
 
 // 系统音量控制器实例
 const systemVolumeController = new SystemVolumeController()
@@ -35,6 +32,7 @@ export function initOpusCodec(): OpusCodec {
  */
 export function registerAudioIpc(): void {
   logger.info('注册音频 IPC 通道...')
+  const db = getDatabase()
 
   // 使用中间件注册处理器
   createIpcHandler({
@@ -206,7 +204,7 @@ export function getOpusCodec(): OpusCodec | null {
  */
 export function getAudioConfig(): Partial<AudioConfig> {
   try {
-    return db.getFormattedAudioConfig()
+    return getDatabase().getFormattedAudioConfig()
   }
   catch (error) {
     logger.error('获取音频配置失败:', error)
@@ -242,7 +240,7 @@ export function setAudioConfig(config: Partial<AudioConfig>): void {
       dbUpdates.conversation_mode = config.conversationMode ?? 'auto'
     }
 
-    db.updateAudioConfig(dbUpdates)
+    getDatabase().updateAudioConfig(dbUpdates)
   }
   catch (error) {
     logger.error('设置音频配置失败:', error)

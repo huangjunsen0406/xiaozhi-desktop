@@ -1,5 +1,5 @@
 import type { ValidSampleRate } from '@shared/types'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('AudioConfig')
@@ -29,7 +29,7 @@ class AudioConfigClass {
 
   private loadConfig(): AudioParams {
     try {
-      const db = DatabaseManager.getInstance()
+      const db = getDatabase()
       const dbConfig = db.getFormattedAudioConfig()
 
       const inputRate = dbConfig.inputSampleRate

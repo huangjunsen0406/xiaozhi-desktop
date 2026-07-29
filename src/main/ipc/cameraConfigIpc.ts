@@ -2,13 +2,13 @@
  * 摄像头配置 IPC 处理
  */
 import { ipcMain } from 'electron'
-import { DatabaseManager } from '../services/database'
+import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('CameraConfigIpc')
 
 export function registerCameraConfigIpc(): void {
-  const db = DatabaseManager.getInstance()
+  const db = getDatabase()
 
   /**
    * 获取摄像头配置
