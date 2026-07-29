@@ -13,8 +13,8 @@
  * ```
  */
 
-import path from 'node:path'
 import { app } from 'electron'
+import { getLogDir } from '../paths'
 import { createLogger, Logger } from './Logger'
 import { LogLevel } from './types'
 
@@ -70,8 +70,8 @@ export function initLogger(options?: {
     enableFile: options?.enableFile ?? true,
     enableIPC: options?.enableIPC ?? false,
     isProduction: !isDev,
-    // 注入日志目录路径，而不是在 Transport 内部获取
-    logDir: path.join(app.getPath('userData'), 'logs'),
+    // 注入日志目录路径（经 paths API，支持 env/配置覆盖）
+    logDir: getLogDir(),
   }
 
   Logger.initialize(config)

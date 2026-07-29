@@ -12,6 +12,10 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import fs from 'fs-extra'
 
 import { getLogger } from '../utils/logger'
+import {
+  getUserDataDir,
+  getModelsDir as resolveModelsDir,
+} from '../utils/paths'
 
 const logger = getLogger('ModelIpc')
 
@@ -19,7 +23,7 @@ const logger = getLogger('ModelIpc')
  * 获取用户模型目录 - userData/models/
  */
 function getModelsDir(): string {
-  return path.join(app.getPath('userData'), 'models')
+  return resolveModelsDir()
 }
 
 /**
@@ -59,14 +63,14 @@ async function ensureDirectories(): Promise<void> {
  * 获取配置文件路径
  */
 function getConfigFilePath(): string {
-  return path.join(app.getPath('userData'), CONFIG_FILE_NAME)
+  return path.join(getUserDataDir(), CONFIG_FILE_NAME)
 }
 
 /**
  * 获取初始化标记文件路径
  */
 function getInitFlagPath(): string {
-  return path.join(app.getPath('userData'), INIT_FLAG_FILE)
+  return path.join(getUserDataDir(), INIT_FLAG_FILE)
 }
 
 /**

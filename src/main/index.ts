@@ -11,6 +11,7 @@ import { getActivationService } from './services/ActivationService'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
+import { migrateFromEnvIfNeeded, resolveAllPaths } from './utils/paths'
 import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
 import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentDisplayMode, getCurrentModeWindow, onDisplayModeChange, setIsQuitting, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from './windows/windowManager'
 
@@ -118,6 +119,15 @@ else {
 
 app.whenReady().then(async () => {
   logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
+
+  // PATHS：env 覆盖生效时从默认目录复制迁移（不删源、不迁 DB）
+  try {
+    migrateFromEnvIfNeeded()
+    logger.info('PATHS 解析', resolveAllPaths())
+  }
+  catch (error) {
+    logger.warn('PATHS 启动迁移跳过/失败', error)
+  }
 
   // 检查并处理企业版代理问题
   if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {

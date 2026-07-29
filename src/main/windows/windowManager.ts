@@ -1,11 +1,11 @@
 import type { BrowserWindow } from 'electron'
 import fs from 'node:fs'
-import path from 'node:path'
 import process from 'node:process'
-import { app, ipcMain, screen } from 'electron'
+import { ipcMain, screen } from 'electron'
 import { hide as hideHover } from '../hover/controller'
 import { DatabaseManager } from '../services/database'
 import { getLogger } from '../utils/logger'
+import { getDisplayModeFile } from '../utils/paths'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildBubbleWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
 
 const logger = getLogger('WindowManager')
@@ -27,15 +27,16 @@ const windowRefs = {
 // 显示模式状态管理
 type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
 
-// 显示模式持久化文件路径
-const DISPLAY_MODE_FILE = path.join(app.getPath('userData'), 'display-mode.json')
+function getDisplayModeFilePath(): string {
+  return getDisplayModeFile()
+}
 
 /**
  * 保存显示模式到磁盘
  */
 function saveDisplayMode(mode: DisplayMode): void {
   try {
-    fs.writeFileSync(DISPLAY_MODE_FILE, JSON.stringify({ mode }), 'utf-8')
+    fs.writeFileSync(getDisplayModeFilePath(), JSON.stringify({ mode }), 'utf-8')
   }
   catch (error) {
     logger.warn('保存显示模式失败', error)
@@ -47,7 +48,7 @@ function saveDisplayMode(mode: DisplayMode): void {
  */
 function loadDisplayMode(): DisplayMode {
   try {
-    const data = JSON.parse(fs.readFileSync(DISPLAY_MODE_FILE, 'utf-8'))
+    const data = JSON.parse(fs.readFileSync(getDisplayModeFilePath(), 'utf-8'))
     const mode = data?.mode
     // 校验是否为合法值
     if (mode === 'main' || mode === 'mini' || mode === 'chat' || mode === 'live2d' || mode === 'pets') {

@@ -5,10 +5,15 @@
  * sprite-pet://   — 访问 userData/pets/ 中的精灵宠物文件
  */
 import path from 'node:path'
-import { app, net, protocol } from 'electron'
+import { net, protocol } from 'electron'
 import fs from 'fs-extra'
 
 import { getLogger } from './logger'
+import {
+  isPathInside,
+  getModelsDir as resolveModelsDir,
+  getPetsDir as resolvePetsDir,
+} from './paths'
 
 const logger = getLogger('ModelProtocol')
 
@@ -16,11 +21,11 @@ const logger = getLogger('ModelProtocol')
  * 获取用户模型目录
  */
 function getModelsDir(): string {
-  return path.join(app.getPath('userData'), 'models')
+  return resolveModelsDir()
 }
 
 function getPetsDir(): string {
-  return path.join(app.getPath('userData'), 'pets')
+  return resolvePetsDir()
 }
 
 /**
@@ -72,9 +77,9 @@ export function registerModelProtocolHandler(): void {
       const modelsDir = getModelsDir()
       const fullPath = path.join(modelsDir, modelName, filePath)
 
-      // 安全检查：确保路径在 models 目录内
-      const normalizedPath = path.normalize(fullPath)
-      if (!normalizedPath.startsWith(modelsDir)) {
+      // 安全检查：确保路径在 models 目录内（resolve + 分隔符边界）
+      const normalizedPath = path.resolve(fullPath)
+      if (!isPathInside(modelsDir, normalizedPath)) {
         logger.error('路径越界访问被拒绝', { requested: fullPath, modelsDir })
         return new Response('Access denied', { status: 403 })
       }
@@ -115,9 +120,9 @@ export function registerModelProtocolHandler(): void {
 
       const petsDir = getPetsDir()
       const fullPath = path.join(petsDir, petId, filePath)
-      const normalizedPath = path.normalize(fullPath)
+      const normalizedPath = path.resolve(fullPath)
 
-      if (!normalizedPath.startsWith(petsDir)) {
+      if (!isPathInside(petsDir, normalizedPath)) {
         return new Response('Access denied', { status: 403 })
       }
 

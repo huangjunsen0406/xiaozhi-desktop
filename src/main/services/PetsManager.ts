@@ -6,15 +6,15 @@
  */
 import type { PetInfo } from '@shared/types'
 import path from 'node:path'
-import { app } from 'electron'
 import fs from 'fs-extra'
 import sharp from 'sharp'
 import { getLogger } from '../utils/logger'
+import {
+  getPetsConfigFile,
+  getPetsDir as resolvePetsDir,
+} from '../utils/paths'
 
 const logger = getLogger('PetsManager')
-
-/** 宠物配置文件名 */
-const PETS_CONFIG_FILE = 'pets-config.json'
 
 /** 精灵图参数 */
 const FRAME_WIDTH = 192
@@ -32,14 +32,14 @@ interface PetsConfig {
  * 获取宠物存储目录
  */
 function getPetsDir(): string {
-  return path.join(app.getPath('userData'), 'pets')
+  return resolvePetsDir()
 }
 
 /**
  * 获取宠物配置文件路径
  */
 function getConfigFilePath(): string {
-  return path.join(app.getPath('userData'), PETS_CONFIG_FILE)
+  return getPetsConfigFile()
 }
 
 /**

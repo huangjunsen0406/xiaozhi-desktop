@@ -14,10 +14,17 @@ import type {
   DbWakeWordConfig,
 } from '../types/database'
 import { existsSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
-import { app } from 'electron'
 import { getLogger } from '../utils/logger'
+import { getDatabasePath } from '../utils/paths'
+
+/**
+ * 当前配置 schema 版本
+ *
+ * 向前迁移时递增；现有 ad-hoc 迁移收敛进版本框架后 stamp 到此基线。
+ */
+export const CONFIG_VERSION = 1
 
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null
@@ -25,14 +32,14 @@ export class DatabaseManager {
   private logger = getLogger('Database') // 移到类内部
 
   private constructor() {
-    // 统一使用 userData/data 目录（遵循 Electron 规范）
-    const dbDir = join(app.getPath('userData'), 'data')
+    // 统一使用 paths API（默认仍为 userData/data，升级无感）
+    const dbPath = getDatabasePath()
+    const dbDir = dirname(dbPath)
 
     if (!existsSync(dbDir)) {
       mkdirSync(dbDir, { recursive: true })
     }
 
-    const dbPath = join(dbDir, 'xiaozhi.db')
     this.logger.info(`数据库路径: ${dbPath}`)
 
     this.db = new Database(dbPath)
@@ -212,16 +219,86 @@ export class DatabaseManager {
       )
     `)
 
-    // 数据库迁移：从 keywords_list 迁移到 keyword_zh/keyword_en
-    this.migrateWakeWordConfig()
+    // 配置版本元表（CONFIG_VERSION 框架）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `)
 
-    // 数据库迁移：修复 network_config 的空默认值
-    this.migrateNetworkConfigDefaults()
-
-    // 数据库迁移：添加 music_config.url_response_path 列
-    this.migrateMusicConfigUrlResponsePath()
+    // 按 CONFIG_VERSION 向前迁移（含既有 ad-hoc 迁移收敛）
+    this.runConfigMigrations()
 
     this.logger.info('数据库表初始化完成')
+  }
+
+  /**
+   * 读取当前已 stamp 的配置版本（无记录视为 0）
+   */
+  getConfigVersion(): number {
+    try {
+      const row = this.db.prepare(
+        `SELECT value FROM schema_meta WHERE key = 'config_version'`,
+      ).get() as { value: string } | undefined
+      if (!row)
+        return 0
+      const n = Number.parseInt(row.value, 10)
+      return Number.isFinite(n) ? n : 0
+    }
+    catch {
+      return 0
+    }
+  }
+
+  /**
+   * 写入配置版本 stamp
+   */
+  private setConfigVersion(version: number): void {
+    this.db.prepare(`
+      INSERT INTO schema_meta (key, value, updated_at)
+      VALUES ('config_version', ?, strftime('%s', 'now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = strftime('%s', 'now')
+    `).run(String(version))
+  }
+
+  /**
+   * CONFIG_VERSION 向前迁移入口
+   *
+   * - 版本 0→1：跑既有 ad-hoc 迁移并 stamp 基线
+   * - 未来版本在此追加 step
+   */
+  private runConfigMigrations(): void {
+    let current = this.getConfigVersion()
+    this.logger.info(`CONFIG_VERSION: disk=${current}, target=${CONFIG_VERSION}`)
+
+    if (current >= CONFIG_VERSION) {
+      // 已是最新；仍幂等跑一遍结构修复（旧库可能 stamp 前半完成）
+      this.migrateWakeWordConfig()
+      this.migrateNetworkConfigDefaults()
+      this.migrateMusicConfigUrlResponsePath()
+      return
+    }
+
+    // v0 → v1：收敛历史 ad-hoc 迁移
+    if (current < 1) {
+      this.logger.info('执行配置迁移 v0 → v1...')
+      this.migrateWakeWordConfig()
+      this.migrateNetworkConfigDefaults()
+      this.migrateMusicConfigUrlResponsePath()
+      this.setConfigVersion(1)
+      current = 1
+      this.logger.info('配置迁移 v0 → v1 完成')
+    }
+
+    // 未来：if (current < 2) { ...; this.setConfigVersion(2) }
+
+    if (current !== CONFIG_VERSION) {
+      this.logger.warn(`配置版本 stamp 异常: current=${current}, expected=${CONFIG_VERSION}`)
+    }
   }
 
   /**

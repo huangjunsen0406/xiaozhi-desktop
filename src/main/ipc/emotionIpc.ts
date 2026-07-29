@@ -1,20 +1,27 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
-import { app, dialog, ipcMain, webContents } from 'electron'
+import { dialog, ipcMain, webContents } from 'electron'
 import fs from 'fs-extra'
 
 import { getLogger } from '../utils/logger'
+import { getEmotionsDir } from '../utils/paths'
 
 const logger = getLogger('EmotionIpc')
 
-const EMOTIONS_DIR = path.join(app.getPath('userData'), 'emotions')
-const CUSTOM_DIR = path.join(EMOTIONS_DIR, 'custom')
-const MAPPING_FILE = path.join(EMOTIONS_DIR, 'mapping.json')
+function getEmotionsPaths() {
+  const EMOTIONS_DIR = getEmotionsDir()
+  return {
+    EMOTIONS_DIR,
+    CUSTOM_DIR: path.join(EMOTIONS_DIR, 'custom'),
+    MAPPING_FILE: path.join(EMOTIONS_DIR, 'mapping.json'),
+  }
+}
 
 /**
  * 确保目录存在
  */
 async function ensureDirectories() {
+  const { CUSTOM_DIR } = getEmotionsPaths()
   await fs.ensureDir(CUSTOM_DIR)
 }
 
@@ -23,6 +30,7 @@ async function ensureDirectories() {
  */
 async function getMapping(): Promise<Record<string, string>> {
   try {
+    const { MAPPING_FILE } = getEmotionsPaths()
     if (await fs.pathExists(MAPPING_FILE)) {
       return await fs.readJson(MAPPING_FILE)
     }
@@ -37,6 +45,7 @@ async function getMapping(): Promise<Record<string, string>> {
  * 保存映射配置
  */
 async function saveMapping(mapping: Record<string, string>): Promise<void> {
+  const { MAPPING_FILE } = getEmotionsPaths()
   await fs.writeJson(MAPPING_FILE, mapping, { spaces: 2 })
 }
 
@@ -152,6 +161,7 @@ export function registerEmotionIpc(): void {
         // 2. 获取文件扩展名
         const ext = path.extname(sourcePath)
         const targetFileName = `${emotionType}${ext}`
+        const { CUSTOM_DIR } = getEmotionsPaths()
         const targetPath = path.join(CUSTOM_DIR, targetFileName)
 
         // 3. 复制文件
@@ -194,6 +204,7 @@ export function registerEmotionIpc(): void {
         return null
       }
 
+      const { CUSTOM_DIR } = getEmotionsPaths()
       const filePath = path.join(CUSTOM_DIR, fileName)
 
       // 检查文件是否存在
@@ -228,6 +239,7 @@ export function registerEmotionIpc(): void {
 
       if (fileName) {
         // 删除文件
+        const { CUSTOM_DIR } = getEmotionsPaths()
         const filePath = path.join(CUSTOM_DIR, fileName)
         if (await fs.pathExists(filePath)) {
           await fs.remove(filePath)
