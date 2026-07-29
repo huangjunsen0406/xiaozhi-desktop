@@ -303,13 +303,14 @@ export class MqttProtocol extends Protocol {
 
   private createHelloMessage() {
     const audioConfig = getAudioConfig()
+    const aecEnabled = audioConfig.enableEchoCancellation !== false
 
     return {
       type: 'hello',
       version: 3,
       features: {
         mcp: true,
-        aec: true,
+        aec: aecEnabled,
       },
       transport: 'udp',
       audio_params: {

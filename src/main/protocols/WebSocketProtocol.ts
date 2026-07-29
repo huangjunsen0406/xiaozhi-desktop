@@ -2,9 +2,13 @@ import type { ConnectionInfo, HelloMessage } from './Protocol'
 import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
 import { AudioConfig } from '../audio/AudioConfig'
+import { getAudioConfig } from '../ipc/audioIpc'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
+import { isCleanCloseCode } from './wsCloseCodes'
+
+export { isCleanCloseCode, WS_CLEAN_CLOSE_CODES } from './wsCloseCodes'
 
 const logger = getLogger('WebSocket')
 
@@ -235,13 +239,23 @@ export class WebSocketProtocol extends Protocol {
 
     this.closeHandler = (code: number, reason: Buffer) => {
       if (!this.isClosing) {
-        logger.info('连接已关闭', { code, reason: reason.toString() })
+        const clean = isCleanCloseCode(code)
+        const reasonText = reason?.toString() || ''
+        if (clean) {
+          logger.info('连接已由服务端正常关闭', { code, reason: reasonText })
+        }
+        else {
+          logger.info('连接已关闭', { code, reason: reasonText })
+        }
         // 如果连接尚未建立成功，说明 close 事件已在 connect() 的 once 中处理
         if (!this.connected) {
           logger.debug('连接建立前关闭，跳过 handleConnectionLoss（已在 connect 中 reject）')
           return
         }
-        this.handleConnectionLoss(`连接关闭: ${code} ${reason.toString()}`)
+        this.handleConnectionLoss(
+          `连接关闭: ${code} ${reasonText}`,
+          { clean },
+        )
       }
     }
 
@@ -357,11 +371,15 @@ export class WebSocketProtocol extends Protocol {
    * 发送 hello 消息
    */
   private async sendHelloMessage(): Promise<void> {
+    const audioConfig = getAudioConfig()
+    const aecEnabled = audioConfig.enableEchoCancellation !== false
+
     const helloMessage: HelloMessage = {
       type: 'hello',
       version: 1,
       features: {
         mcp: true,
+        aec: aecEnabled,
       },
       transport: 'websocket',
       audio_params: {
@@ -462,16 +480,31 @@ export class WebSocketProtocol extends Protocol {
 
   /**
    * 处理连接丢失
+   *
+   * @param reason 丢失原因
+   * @param options 选项
+   * @param options.clean 服务端正常关闭（1000/1001/1005）。只收回通道，
+   *                      不触发自动重连，也不上报网络错误（对齐 py）。
    */
-  private async handleConnectionLoss(reason: string): Promise<void> {
+  private async handleConnectionLoss(
+    reason: string,
+    options: { clean?: boolean } = {},
+  ): Promise<void> {
+    const clean = options.clean === true
+
     // 防止重复调用
     if (this.isHandlingConnectionLoss) {
-      logger.debug('已在处理连接丢失，忽略', { reason })
+      logger.debug('已在处理连接丢失，忽略', { reason, clean })
       return
     }
     this.isHandlingConnectionLoss = true
 
-    logger.warn('连接丢失', { reason })
+    if (clean) {
+      logger.info('连接已由服务端正常关闭', { reason })
+    }
+    else {
+      logger.warn('连接丢失', { reason })
+    }
 
     const wasConnected = this.connected
     this.connected = false
@@ -497,6 +530,13 @@ export class WebSocketProtocol extends Protocol {
       catch (error) {
         logger.error('调用音频通道关闭回调失败', error)
       }
+    }
+
+    // 服务端正常关闭：会话结束不算故障，不重连也不报错；
+    // 下次交互时按需重新 openAudioChannel
+    if (clean) {
+      this.isHandlingConnectionLoss = false
+      return
     }
 
     // 尝试自动重连
