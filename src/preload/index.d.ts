@@ -11,6 +11,9 @@ import type {
   ChatMessage,
   ChatSession,
   DeviceInfo,
+  McpPluginImportResult,
+  McpToolCatalogItem,
+  McpToolsSaveResult,
   ModelInfo,
   MusicConfig,
   PetInfo,
@@ -39,6 +42,9 @@ export type {
   ChatMessage,
   ChatSession,
   DeviceInfo,
+  McpPluginImportResult,
+  McpToolCatalogItem,
+  McpToolsSaveResult,
   ModelInfo,
   MusicConfig,
   PetInfo,
@@ -184,6 +190,18 @@ export interface RendererApi {
   petsGetSpritesheet: (petId: string) => Promise<string | null>
   petsOpenFolder: () => Promise<void>
   petsOnChanged: (callback: (petId: string) => void) => () => void
+
+  // MCP 工具 APIs
+  mcpToolsGetCatalog: () => Promise<McpToolCatalogItem[]>
+  mcpToolsGetDisabled: () => Promise<string[]>
+  mcpToolsSaveDisabled: (disabledNames: string[]) => Promise<McpToolsSaveResult>
+  mcpToolsSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
+  mcpToolsImportPlugin: (sourcePath: string) => Promise<McpPluginImportResult>
+  mcpToolsOpenFolder: () => Promise<void>
+  mcpToolsGetFolderPath: () => Promise<string>
+  mcpToolsRefresh: () => Promise<McpToolCatalogItem[]>
+  /** 删除已导入外挂，返回最新 catalog */
+  mcpToolsDeletePlugin: (pluginId: string) => Promise<McpToolCatalogItem[]>
 
   // 剪贴板 API
   clipboardWriteText: (text: string) => Promise<void>

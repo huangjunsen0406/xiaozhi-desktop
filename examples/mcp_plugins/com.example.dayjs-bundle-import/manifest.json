@@ -1,0 +1,13 @@
+{
+  "id": "com.example.dayjs-bundle",
+  "name": "Dayjs Bundle Demo",
+  "version": "1.0.0",
+  "api_version": 1,
+  "runtime": "node-inprocess",
+  "entry": "./register.js",
+  "tool_name_prefix": "example.",
+  "enabled_by_default": true,
+  "call_timeout_ms": 30000,
+  "platforms": ["darwin", "win32", "linux"],
+  "description": "第三方 dayjs 已 esbuild 打进 register.js；导入本目录即可，主程序无需安装 dayjs"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "com.example.hello",
+  "name": "Hello Demo",
+  "version": "1.0.0",
+  "api_version": 1,
+  "runtime": "node-inprocess",
+  "entry": "./register.js",
+  "tool_name_prefix": "example.",
+  "enabled_by_default": true,
+  "call_timeout_ms": 30000,
+  "platforms": ["darwin", "win32", "linux"],
+  "description": "示例外挂：注册 example.hello 打招呼工具"
+}

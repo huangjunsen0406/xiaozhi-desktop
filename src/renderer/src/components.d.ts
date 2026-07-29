@@ -27,6 +27,7 @@ declare module 'vue' {
     IconCarbonSendAlt: typeof import('~icons/carbon/send-alt')['default']
     IconCarbonSidePanelClose: typeof import('~icons/carbon/side-panel-close')['default']
     IconCarbonSidePanelOpen: typeof import('~icons/carbon/side-panel-open')['default']
+    McpToolsSettings: typeof import('./components/settings/McpToolsSettings.vue')['default']
     ModelSettings: typeof import('./components/settings/ModelSettings.vue')['default']
     MusicSettings: typeof import('./components/settings/MusicSettings.vue')['default']
     NButton: typeof import('naive-ui')['NButton']

@@ -1,0 +1,35 @@
+/**
+ * MCP 工具设置页共享类型
+ */
+
+/** catalog 中单行工具 */
+export interface McpToolCatalogItem {
+  /** 工具全名，如 self.music.pause */
+  name: string
+  /** 中文展示名 */
+  label: string
+  /** 分组展示名（内置中文 / 外挂 manifest.name） */
+  group: string
+  /** 分组稳定 key：内置 domain 或外挂 pluginId，UI 按此归组 */
+  groupKey: string
+  /** 描述 */
+  description: string
+  /** 是否启用（非 DISABLED） */
+  enabled: boolean
+  /** 来源 */
+  source: 'builtin' | 'plugin'
+  /** 外挂插件 id */
+  pluginId?: string
+}
+
+/** 保存禁用列表结果 */
+export interface McpToolsSaveResult {
+  disabled: string[]
+  reconnected: boolean
+}
+
+/** 导入插件结果 */
+export interface McpPluginImportResult {
+  pluginId: string
+  name: string
+}

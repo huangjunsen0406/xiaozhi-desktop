@@ -183,8 +183,10 @@ export function getEmotionsDir(): string {
 }
 
 /**
- * MCP 外挂插件目录（预留，本轮不实现 loader）
+ * MCP 外挂插件目录
  * XIAOZHI_MCP_PLUGINS_DIR > PATHS.mcpPluginsDir > {userData}/mcp_plugins
+ *
+ * 由 mcp/plugins loader 扫描下一层目录包（manifest.json + entry JS）。
  */
 export function getMcpPluginsDir(): string {
   const env = envPath(ENV_MCP_PLUGINS_DIR)

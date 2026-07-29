@@ -14,8 +14,8 @@ import { registerChatIpc } from './chatIpc'
 import { registerClipboardIpcChannels } from './clipboardIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
+import { registerMcpToolsIpc } from './mcpToolsIpc'
 import { registerModelIpc } from './modelIpc'
-
 import { registerMusicConfigIpc } from './musicConfigIpc'
 import { registerMusicIpc } from './musicIpc'
 import { registerPetsIpc } from './petsIpc'
@@ -44,6 +44,7 @@ export function registerBasicIpcChannels(): void {
 
   registerModelIpc()
   registerPetsIpc()
+  registerMcpToolsIpc()
   registerClipboardIpcChannels()
 
   // 注册窗口拖动行为（提取到独立模块）

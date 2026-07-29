@@ -1,0 +1,216 @@
+/**
+ * McpHost 实现 — 插件 register(host) 的稳定契约
+ *
+ * 插件禁止依赖 getServiceContainer / 应用内部实现细节。
+ * host.get 仅暴露白名单键：logger、config_readonly。
+ */
+
+import type { McpTool, Property, ToolCallback } from '../types'
+import type {
+  McpHost,
+  McpHostGetKey,
+  PropDef,
+  ToolDefLike,
+} from './types'
+import { getConfigManager } from '../../services/configManagerDB'
+import { getLogger } from '../../utils/logger'
+import { PropertyList, PropertyType } from '../types'
+
+const baseLogger = getLogger('McpHost')
+
+export interface McpHostOptions {
+  pluginId: string
+  allowHostGet: McpHostGetKey[]
+  /** 强制前缀（可选） */
+  toolNamePrefix?: string
+  enforcePrefix: boolean
+  /** 调用超时（毫秒），包装 callback */
+  callTimeoutMs: number
+  /** 注册工具到 McpServer */
+  onAddTool: (tool: McpTool) => void
+}
+
+function propDefsToPropertyList(props?: PropDef[]): PropertyList {
+  if (!props || props.length === 0) {
+    return new PropertyList([])
+  }
+  const mapped: Property[] = props.map((p) => {
+    let type: PropertyType
+    switch (p.type) {
+      case 'boolean':
+        type = PropertyType.BOOLEAN
+        break
+      case 'integer':
+        type = PropertyType.INTEGER
+        break
+      case 'number':
+        type = PropertyType.NUMBER
+        break
+      default:
+        type = PropertyType.STRING
+    }
+    return {
+      name: p.name,
+      type,
+      defaultValue: p.defaultValue,
+      minValue: p.minValue,
+      maxValue: p.maxValue,
+    }
+  })
+  return new PropertyList(mapped)
+}
+
+function isPropertyList(value: unknown): value is PropertyList {
+  return (
+    value instanceof PropertyList
+    || (
+      typeof value === 'object'
+      && value !== null
+      && !Array.isArray(value)
+      && typeof (value as PropertyList).parseArguments === 'function'
+      && typeof (value as PropertyList).toJson === 'function'
+    )
+  )
+}
+
+function ensurePropertyList(properties?: PropertyList | PropDef[]): PropertyList {
+  if (!properties) {
+    return new PropertyList([])
+  }
+  if (isPropertyList(properties)) {
+    return properties
+  }
+  return propDefsToPropertyList(properties)
+}
+
+/**
+ * 为工具 callback 包一层超时
+ */
+function withTimeout(
+  callback: ToolCallback,
+  timeoutMs: number,
+  toolName: string,
+): ToolCallback {
+  return async (args) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // 超时后仍可能继续跑的原 promise：挂空 catch，避免 unhandled rejection
+    const work = Promise.resolve().then(() => callback(args))
+    work.catch(() => {})
+    try {
+      const result = await Promise.race([
+        work,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`工具调用超时 (${timeoutMs}ms): ${toolName}`))
+          }, timeoutMs)
+        }),
+      ])
+      return result
+    }
+    finally {
+      if (timer)
+        clearTimeout(timer)
+    }
+  }
+}
+
+/**
+ * 只读配置切片（脱敏，不含密钥）
+ */
+function getConfigReadonlySlice(): Record<string, unknown> {
+  try {
+    const cm = getConfigManager()
+    const all = cm.getAll()
+    return {
+      ota_version_url: all.ota_version_url ?? all.OTA_VERSION_URL ?? null,
+      authorization_url: all.authorization_url ?? all.AUTHORIZATION_URL ?? null,
+      activation_version: all.activation_version ?? all.ACTIVATION_VERSION ?? null,
+      // 不暴露 token / password / hmac
+    }
+  }
+  catch {
+    return {}
+  }
+}
+
+export function createMcpHost(options: McpHostOptions): McpHost {
+  const {
+    pluginId,
+    allowHostGet,
+    toolNamePrefix,
+    enforcePrefix,
+    callTimeoutMs,
+    onAddTool,
+  } = options
+
+  const pluginLogger = {
+    info: (msg: string, meta?: unknown) => baseLogger.info(`[${pluginId}] ${msg}`, meta),
+    warn: (msg: string, meta?: unknown) => baseLogger.warn(`[${pluginId}] ${msg}`, meta),
+    error: (msg: string, err?: unknown, meta?: unknown) => baseLogger.error(`[${pluginId}] ${msg}`, err, meta),
+    debug: (msg: string, meta?: unknown) => baseLogger.debug(`[${pluginId}] ${msg}`, meta),
+  }
+
+  function resolveToolName(name: string): string {
+    if (!enforcePrefix || !toolNamePrefix)
+      return name
+    if (name.startsWith(toolNamePrefix))
+      return name
+    return `${toolNamePrefix}${name}`
+  }
+
+  function registerTool(tool: McpTool | ToolDefLike): void {
+    if (!tool || typeof tool !== 'object' || typeof tool.name !== 'string' || typeof tool.callback !== 'function') {
+      throw new Error('无效的工具定义')
+    }
+
+    const name = resolveToolName(tool.name)
+    const properties = ensurePropertyList(
+      (tool as ToolDefLike).properties as PropertyList | PropDef[] | undefined,
+    )
+
+    const mcpTool: McpTool = {
+      name,
+      description: tool.description || '',
+      properties,
+      callback: withTimeout(tool.callback, callTimeoutMs, name),
+    }
+
+    onAddTool(mcpTool)
+  }
+
+  const host: McpHost = {
+    pluginId,
+
+    addTool(tool: McpTool | ToolDefLike): void {
+      registerTool(tool)
+    },
+
+    tool(name: string, description: string, props?: PropDef[]) {
+      return (fn: ToolCallback) => {
+        registerTool({
+          name,
+          description,
+          properties: propDefsToPropertyList(props),
+          callback: fn,
+        })
+      }
+    },
+
+    get(name: string): unknown {
+      if (!allowHostGet.includes(name as McpHostGetKey)) {
+        pluginLogger.warn(`host.get 拒绝非白名单键: ${name}`)
+        return undefined
+      }
+      switch (name) {
+        case 'logger':
+          return pluginLogger
+        case 'config_readonly':
+          return getConfigReadonlySlice()
+        default:
+          return undefined
+      }
+    },
+  }
+
+  return host
+}

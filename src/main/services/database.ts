@@ -293,13 +293,119 @@ export class DatabaseManager {
    * 写入配置版本 stamp
    */
   private setConfigVersion(version: number): void {
+    this.setSchemaMeta('config_version', String(version))
+  }
+
+  /**
+   * 读写 schema_meta 通用键值（配置扩展、MCP 工具禁用列表等）
+   */
+  getSchemaMeta(key: string): string | null {
+    try {
+      const row = this.db.prepare(
+        `SELECT value FROM schema_meta WHERE key = ?`,
+      ).get(key) as { value: string } | undefined
+      return row?.value ?? null
+    }
+    catch {
+      return null
+    }
+  }
+
+  setSchemaMeta(key: string, value: string): void {
     this.db.prepare(`
       INSERT INTO schema_meta (key, value, updated_at)
-      VALUES ('config_version', ?, strftime('%s', 'now'))
+      VALUES (?, ?, strftime('%s', 'now'))
       ON CONFLICT(key) DO UPDATE SET
         value = excluded.value,
         updated_at = strftime('%s', 'now')
-    `).run(String(version))
+    `).run(key, value)
+  }
+
+  /**
+   * MCP 工具黑名单（DISABLED 工具全名列表）
+   */
+  getMcpDisabledTools(): string[] {
+    const raw = this.getSchemaMeta('mcp_tools_disabled')
+    if (!raw)
+      return []
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (!Array.isArray(parsed))
+        return []
+      return parsed.filter((x): x is string => typeof x === 'string' && x.length > 0)
+    }
+    catch {
+      return []
+    }
+  }
+
+  setMcpDisabledTools(names: string[]): void {
+    const unique = Array.from(new Set(names.filter(n => typeof n === 'string' && n.length > 0)))
+    this.setSchemaMeta('mcp_tools_disabled', JSON.stringify(unique))
+  }
+
+  /**
+   * MCP 外挂插件加载相关配置
+   */
+  getMcpPluginsConfig(): {
+    enabled: boolean
+    disabledIds: string[]
+    enabledIds: string[]
+    allowHostGet: string[]
+    enforcePrefix: boolean
+  } {
+    const parseJsonArray = (key: string, fallback: string[]): string[] => {
+      const raw = this.getSchemaMeta(key)
+      if (!raw)
+        return fallback
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        if (!Array.isArray(parsed))
+          return fallback
+        return parsed.filter((x): x is string => typeof x === 'string')
+      }
+      catch {
+        return fallback
+      }
+    }
+
+    const enabledRaw = this.getSchemaMeta('mcp_plugins_enabled')
+    const enabled = enabledRaw === null ? true : enabledRaw !== '0' && enabledRaw !== 'false'
+
+    const enforceRaw = this.getSchemaMeta('mcp_plugins_enforce_prefix')
+    const enforcePrefix = enforceRaw === '1' || enforceRaw === 'true'
+
+    return {
+      enabled,
+      disabledIds: parseJsonArray('mcp_plugins_disabled_ids', []),
+      enabledIds: parseJsonArray('mcp_plugins_enabled_ids', []),
+      allowHostGet: parseJsonArray('mcp_plugins_allow_host_get', ['logger', 'config_readonly']),
+      enforcePrefix,
+    }
+  }
+
+  setMcpPluginsConfig(partial: {
+    enabled?: boolean
+    disabledIds?: string[]
+    enabledIds?: string[]
+    allowHostGet?: string[]
+    enforcePrefix?: boolean
+  }): void {
+    if (partial.enabled !== undefined) {
+      this.setSchemaMeta('mcp_plugins_enabled', partial.enabled ? '1' : '0')
+    }
+    if (partial.disabledIds !== undefined) {
+      this.setSchemaMeta('mcp_plugins_disabled_ids', JSON.stringify(partial.disabledIds))
+    }
+    if (partial.enabledIds !== undefined) {
+      this.setSchemaMeta('mcp_plugins_enabled_ids', JSON.stringify(partial.enabledIds))
+    }
+    if (partial.allowHostGet !== undefined) {
+      this.setSchemaMeta('mcp_plugins_allow_host_get', JSON.stringify(partial.allowHostGet))
+    }
+    if (partial.enforcePrefix !== undefined) {
+      this.setSchemaMeta('mcp_plugins_enforce_prefix', partial.enforcePrefix ? '1' : '0')
+    }
   }
 
   /**

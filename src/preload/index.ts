@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -140,7 +140,7 @@ const api = {
   modelGetFolderPath: modelApi.getFolderPath,
   modelOnChanged: modelApi.onChanged,
 
-  // 精灵宠物管�� API
+  // 精灵宠物管理 API
   petsGetList: petsApi.getList,
   petsGetCurrent: petsApi.getCurrent,
   petsSetCurrent: petsApi.setCurrent,
@@ -151,6 +151,17 @@ const api = {
   petsGetFolderPath: petsApi.getFolderPath,
   petsGetSpritesheet: petsApi.getSpritesheet,
   petsOnChanged: petsApi.onChanged,
+
+  // MCP 工具 API
+  mcpToolsGetCatalog: mcpToolsApi.getCatalog,
+  mcpToolsGetDisabled: mcpToolsApi.getDisabled,
+  mcpToolsSaveDisabled: mcpToolsApi.saveDisabled,
+  mcpToolsSelectFolder: mcpToolsApi.selectFolder,
+  mcpToolsImportPlugin: mcpToolsApi.importPlugin,
+  mcpToolsOpenFolder: mcpToolsApi.openFolder,
+  mcpToolsGetFolderPath: mcpToolsApi.getFolderPath,
+  mcpToolsRefresh: mcpToolsApi.refresh,
+  mcpToolsDeletePlugin: mcpToolsApi.deletePlugin,
 
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,
