@@ -237,7 +237,7 @@ function setupModel(model: Live2DModel): void {
   // 上报模型头顶相对窗口顶边的偏移，供主进程气泡定位使用。
   // 模型 bbox 底部对齐到 canvas 底，故 bbox 顶到 canvas 顶的距离 = canvasH - bboxH。
   const headOffsetY = Math.max(0, canvasSize.height - newBounds.height)
-  window.electron?.ipcRenderer.send('bubble:set-anchor-offset', headOffsetY)
+  window.api.bubbleSetAnchorOffset(headOffsetY)
 }
 
 /**

@@ -41,7 +41,7 @@ import TitleBar from '../components/TitleBar.vue'
 type Key = 'system' | 'appearance' | 'model' | 'pets' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey' | 'mcp'
 const selected = ref<Key>('system')
 const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
-const showTitleBar = window.electron.process.platform !== 'darwin'
+const showTitleBar = window.api.getPlatform() !== 'darwin'
 
 const menuOptions = [
   { label: '系统选项', key: 'system', icon: withIcon(IconCarbonSettings) },

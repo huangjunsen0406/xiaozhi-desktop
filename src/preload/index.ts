@@ -4,7 +4,7 @@
  */
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, audioApi, backgroundAudioApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -28,6 +28,16 @@ const api = {
   toggleMaximize: windowApi.toggleMaximize,
   close: windowApi.close,
   openExternal: windowApi.openExternal,
+
+  // 环境信息（替代 window.electron.process）
+  getPlatform: appEnvApi.getPlatform,
+  getProcessVersions: appEnvApi.getProcessVersions,
+
+  // 气泡窗
+  bubbleShow: bubbleApi.show,
+  bubbleHide: bubbleApi.hide,
+  bubbleSetAnchorOffset: bubbleApi.setAnchorOffset,
+  bubbleOnSetArrowX: bubbleApi.onSetArrowX,
 
   // Hover 控制 API
   showHover: hoverApi.showHover,

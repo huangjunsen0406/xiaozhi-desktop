@@ -6,7 +6,7 @@ import Dots from '../components/Dots.vue'
 import { useEmotion } from '../composables/useEmotion'
 import { useAppStore } from '../stores/app'
 
-const platform = window.electron.process.platform
+const platform = window.api.getPlatform()
 const isMac = platform === 'darwin'
 
 // 使用全局 App Store

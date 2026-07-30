@@ -81,6 +81,14 @@ export interface RendererApi {
   toggleMaximize: () => void
   close: () => void
   openExternal: (string: string) => void
+  /** process.platform；勿再用 window.electron.process.platform */
+  getPlatform: () => NodeJS.Platform | string
+  getProcessVersions: () => Partial<NodeJS.ProcessVersions> & Record<string, string | undefined>
+  // Bubble APIs（独立气泡窗，禁止 renderer 裸打 bubble:*）
+  bubbleShow: () => void
+  bubbleHide: () => void
+  bubbleSetAnchorOffset: (offsetY: number) => void
+  bubbleOnSetArrowX: (callback: (x: number) => void) => () => void
   // Activation APIs
   activationInitialize: () => Promise<{ success: boolean, error?: string }>
   activationGetDeviceInfo: () => Promise<ActivationDeviceInfo>

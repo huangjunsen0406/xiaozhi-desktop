@@ -77,33 +77,21 @@ function handleServerMessage(message: ServerMessage): void {
   }
 }
 
-// 监听 bubbleText 变化，通知主进程显示/隐藏气泡窗口
+// 监听 bubbleText 变化，经 preload 通知主进程显示/隐藏气泡窗口
 watch(bubbleText, (newVal) => {
-  if (newVal) {
-    window.electron?.ipcRenderer.send('bubble:show')
-  }
-  else {
-    window.electron?.ipcRenderer.send('bubble:hide')
-  }
+  if (newVal)
+    window.api.bubbleShow()
+  else
+    window.api.bubbleHide()
 })
 
 onMounted(() => {
-  // 监听设备状态变更
-  removeStateListener = window.api?.appOnStateChanged?.(handleStateChanged) ?? null
-
-  // 监听服务器消息
-  removeMessageListener = window.api?.appOnServerMessage?.(handleServerMessage) ?? null
-
-  // 监听主进程下发的箭头位置（边缘场景下气泡整体滑动指向精灵中心）
-  const ipc = window.electron?.ipcRenderer
-  if (ipc) {
-    const arrowHandler = (_event: unknown, x: number): void => {
-      if (typeof x === 'number' && Number.isFinite(x))
-        arrowX.value = x
-    }
-    ipc.on('bubble:set-arrow-x', arrowHandler)
-    removeArrowListener = () => ipc.removeListener('bubble:set-arrow-x', arrowHandler)
-  }
+  removeStateListener = window.api.appOnStateChanged(handleStateChanged)
+  removeMessageListener = window.api.appOnServerMessage(handleServerMessage)
+  // 主进程下发箭头位置（勿再用 window.electron.ipcRenderer）
+  removeArrowListener = window.api.bubbleOnSetArrowX((x) => {
+    arrowX.value = x
+  })
 })
 
 onUnmounted(() => {
