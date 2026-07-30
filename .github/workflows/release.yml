@@ -40,10 +40,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Apple Silicon 包（runner 本身多为 arm64）
           - os: macos-latest
             arch: arm64
             build_cmd: --mac --arm64
-          - os: macos-13
+          # Intel Mac 包：在 arm runner 上交叉出 x64（不再依赖退役风险高的 macos-13）
+          # 需要 Rosetta + npm_config_arch=x64 拉取/编译 darwin-x64 原生模块
+          - os: macos-latest
             arch: x64
             build_cmd: --mac --x64
           - os: windows-latest
@@ -73,6 +76,16 @@ jobs:
         with:
           python-version: '3.11'
 
+      # arm runner 打 mac x64 时，部分 native 模块编译需要 x86_64 工具链（Rosetta）
+      - name: Install Rosetta 2 (mac x64 on Apple Silicon)
+        if: runner.os == 'macOS' && matrix.arch == 'x64'
+        run: |
+          if /usr/bin/pgrep oahd >/dev/null 2>&1; then
+            echo "Rosetta already available"
+          else
+            softwareupdate --install-rosetta --agree-to-license
+          fi
+
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev libxt-dev libxinerama-dev libxkbcommon-x11-dev libxrandr-dev libxkbfile-dev ruby-dev
@@ -96,11 +109,15 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           npm_config_arch: ${{ matrix.arch }}
+          npm_config_target_arch: ${{ matrix.arch }}
 
       - name: Build
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never
         env:
           USE_SYSTEM_FPM: ${{ runner.os == 'Linux' && 'true' || 'false' }}
+          # 与 install 一致，避免 electron-builder / rebuild 回到 host arch
+          npm_config_arch: ${{ matrix.arch }}
+          npm_config_target_arch: ${{ matrix.arch }}
 
       - name: Upload assets to Public Release
         uses: softprops/action-gh-release@v2
