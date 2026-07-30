@@ -1,8 +1,8 @@
 import type { BackgroundAudioStatus } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getLogger } from '../utils/logger'
-
 import { getBackgroundAudioWindow } from '../windows/windowManager'
+import { createIpcHandler, success } from './middleware'
 
 const logger = getLogger('BackgroundAudioIpc')
 
@@ -29,21 +29,32 @@ export function registerBackgroundAudioIpc(): void {
   }
 
   // 切换音频设备（用户在设置中更改设备时调用）
-  ipcMain.handle('background-audio:switch-devices', async () => {
-    sendAudioCommand('switchDevices')
+  createIpcHandler({
+    channel: 'background-audio:switch-devices',
+    handler: async () => {
+      sendAudioCommand('switchDevices')
+      return success()
+    },
   })
 
   // 清理资源（仅在应用退出时调用）
-  ipcMain.handle('background-audio:cleanup', async () => {
-    sendAudioCommand('cleanup')
+  createIpcHandler({
+    channel: 'background-audio:cleanup',
+    handler: async () => {
+      sendAudioCommand('cleanup')
+      return success()
+    },
   })
 
   // 获取音频状态
-  ipcMain.handle('background-audio:get-status', async () => {
-    return audioStatus
+  createIpcHandler({
+    channel: 'background-audio:get-status',
+    handler: async () => {
+      return success(audioStatus)
+    },
   })
 
-  // 监听音频状态更新
+  // 监听音频状态更新（事件推送，非 handle）
   ipcMain.on('audio:state', (_, state: { capturing?: boolean, playing?: boolean, error?: string }) => {
     logger.info('收到音频状态更新:', state)
 

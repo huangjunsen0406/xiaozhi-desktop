@@ -2,12 +2,14 @@
  * Emotion (表情) API 模块
  */
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 export const emotionApi = {
   // 打开文件选择器
-  selectImage: (): Promise<Electron.OpenDialogReturnValue> =>
-    ipcRenderer.invoke('emotion:select-image'),
+  selectImage: async (): Promise<Electron.OpenDialogReturnValue> => {
+    const result: unknown = await ipcRenderer.invoke('emotion:select-image')
+    return unwrapIpcResult(result, '选择表情图片失败')
+  },
 
   // 上传自定义表情
   uploadCustom: async (emotionType: string, sourcePath: string): Promise<void> => {
@@ -16,12 +18,16 @@ export const emotionApi = {
   },
 
   // 获取映射配置
-  getMapping: (): Promise<Record<string, string>> =>
-    ipcRenderer.invoke('emotion:get-mapping'),
+  getMapping: async (): Promise<Record<string, string>> => {
+    const result: unknown = await ipcRenderer.invoke('emotion:get-mapping')
+    return unwrapIpcResult<Record<string, string>>(result, '获取表情映射失败') ?? {}
+  },
 
   // 获取自定义图片路径
-  getCustomPath: (emotionType: string): Promise<string | null> =>
-    ipcRenderer.invoke('emotion:get-custom-path', emotionType),
+  getCustomPath: async (emotionType: string): Promise<string | null> => {
+    const result: unknown = await ipcRenderer.invoke('emotion:get-custom-path', emotionType)
+    return unwrapIpcResult<string | null>(result, '获取自定义表情路径失败') ?? null
+  },
 
   // 重置表情（删除自定义）
   reset: async (emotionType: string): Promise<void> => {

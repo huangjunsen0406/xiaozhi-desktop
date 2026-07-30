@@ -1,81 +1,64 @@
 /**
  * 聊天 IPC 通道
- * 提供聊天会话和消息的数据库操作接口
+ * 提供聊天会话和消息的数据库操作接口（createIpcHandler + IpcResult）
  */
 import type { DbChatMessage } from '../types/database'
 import { Buffer } from 'node:buffer'
-import { ipcMain } from 'electron'
 import { getDatabase } from '../services/database'
-
 import { getLogger } from '../utils/logger'
+import { createIpcHandler, success } from './middleware'
 
 const logger = getLogger('ChatIpc')
 
 export function registerChatIpc(): void {
   const db = getDatabase()
 
-  /**
-   * 获取会话列表
-   */
-  ipcMain.handle('chat:get-sessions', async (_event, limit = 50, offset = 0) => {
-    try {
+  createIpcHandler({
+    channel: 'chat:get-sessions',
+    handler: async (_event, limitUnknown: unknown, offsetUnknown: unknown) => {
+      const limit = typeof limitUnknown === 'number' ? limitUnknown : 50
+      const offset = typeof offsetUnknown === 'number' ? offsetUnknown : 0
       const sessions = db.getChatSessions(limit, offset)
-      return { success: true, data: sessions }
-    }
-    catch (error) {
-      logger.error('获取会话列表失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '获取会话列表失败',
-      }
-    }
+      return success(sessions)
+    },
   })
 
-  /**
-   * 获取单个会话
-   */
-  ipcMain.handle('chat:get-session', async (_event, sessionId: string) => {
-    try {
-      const session = db.getChatSession(sessionId)
-      return { success: true, data: session }
-    }
-    catch (error) {
-      logger.error('获取会话失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '获取会话失败',
-      }
-    }
+  createIpcHandler({
+    channel: 'chat:get-session',
+    schema: {
+      sessionId: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, sessionId: unknown) => {
+      const session = db.getChatSession(String(sessionId))
+      return success(session)
+    },
   })
 
-  /**
-   * 创建会话
-   */
-  ipcMain.handle('chat:create-session', async (_event, data: {
-    session_id: string
-    title?: string
-    started_at?: number
-  }) => {
-    try {
+  createIpcHandler({
+    channel: 'chat:create-session',
+    schema: {
+      data: { type: 'object', required: true },
+    },
+    handler: async (_event, dataUnknown: unknown) => {
+      const data = dataUnknown as {
+        session_id: string
+        title?: string
+        started_at?: number
+      }
       const session = db.createChatSession(data)
-      return { success: true, data: session }
-    }
-    catch (error) {
-      logger.error('创建会话失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '创建会话失败',
-      }
-    }
+      return success(session)
+    },
   })
 
-  /**
-   * 获取消息列表
-   * @param limit 不传或传undefined则加载所有消息
-   */
-  ipcMain.handle('chat:get-messages', async (_event, sessionId: string, limit?: number, offset = 0) => {
-    try {
-      const messages = db.getChatMessages(sessionId, limit, offset)
+  createIpcHandler({
+    channel: 'chat:get-messages',
+    schema: {
+      sessionId: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, sessionId: unknown, limitUnknown: unknown, offsetUnknown: unknown) => {
+      const limit = typeof limitUnknown === 'number' ? limitUnknown : undefined
+      const offset = typeof offsetUnknown === 'number' ? offsetUnknown : 0
+      const messages = db.getChatMessages(String(sessionId), limit, offset)
 
       // 将 DB 记录转换为 IPC 传输格式：Buffer -> Uint8Array, source_type -> sourceType
       const processedMessages = messages.map((msg: DbChatMessage) => {
@@ -89,30 +72,26 @@ export function registerChatIpc(): void {
         }
       })
 
-      return { success: true, data: processedMessages }
-    }
-    catch (error) {
-      logger.error('获取消息失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '获取消息失败',
-      }
-    }
+      return success(processedMessages)
+    },
   })
 
-  /**
-   * 添加消息
-   */
-  ipcMain.handle('chat:add-message', async (_event, data: {
-    session_id: string
-    role: 'user' | 'assistant'
-    content: string
-    emotion?: string
-    sourceType: string
-    image_data?: Buffer | Uint8Array
-    timestamp?: number
-  }) => {
-    try {
+  createIpcHandler({
+    channel: 'chat:add-message',
+    schema: {
+      data: { type: 'object', required: true },
+    },
+    handler: async (_event, dataUnknown: unknown) => {
+      const data = dataUnknown as {
+        session_id: string
+        role: 'user' | 'assistant'
+        content: string
+        emotion?: string
+        sourceType: string
+        image_data?: Buffer | Uint8Array
+        timestamp?: number
+      }
+
       // 如果是 Uint8Array，转换为 Buffer
       let imageData: Buffer | undefined
       if (data.image_data) {
@@ -131,66 +110,42 @@ export function registerChatIpc(): void {
         image_data: imageData,
         timestamp: data.timestamp,
       })
-      return { success: true, data: message }
-    }
-    catch (error) {
-      logger.error('添加消息失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '添加消息失败',
-      }
-    }
+      return success(message)
+    },
   })
 
-  /**
-   * 更新会话标题
-   */
-  ipcMain.handle('chat:update-session-title', async (_event, sessionId: string, title: string) => {
-    try {
-      db.updateChatSessionTitle(sessionId, title)
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('更新标题失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '更新标题失败',
-      }
-    }
+  createIpcHandler({
+    channel: 'chat:update-session-title',
+    schema: {
+      sessionId: { type: 'string', required: true, minLength: 1 },
+      title: { type: 'string', required: true },
+    },
+    handler: async (_event, sessionId: unknown, title: unknown) => {
+      db.updateChatSessionTitle(String(sessionId), String(title))
+      return success()
+    },
   })
 
-  /**
-   * 删除会话
-   */
-  ipcMain.handle('chat:delete-session', async (_event, sessionId: string) => {
-    try {
-      db.deleteChatSession(sessionId)
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('删除会话失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '删除会话失败',
-      }
-    }
+  createIpcHandler({
+    channel: 'chat:delete-session',
+    schema: {
+      sessionId: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, sessionId: unknown) => {
+      db.deleteChatSession(String(sessionId))
+      return success()
+    },
   })
 
-  /**
-   * 清空消息
-   */
-  ipcMain.handle('chat:clear-messages', async (_event, sessionId: string) => {
-    try {
-      db.clearChatMessages(sessionId)
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('清空消息失败', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '清空消息失败',
-      }
-    }
+  createIpcHandler({
+    channel: 'chat:clear-messages',
+    schema: {
+      sessionId: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, sessionId: unknown) => {
+      db.clearChatMessages(String(sessionId))
+      return success()
+    },
   })
 
   logger.info('聊天 IPC 通道已注册')

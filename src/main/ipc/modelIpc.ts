@@ -1,14 +1,13 @@
 import type { ModelInfo } from '@shared/types'
 /**
- * 模型管理 IPC 处理器
+ * 模型管理 IPC 处理器（createIpcHandler + IpcResult）
  *
  * 模型统一存储在 userData/models/ 目录
  * 首次启动时会从内置资源目录复制默认模型
  */
-import type { IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import process from 'node:process'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import fs from 'fs-extra'
 
 import { getLogger } from '../utils/logger'
@@ -16,6 +15,7 @@ import {
   getUserDataDir,
   getModelsDir as resolveModelsDir,
 } from '../utils/paths'
+import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('ModelIpc')
 
@@ -369,26 +369,28 @@ export function registerModelIpc(): void {
   // 初始化模型目录（首次启动时复制内置模型）
   initializeModels().catch(err => logger.error('初始化模型目录失败', err))
 
-  /**
-   * 获取模型列表
-   */
-  ipcMain.handle('model:get-list', async (_event: IpcMainInvokeEvent) => {
-    return getModelList()
+  createIpcHandler({
+    channel: 'model:get-list',
+    handler: async () => {
+      return success(await getModelList())
+    },
   })
 
-  /**
-   * 获取当前模型
-   */
-  ipcMain.handle('model:get-current', async (_event: IpcMainInvokeEvent) => {
-    const config = await getConfig()
-    return config.currentModel
+  createIpcHandler({
+    channel: 'model:get-current',
+    handler: async () => {
+      const config = await getConfig()
+      return success(config.currentModel)
+    },
   })
 
-  /**
-   * 切换模型
-   */
-  ipcMain.handle('model:set-current', async (_event: IpcMainInvokeEvent, modelId: string) => {
-    try {
+  createIpcHandler({
+    channel: 'model:set-current',
+    schema: {
+      modelId: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, modelIdUnknown: unknown) => {
+      const modelId = String(modelIdUnknown)
       const config = await getConfig()
       config.currentModel = modelId
       await saveConfig(config)
@@ -403,36 +405,34 @@ export function registerModelIpc(): void {
       }
       logger.info(`已广播模型切换事件到 ${windows.length} 个窗口`)
 
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('切换模型失败', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
-  /**
-   * 打开文件夹选择器
-   */
-  ipcMain.handle('model:select-folder', async (_event: IpcMainInvokeEvent) => {
-    return dialog.showOpenDialog({
-      title: '选择 Live2D 模型文件夹',
-      properties: ['openDirectory'],
-    })
+  createIpcHandler({
+    channel: 'model:select-folder',
+    handler: async () => {
+      return success(await dialog.showOpenDialog({
+        title: '选择 Live2D 模型文件夹',
+        properties: ['openDirectory'],
+      }))
+    },
   })
 
-  /**
-   * 导入模型
-   */
-  ipcMain.handle('model:import', async (_event: IpcMainInvokeEvent, sourcePath: string) => {
-    try {
+  createIpcHandler({
+    channel: 'model:import',
+    schema: {
+      sourcePath: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, sourcePathUnknown: unknown) => {
+      const sourcePath = String(sourcePathUnknown)
       const modelsDir = getModelsDir()
       logger.info(`导入模型: ${sourcePath}`)
 
       // 验证文件夹
       const validation = await validateModelFolder(sourcePath)
       if (!validation.valid) {
-        return { success: false, error: validation.error }
+        return failure(validation.error || '模型验证失败')
       }
 
       // 获取文件夹名作为模型 ID
@@ -441,7 +441,7 @@ export function registerModelIpc(): void {
 
       // 检查是否已存在
       if (await fs.pathExists(targetPath)) {
-        return { success: false, error: `模型 "${modelId}" 已存在` }
+        return failure(`模型 "${modelId}" 已存在`)
       }
 
       // 复制文件夹
@@ -461,25 +461,24 @@ export function registerModelIpc(): void {
         }
       }
 
-      return { success: true, modelId }
-    }
-    catch (error) {
-      logger.error('导入模型失败', error)
-      return { success: false, error: String(error) }
-    }
+      // modelId 放在 data 内，preload 用 unwrapIpcResult 取 data
+      return success({ modelId })
+    },
   })
 
-  /**
-   * 删除模型
-   */
-  ipcMain.handle('model:delete', async (_event: IpcMainInvokeEvent, modelId: string) => {
-    try {
+  createIpcHandler({
+    channel: 'model:delete',
+    schema: {
+      modelId: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, modelIdUnknown: unknown) => {
+      const modelId = String(modelIdUnknown)
       const modelsDir = getModelsDir()
       const modelPath = path.join(modelsDir, modelId)
 
       // 检查模型是否存在
       if (!(await fs.pathExists(modelPath))) {
-        return { success: false, error: '模型不存在' }
+        return failure('模型不存在')
       }
 
       // 删除模型文件夹
@@ -493,29 +492,25 @@ export function registerModelIpc(): void {
         await saveConfig(config)
       }
 
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('删除模型失败', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
-  /**
-   * 打开模型目录
-   */
-  ipcMain.handle('model:open-folder', async (_event: IpcMainInvokeEvent) => {
-    const modelsDir = getModelsDir()
-    await ensureDirectories()
-    shell.openPath(modelsDir)
-    return { success: true }
+  createIpcHandler({
+    channel: 'model:open-folder',
+    handler: async () => {
+      const modelsDir = getModelsDir()
+      await ensureDirectories()
+      shell.openPath(modelsDir)
+      return success()
+    },
   })
 
-  /**
-   * 获取模型目录路径
-   */
-  ipcMain.handle('model:get-folder-path', async (_event: IpcMainInvokeEvent) => {
-    return getModelsDir()
+  createIpcHandler({
+    channel: 'model:get-folder-path',
+    handler: async () => {
+      return success(getModelsDir())
+    },
   })
 
   logger.info('模型管理 IPC 处理器已注册')

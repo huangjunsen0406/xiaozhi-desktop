@@ -1,10 +1,10 @@
-import type { IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
-import { dialog, ipcMain, webContents } from 'electron'
+import { dialog, webContents } from 'electron'
 import fs from 'fs-extra'
 
 import { getLogger } from '../utils/logger'
 import { getEmotionsDir } from '../utils/paths'
+import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('EmotionIpc')
 
@@ -120,125 +120,119 @@ async function validateImageFile(filePath: string): Promise<{ valid: boolean, er
 }
 
 /**
- * 注册表情相关 IPC 处理器
+ * 注册表情相关 IPC 处理器（createIpcHandler + IpcResult）
  */
 export function registerEmotionIpc(): void {
   // 初始化目录
   ensureDirectories().catch(err => logger.error('初始化目录失败', err))
 
-  /**
-   * 打开文件选择器
-   */
-  ipcMain.handle('emotion:select-image', async (_event: IpcMainInvokeEvent) => {
-    return dialog.showOpenDialog({
-      title: '选择表情图片',
-      properties: ['openFile'],
-      filters: [
-        { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
-      ],
-    })
+  createIpcHandler({
+    channel: 'emotion:select-image',
+    handler: async () => {
+      return success(await dialog.showOpenDialog({
+        title: '选择表情图片',
+        properties: ['openFile'],
+        filters: [
+          { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+        ],
+      }))
+    },
   })
 
-  /**
-   * 上传自定义图片
-   */
-  ipcMain.handle(
-    'emotion:upload-custom',
-    async (_event: IpcMainInvokeEvent, emotionType: string, sourcePath: string) => {
+  createIpcHandler({
+    channel: 'emotion:upload-custom',
+    schema: {
+      emotionType: { type: 'string', required: true, minLength: 1 },
+      sourcePath: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, emotionTypeUnknown: unknown, sourcePathUnknown: unknown) => {
+      const emotionType = String(emotionTypeUnknown)
+      const sourcePath = String(sourcePathUnknown)
+      logger.info(`上传表情: ${emotionType}, 源文件: ${sourcePath}`)
+
+      await ensureDirectories()
+
+      const validation = await validateImageFile(sourcePath)
+      if (!validation.valid) {
+        logger.warn(`文件验证失败: ${validation.error}`)
+        return failure(validation.error || '文件验证失败')
+      }
+
+      const ext = path.extname(sourcePath)
+      const targetFileName = `${emotionType}${ext}`
+      const { CUSTOM_DIR } = getEmotionsPaths()
+      const targetPath = path.join(CUSTOM_DIR, targetFileName)
+
+      await fs.copy(sourcePath, targetPath, { overwrite: true })
+      logger.info(`文件已复制到: ${targetPath}`)
+
+      const mapping = await getMapping()
+      mapping[emotionType] = targetFileName
+      await saveMapping(mapping)
+      logger.info(`映射已更新`)
+
+      broadcastEmotionChanged(emotionType)
+
+      return success()
+    },
+  })
+
+  createIpcHandler({
+    channel: 'emotion:get-mapping',
+    handler: async () => {
+      return success(await getMapping())
+    },
+  })
+
+  createIpcHandler({
+    channel: 'emotion:get-custom-path',
+    schema: {
+      emotionType: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, emotionTypeUnknown: unknown) => {
+      const emotionType = String(emotionTypeUnknown)
       try {
-        logger.info(`上传表情: ${emotionType}, 源文件: ${sourcePath}`)
-
-        // 确保目录存在
-        await ensureDirectories()
-
-        // 1. 验证文件
-        const validation = await validateImageFile(sourcePath)
-        if (!validation.valid) {
-          logger.warn(`文件验证失败: ${validation.error}`)
-          return { success: false, error: validation.error }
+        const mapping = await getMapping()
+        const fileName = mapping[emotionType]
+        if (!fileName) {
+          return success(null)
         }
 
-        // 2. 获取文件扩展名
-        const ext = path.extname(sourcePath)
-        const targetFileName = `${emotionType}${ext}`
         const { CUSTOM_DIR } = getEmotionsPaths()
-        const targetPath = path.join(CUSTOM_DIR, targetFileName)
+        const filePath = path.join(CUSTOM_DIR, fileName)
 
-        // 3. 复制文件
-        await fs.copy(sourcePath, targetPath, { overwrite: true })
-        logger.info(`文件已复制到: ${targetPath}`)
+        if (!(await fs.pathExists(filePath))) {
+          logger.warn(`自定义表情文件不存在: ${filePath}`)
+          return success(null)
+        }
 
-        // 4. 更新映射
-        const mapping = await getMapping()
-        mapping[emotionType] = targetFileName
-        await saveMapping(mapping)
-        logger.info(`映射已更新`)
+        const fileBuffer = await fs.readFile(filePath)
+        const ext = path.extname(fileName).toLowerCase().slice(1)
+        const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
+        const base64 = fileBuffer.toString('base64')
 
-        // 5. 广播变更事件
-        broadcastEmotionChanged(emotionType)
-
-        return { success: true }
+        return success(`data:${mimeType};base64,${base64}`)
       }
       catch (error) {
-        logger.error('上传失败', error)
-        return { success: false, error: String(error) }
+        logger.error('获取自定义路径失败', error)
+        return success(null)
       }
     },
-  )
-
-  /**
-   * 获取映射配置
-   */
-  ipcMain.handle('emotion:get-mapping', async (_event: IpcMainInvokeEvent) => {
-    return getMapping()
   })
 
-  /**
-   * 获取自定义图片路径（返回 base64 data URL）
-   */
-  ipcMain.handle('emotion:get-custom-path', async (_event: IpcMainInvokeEvent, emotionType: string) => {
-    try {
-      const mapping = await getMapping()
-      const fileName = mapping[emotionType]
-      if (!fileName) {
-        return null
-      }
-
-      const { CUSTOM_DIR } = getEmotionsPaths()
-      const filePath = path.join(CUSTOM_DIR, fileName)
-
-      // 检查文件是否存在
-      if (!(await fs.pathExists(filePath))) {
-        logger.warn(`自定义表情文件不存在: ${filePath}`)
-        return null
-      }
-
-      // 读取文件并转换为 base64 data URL
-      const fileBuffer = await fs.readFile(filePath)
-      const ext = path.extname(fileName).toLowerCase().slice(1)
-      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
-      const base64 = fileBuffer.toString('base64')
-
-      return `data:${mimeType};base64,${base64}`
-    }
-    catch (error) {
-      logger.error('获取自定义路径失败', error)
-      return null
-    }
-  })
-
-  /**
-   * 重置表情（删除自定义图片）
-   */
-  ipcMain.handle('emotion:reset', async (_event: IpcMainInvokeEvent, emotionType: string) => {
-    try {
+  createIpcHandler({
+    channel: 'emotion:reset',
+    schema: {
+      emotionType: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, emotionTypeUnknown: unknown) => {
+      const emotionType = String(emotionTypeUnknown)
       logger.info(`重置表情: ${emotionType}`)
 
       const mapping = await getMapping()
       const fileName = mapping[emotionType]
 
       if (fileName) {
-        // 删除文件
         const { CUSTOM_DIR } = getEmotionsPaths()
         const filePath = path.join(CUSTOM_DIR, fileName)
         if (await fs.pathExists(filePath)) {
@@ -246,21 +240,15 @@ export function registerEmotionIpc(): void {
           logger.info(`已删除文件: ${filePath}`)
         }
 
-        // 更新映射
         delete mapping[emotionType]
         await saveMapping(mapping)
         logger.info(`映射已更新`)
 
-        // 广播变更事件
         broadcastEmotionChanged(emotionType)
       }
 
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('重置失败', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
   logger.info('表情 IPC 处理器已注册')

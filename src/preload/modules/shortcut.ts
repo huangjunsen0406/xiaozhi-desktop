@@ -1,11 +1,14 @@
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 export const shortcutApi = {
   /**
    * 获取所有快捷键配置
    */
-  getAll: () => ipcRenderer.invoke('shortcut:get-all'),
+  getAll: async () => {
+    const result: unknown = await ipcRenderer.invoke('shortcut:get-all')
+    return unwrapIpcResult(result, '获取快捷键配置失败')
+  },
 
   /**
    * 更新快捷键
@@ -18,8 +21,13 @@ export const shortcutApi = {
   /**
    * 检测快捷键冲突
    */
-  checkConflict: (accelerator: string, excludeAction?: string) =>
-    ipcRenderer.invoke('shortcut:check-conflict', accelerator, excludeAction),
+  checkConflict: async (accelerator: string, excludeAction?: string) => {
+    const result: unknown = await ipcRenderer.invoke('shortcut:check-conflict', accelerator, excludeAction)
+    return unwrapIpcResult<{ conflict: boolean, name: string | null | undefined }>(
+      result,
+      '检测快捷键冲突失败',
+    )
+  },
 
   /**
    * 重置为默认快捷键

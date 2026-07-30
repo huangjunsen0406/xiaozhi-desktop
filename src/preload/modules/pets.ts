@@ -4,18 +4,22 @@ import type { PetInfo } from '@shared/types'
  */
 import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess, unwrapIpcSuccessFields } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 export type { PetInfo }
 
 export const petsApi = {
   // 获取宠物列表
-  getList: (): Promise<PetInfo[]> =>
-    ipcRenderer.invoke('pets:get-list'),
+  getList: async (): Promise<PetInfo[]> => {
+    const result: unknown = await ipcRenderer.invoke('pets:get-list')
+    return unwrapIpcResult<PetInfo[]>(result, '获取宠物列表失败') ?? []
+  },
 
   // 获取当前宠物
-  getCurrent: (): Promise<string> =>
-    ipcRenderer.invoke('pets:get-current'),
+  getCurrent: async (): Promise<string> => {
+    const result: unknown = await ipcRenderer.invoke('pets:get-current')
+    return unwrapIpcResult<string>(result, '获取当前宠物失败') ?? ''
+  },
 
   // 设置当前宠物
   setCurrent: async (petId: string): Promise<void> => {
@@ -24,17 +28,16 @@ export const petsApi = {
   },
 
   // 打开文件夹选择器
-  selectFolder: (): Promise<Electron.OpenDialogReturnValue> =>
-    ipcRenderer.invoke('pets:select-folder'),
+  selectFolder: async (): Promise<Electron.OpenDialogReturnValue> => {
+    const result: unknown = await ipcRenderer.invoke('pets:select-folder')
+    return unwrapIpcResult(result, '选择宠物文件夹失败')
+  },
 
-  // 导入宠物
+  // 导入宠物（标准 IpcResult：`{ success, data: { petId } }`）
   import: async (sourcePath: string): Promise<string | undefined> => {
     const result: unknown = await ipcRenderer.invoke('pets:import', sourcePath)
-    const data = unwrapIpcSuccessFields<{ success: true, petId?: string }>(
-      result,
-      '导入宠物失败',
-    )
-    return data.petId
+    const data = unwrapIpcResult<{ petId?: string }>(result, '导入宠物失败')
+    return data?.petId
   },
 
   // 删除宠物
@@ -50,12 +53,16 @@ export const petsApi = {
   },
 
   // 获取宠物目录路径
-  getFolderPath: (): Promise<string> =>
-    ipcRenderer.invoke('pets:get-folder-path'),
+  getFolderPath: async (): Promise<string> => {
+    const result: unknown = await ipcRenderer.invoke('pets:get-folder-path')
+    return unwrapIpcResult<string>(result, '获取宠物目录路径失败')
+  },
 
   // 获取精灵图 base64 数据
-  getSpritesheet: (petId: string): Promise<string | null> =>
-    ipcRenderer.invoke('pets:get-spritesheet', petId),
+  getSpritesheet: async (petId: string): Promise<string | null> => {
+    const result: unknown = await ipcRenderer.invoke('pets:get-spritesheet', petId)
+    return unwrapIpcResult<string | null>(result, '获取精灵图失败') ?? null
+  },
 
   // 监听宠物切换事件
   onChanged: (callback: (petId: string) => void): () => void => {

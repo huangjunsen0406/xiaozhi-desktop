@@ -2,13 +2,17 @@
  * 窗口控制 API 模块
  */
 import { ipcRenderer } from 'electron'
+import { assertIpcSuccess } from '../utils/ipc'
 
 export const windowApi = {
   // 面板控制
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
-  switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets'): Promise<void> => ipcRenderer.invoke('window:switch-display-mode', mode),
+  switchDisplayMode: async (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets'): Promise<void> => {
+    const result: unknown = await ipcRenderer.invoke('window:switch-display-mode', mode)
+    assertIpcSuccess(result, '切换显示模式失败')
+  },
 
   // 激活窗口
   showActivation: (): void => ipcRenderer.send('activation:show'),

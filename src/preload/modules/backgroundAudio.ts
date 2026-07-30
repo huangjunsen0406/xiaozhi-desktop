@@ -3,6 +3,7 @@ import type { BackgroundAudioStateUpdate, BackgroundAudioStatus } from '@shared/
  * 后台音频窗口 API 模块
  */
 import { ipcRenderer } from 'electron'
+import { unwrapIpcResult } from '../utils/ipc'
 
 export const backgroundAudioApi = {
   // 监听音频命令
@@ -16,5 +17,8 @@ export const backgroundAudioApi = {
   sendAudioState: (state: BackgroundAudioStateUpdate): void => ipcRenderer.send('audio:state', state),
 
   // 获取后台音频状态（仅主窗口可用）
-  getStatus: (): Promise<BackgroundAudioStatus> => ipcRenderer.invoke('background-audio:get-status'),
+  getStatus: async (): Promise<BackgroundAudioStatus> => {
+    const result: unknown = await ipcRenderer.invoke('background-audio:get-status')
+    return unwrapIpcResult<BackgroundAudioStatus>(result, '获取后台音频状态失败')
+  },
 }

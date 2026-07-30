@@ -3,6 +3,7 @@
  * 用于主进程和渲染进程之间的主题切换通信
  */
 import { ipcRenderer } from 'electron'
+import { unwrapIpcResult } from '../utils/ipc'
 
 export const themeApi = {
   /**
@@ -21,6 +22,7 @@ export const themeApi = {
    * @returns 当前主题 ('light' | 'dark' | 'auto')
    */
   getCurrentTheme: async (): Promise<string> => {
-    return await ipcRenderer.invoke('theme:get')
+    const result: unknown = await ipcRenderer.invoke('theme:get')
+    return unwrapIpcResult<string>(result, '获取主题失败') ?? 'auto'
   },
 }

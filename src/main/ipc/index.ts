@@ -15,6 +15,7 @@ import { registerClipboardIpcChannels } from './clipboardIpc'
 import { registerConfigIpc } from './configIpc'
 import { registerEmotionIpc, setEmotionBroadcastCallback } from './emotionIpc'
 import { registerMcpToolsIpc } from './mcpToolsIpc'
+import { createIpcHandler, success } from './middleware'
 import { registerModelIpc } from './modelIpc'
 import { registerMusicConfigIpc } from './musicConfigIpc'
 import { registerMusicIpc } from './musicIpc'
@@ -141,22 +142,39 @@ export function registerBasicIpcChannels(): void {
   })
 
   // 显示模式切换
-  ipcMain.handle('window:switch-display-mode', async (_, mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => {
-    if (mode === 'mini') {
-      toggleToMini()
-    }
-    else if (mode === 'chat') {
-      toggleToChat()
-    }
-    else if (mode === 'live2d') {
-      toggleToLive2d()
-    }
-    else if (mode === 'pets') {
-      toggleToPets()
-    }
-    else {
-      toggleToMain()
-    }
+  createIpcHandler({
+    channel: 'window:switch-display-mode',
+    schema: {
+      mode: {
+        type: 'string',
+        required: true,
+        custom: (value) => {
+          const allowed = ['main', 'mini', 'chat', 'live2d', 'pets']
+          return typeof value === 'string' && allowed.includes(value)
+            ? true
+            : 'mode 必须是 main | mini | chat | live2d | pets'
+        },
+      },
+    },
+    handler: async (_event, modeUnknown: unknown) => {
+      const mode = String(modeUnknown)
+      if (mode === 'mini') {
+        toggleToMini()
+      }
+      else if (mode === 'chat') {
+        toggleToChat()
+      }
+      else if (mode === 'live2d') {
+        toggleToLive2d()
+      }
+      else if (mode === 'pets') {
+        toggleToPets()
+      }
+      else {
+        toggleToMain()
+      }
+      return success()
+    },
   })
 
   logger.info('基础 IPC 通道已注册')

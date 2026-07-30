@@ -41,8 +41,8 @@ export function assertIpcSuccess(result: unknown, fallbackError = '请求失败'
 
 /**
  * 解析「成功标志 + 顶层附加字段」形态（非标准 data 包装）。
- * 例：wake-word:test → `{ success, keyword?, error? }`；
- * model/pets import → `{ success, modelId?/petId?, error? }`。
+ * 存量迁移中：优先改 main 为 `success({ field })` + preload `unwrapIpcResult`；
+ * 本 helper 仅保留给尚未迁完的通道。
  */
 export function unwrapIpcSuccessFields<T extends object>(
   result: unknown,

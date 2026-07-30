@@ -1,47 +1,43 @@
 /**
- * 摄像头配置 IPC 处理
+ * 摄像头配置 IPC 处理（createIpcHandler + IpcResult）
  */
-import { ipcMain } from 'electron'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
+import { createIpcHandler, success } from './middleware'
 
 const logger = getLogger('CameraConfigIpc')
 
 export function registerCameraConfigIpc(): void {
   const db = getDatabase()
 
-  /**
-   * 获取摄像头配置
-   */
-  ipcMain.handle('camera-config:get', async () => {
-    try {
+  createIpcHandler({
+    channel: 'camera-config:get',
+    handler: async () => {
       const config = db.getFormattedCameraConfig()
       logger.info('获取配置:', config)
-      return config
-    }
-    catch (error) {
-      logger.error('获取配置失败:', error)
-      throw error
-    }
+      return success(config)
+    },
   })
 
-  /**
-   * 更新摄像头配置
-   */
-  ipcMain.handle('camera-config:update', async (_event, updates: {
-    enabled?: boolean
-    deviceId?: string
-    deviceLabel?: string
-    useLocalVision?: boolean
-    vlApiKey?: string
-    vlUrl?: string
-    vlModel?: string
-    captureWidth?: number
-    captureHeight?: number
-    jpegQuality?: number
-    maxDimension?: number
-  }) => {
-    try {
+  createIpcHandler({
+    channel: 'camera-config:update',
+    schema: {
+      updates: { type: 'object', required: true },
+    },
+    handler: async (_event, updatesUnknown: unknown) => {
+      const updates = updatesUnknown as {
+        enabled?: boolean
+        deviceId?: string
+        deviceLabel?: string
+        useLocalVision?: boolean
+        vlApiKey?: string
+        vlUrl?: string
+        vlModel?: string
+        captureWidth?: number
+        captureHeight?: number
+        jpegQuality?: number
+        maxDimension?: number
+      }
       logger.info('更新配置:', updates)
       const dbUpdates: {
         enabled?: boolean
@@ -82,11 +78,8 @@ export function registerCameraConfigIpc(): void {
 
       db.updateCameraConfig(dbUpdates)
       logger.info('配置更新成功')
-    }
-    catch (error) {
-      logger.error('更新配置失败:', error)
-      throw error
-    }
+      return success()
+    },
   })
 
   logger.info('摄像头配置 IPC 注册完成')

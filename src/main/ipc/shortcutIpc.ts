@@ -1,8 +1,6 @@
-import type { IpcMainInvokeEvent } from 'electron'
 import type { ServiceContainer } from '../core/ServiceContainer'
-import { ipcMain } from 'electron'
-
 import { getLogger } from '../utils/logger'
+import { createIpcHandler, success } from './middleware'
 
 const logger = getLogger('ShortcutIpc')
 
@@ -14,27 +12,45 @@ export function registerShortcutIpcChannels(container: ServiceContainer) {
     return
   }
 
-  // 获取所有快捷键
-  ipcMain.handle('shortcut:get-all', async () => {
-    return await shortcutManager.loadShortcuts()
+  createIpcHandler({
+    channel: 'shortcut:get-all',
+    handler: async () => {
+      return success(await shortcutManager.loadShortcuts())
+    },
   })
 
-  // 更新快捷键
-  ipcMain.handle('shortcut:update', async (_event: IpcMainInvokeEvent, action: string, accelerator: string | null) => {
-    await shortcutManager.updateShortcut(action, accelerator)
-    return { success: true }
+  createIpcHandler({
+    channel: 'shortcut:update',
+    schema: {
+      action: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, action: unknown, accelerator: unknown) => {
+      const accel = accelerator === null || accelerator === undefined
+        ? null
+        : String(accelerator)
+      await shortcutManager.updateShortcut(String(action), accel)
+      return success()
+    },
   })
 
-  // 检测冲突
-  ipcMain.handle('shortcut:check-conflict', async (_event: IpcMainInvokeEvent, accelerator: string, excludeAction?: string) => {
-    const conflictName = shortcutManager.checkConflict(accelerator, excludeAction)
-    return { conflict: !!conflictName, name: conflictName }
+  createIpcHandler({
+    channel: 'shortcut:check-conflict',
+    schema: {
+      accelerator: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: async (_event, accelerator: unknown, excludeAction: unknown) => {
+      const exclude = typeof excludeAction === 'string' ? excludeAction : undefined
+      const conflictName = shortcutManager.checkConflict(String(accelerator), exclude)
+      return success({ conflict: !!conflictName, name: conflictName })
+    },
   })
 
-  // 重置为默认
-  ipcMain.handle('shortcut:reset', async () => {
-    await shortcutManager.resetToDefaults()
-    return { success: true }
+  createIpcHandler({
+    channel: 'shortcut:reset',
+    handler: async () => {
+      await shortcutManager.resetToDefaults()
+      return success()
+    },
   })
 
   logger.info('快捷键 IPC 通道已注册')

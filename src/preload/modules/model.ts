@@ -4,18 +4,22 @@ import type { ModelInfo } from '@shared/types'
  */
 import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess, unwrapIpcSuccessFields } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 export type { ModelInfo }
 
 export const modelApi = {
   // 获取模型列表
-  getList: (): Promise<ModelInfo[]> =>
-    ipcRenderer.invoke('model:get-list'),
+  getList: async (): Promise<ModelInfo[]> => {
+    const result: unknown = await ipcRenderer.invoke('model:get-list')
+    return unwrapIpcResult<ModelInfo[]>(result, '获取模型列表失败') ?? []
+  },
 
   // 获取当前模型
-  getCurrent: (): Promise<string> =>
-    ipcRenderer.invoke('model:get-current'),
+  getCurrent: async (): Promise<string> => {
+    const result: unknown = await ipcRenderer.invoke('model:get-current')
+    return unwrapIpcResult<string>(result, '获取当前模型失败') ?? ''
+  },
 
   // 切换模型
   setCurrent: async (modelId: string): Promise<void> => {
@@ -24,17 +28,16 @@ export const modelApi = {
   },
 
   // 打开文件夹选择器
-  selectFolder: (): Promise<Electron.OpenDialogReturnValue> =>
-    ipcRenderer.invoke('model:select-folder'),
+  selectFolder: async (): Promise<Electron.OpenDialogReturnValue> => {
+    const result: unknown = await ipcRenderer.invoke('model:select-folder')
+    return unwrapIpcResult(result, '选择模型文件夹失败')
+  },
 
-  // 导入模型
+  // 导入模型（标准 IpcResult：`{ success, data: { modelId } }`）
   import: async (sourcePath: string): Promise<string | undefined> => {
     const result: unknown = await ipcRenderer.invoke('model:import', sourcePath)
-    const data = unwrapIpcSuccessFields<{ success: true, modelId?: string }>(
-      result,
-      '导入模型失败',
-    )
-    return data.modelId
+    const data = unwrapIpcResult<{ modelId?: string }>(result, '导入模型失败')
+    return data?.modelId
   },
 
   // 删除模型
@@ -50,8 +53,10 @@ export const modelApi = {
   },
 
   // 获取模型目录路径
-  getFolderPath: (): Promise<string> =>
-    ipcRenderer.invoke('model:get-folder-path'),
+  getFolderPath: async (): Promise<string> => {
+    const result: unknown = await ipcRenderer.invoke('model:get-folder-path')
+    return unwrapIpcResult<string>(result, '获取模型目录路径失败')
+  },
 
   // 监听模型切换事件
   onChanged: (callback: (modelId: string) => void): () => void => {
