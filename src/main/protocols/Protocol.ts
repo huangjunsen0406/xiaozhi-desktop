@@ -112,9 +112,10 @@ export abstract class Protocol {
   abstract connect(): Promise<boolean>
 
   /**
-   * 发送文本消息
+   * 发送传输层文本帧（已序列化的协议 JSON 字符串），非用户话语。
+   * 用户话语请走会话层 `ConversationSession.sendText` / `appSendText`。
    */
-  abstract sendText(message: string): Promise<boolean>
+  abstract sendRawText(message: string): Promise<boolean>
 
   /**
    * 发送音频数据
@@ -162,7 +163,7 @@ export abstract class Protocol {
       message.reason = 'user_interrupted'
     }
 
-    return await this.sendText(JSON.stringify(message))
+    return await this.sendRawText(JSON.stringify(message))
   }
 
   /**
@@ -176,7 +177,7 @@ export abstract class Protocol {
       text: wakeWord,
     }
 
-    return await this.sendText(JSON.stringify(message))
+    return await this.sendRawText(JSON.stringify(message))
   }
 
   /**
@@ -190,7 +191,7 @@ export abstract class Protocol {
       mode,
     }
 
-    return await this.sendText(JSON.stringify(message))
+    return await this.sendRawText(JSON.stringify(message))
   }
 
   /**
@@ -203,7 +204,7 @@ export abstract class Protocol {
       state: 'stop',
     }
 
-    return await this.sendText(JSON.stringify(message))
+    return await this.sendRawText(JSON.stringify(message))
   }
 
   /**
@@ -226,7 +227,7 @@ export abstract class Protocol {
       }
 
       logger.info('发送 MCP 响应:', JSON.stringify(message))
-      return await this.sendText(JSON.stringify(message))
+      return await this.sendRawText(JSON.stringify(message))
     }
     catch (error) {
       logger.error('发送 MCP message 失败', error)

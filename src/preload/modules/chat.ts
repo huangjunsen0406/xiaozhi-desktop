@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSession, IpcResult } from '@shared/types'
+import type { ChatMessage, ChatSession } from '@shared/types'
 /**
  * 聊天 API 模块
  */
@@ -10,7 +10,7 @@ export const chatApi = {
    * 获取会话列表
    */
   getSessions: async (limit = 50, offset = 0): Promise<ChatSession[]> => {
-    const result = await ipcRenderer.invoke('chat:get-sessions', limit, offset) as IpcResult<ChatSession[]>
+    const result: unknown = await ipcRenderer.invoke('chat:get-sessions', limit, offset)
     const data = unwrapIpcResult<ChatSession[] | undefined>(result, '获取会话列表失败')
     return data ?? []
   },
@@ -19,7 +19,7 @@ export const chatApi = {
    * 获取单个会话
    */
   getSession: async (sessionId: string): Promise<ChatSession | null> => {
-    const result = await ipcRenderer.invoke('chat:get-session', sessionId) as IpcResult<ChatSession>
+    const result: unknown = await ipcRenderer.invoke('chat:get-session', sessionId)
     const data = unwrapIpcResult<ChatSession | undefined>(result, '获取会话失败')
     return data ?? null
   },
@@ -28,7 +28,7 @@ export const chatApi = {
    * 创建会话
    */
   createSession: async (data: { session_id: string, title?: string, started_at?: number }): Promise<ChatSession> => {
-    const result = await ipcRenderer.invoke('chat:create-session', data) as IpcResult<ChatSession>
+    const result: unknown = await ipcRenderer.invoke('chat:create-session', data)
     return unwrapIpcResult(result, '创建会话失败')
   },
 
@@ -39,7 +39,7 @@ export const chatApi = {
    * @param offset 偏移量
    */
   getMessages: async (sessionId: string, limit?: number, offset = 0): Promise<ChatMessage[]> => {
-    const result = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset) as IpcResult<ChatMessage[]>
+    const result: unknown = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset)
     // 将 IPC 传输后的图片数据转换回 Uint8Array
     const data = unwrapIpcResult<ChatMessage[] | undefined>(result, '获取消息失败')
     const messages = (data ?? []).map((msg: ChatMessage) => {
@@ -76,7 +76,7 @@ export const chatApi = {
     image_data?: Uint8Array
     timestamp?: number
   }): Promise<ChatMessage> => {
-    const result = await ipcRenderer.invoke('chat:add-message', data) as IpcResult<ChatMessage>
+    const result: unknown = await ipcRenderer.invoke('chat:add-message', data)
     return unwrapIpcResult(result, '添加消息失败')
   },
 
@@ -84,7 +84,7 @@ export const chatApi = {
    * 更新会话标题
    */
   updateSessionTitle: async (sessionId: string, title: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('chat:update-session-title', sessionId, title) as IpcResult<void>
+    const result: unknown = await ipcRenderer.invoke('chat:update-session-title', sessionId, title)
     unwrapIpcResult(result, '更新标题失败')
   },
 
@@ -92,7 +92,7 @@ export const chatApi = {
    * 删除会话
    */
   deleteSession: async (sessionId: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('chat:delete-session', sessionId) as IpcResult<void>
+    const result: unknown = await ipcRenderer.invoke('chat:delete-session', sessionId)
     unwrapIpcResult(result, '删除会话失败')
   },
 
@@ -100,7 +100,7 @@ export const chatApi = {
    * 清空消息
    */
   clearMessages: async (sessionId: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('chat:clear-messages', sessionId) as IpcResult<void>
+    const result: unknown = await ipcRenderer.invoke('chat:clear-messages', sessionId)
     unwrapIpcResult(result, '清空消息失败')
   },
 

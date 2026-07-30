@@ -384,7 +384,7 @@ export class WebSocketProtocol extends Protocol {
 
     logger.debug('发送 hello 消息', helloMessage)
 
-    await this.sendText(JSON.stringify(helloMessage))
+    await this.sendRawText(JSON.stringify(helloMessage))
   }
 
   /**
@@ -663,9 +663,9 @@ export class WebSocketProtocol extends Protocol {
   }
 
   /**
-   * 发送文本消息
+   * 发送传输层文本帧（已序列化的协议 JSON 字符串）
    */
-  async sendText(message: string): Promise<boolean> {
+  async sendRawText(message: string): Promise<boolean> {
     if (!this.ws || this.isClosing) {
       logger.warn('WebSocket 未连接或正在关闭，无法发送消息')
       return false
@@ -682,8 +682,8 @@ export class WebSocketProtocol extends Protocol {
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error('发送文本消息失败', error)
-      this.handleConnectionLoss(`发送文本异常: ${errorMessage}`)
+      logger.error('发送文本帧失败', error)
+      this.handleConnectionLoss(`发送文本帧异常: ${errorMessage}`)
       return false
     }
   }

@@ -11,7 +11,7 @@ export const shortcutApi = {
    * 更新快捷键
    */
   update: async (action: string, accelerator: string | null): Promise<void> => {
-    const result = await ipcRenderer.invoke('shortcut:update', action, accelerator) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('shortcut:update', action, accelerator)
     assertIpcSuccess(result, '更新快捷键失败')
   },
 
@@ -25,7 +25,7 @@ export const shortcutApi = {
    * 重置为默认快捷键
    */
   reset: async (): Promise<void> => {
-    const result = await ipcRenderer.invoke('shortcut:reset') as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('shortcut:reset')
     assertIpcSuccess(result, '重置快捷键失败')
   },
 }

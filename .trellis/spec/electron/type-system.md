@@ -90,6 +90,8 @@ function parseHello(data: unknown): HelloMessage {
 }
 ```
 
+协议传输发送用 `sendRawText`（帧），会话用户话语用 `sendText`；二者不得同名。
+
 例外（须注释原因）：
 
 * 第三方最小 `*.d.ts` 补丁（如 PIXI）

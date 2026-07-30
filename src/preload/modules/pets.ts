@@ -4,7 +4,7 @@ import type { PetInfo } from '@shared/types'
  */
 import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcSuccessFields } from '../utils/ipc'
 
 export type { PetInfo }
 
@@ -19,7 +19,7 @@ export const petsApi = {
 
   // 设置当前宠物
   setCurrent: async (petId: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('pets:set-current', petId) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('pets:set-current', petId)
     assertIpcSuccess(result, '切换宠物失败')
   },
 
@@ -29,20 +29,23 @@ export const petsApi = {
 
   // 导入宠物
   import: async (sourcePath: string): Promise<string | undefined> => {
-    const result = await ipcRenderer.invoke('pets:import', sourcePath) as { success: boolean, error?: string, petId?: string }
-    assertIpcSuccess(result, '导入宠物失败')
-    return result.petId
+    const result: unknown = await ipcRenderer.invoke('pets:import', sourcePath)
+    const data = unwrapIpcSuccessFields<{ success: true, petId?: string }>(
+      result,
+      '导入宠物失败',
+    )
+    return data.petId
   },
 
   // 删除宠物
   delete: async (petId: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('pets:delete', petId) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('pets:delete', petId)
     assertIpcSuccess(result, '删除宠物失败')
   },
 
   // 打开宠物目录
   openFolder: async (): Promise<void> => {
-    const result = await ipcRenderer.invoke('pets:open-folder') as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('pets:open-folder')
     assertIpcSuccess(result, '打开宠物目录失败')
   },
 

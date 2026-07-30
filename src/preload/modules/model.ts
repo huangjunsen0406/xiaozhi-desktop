@@ -4,7 +4,7 @@ import type { ModelInfo } from '@shared/types'
  */
 import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcSuccessFields } from '../utils/ipc'
 
 export type { ModelInfo }
 
@@ -19,7 +19,7 @@ export const modelApi = {
 
   // 切换模型
   setCurrent: async (modelId: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('model:set-current', modelId) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('model:set-current', modelId)
     assertIpcSuccess(result, '切换模型失败')
   },
 
@@ -29,20 +29,23 @@ export const modelApi = {
 
   // 导入模型
   import: async (sourcePath: string): Promise<string | undefined> => {
-    const result = await ipcRenderer.invoke('model:import', sourcePath) as { success: boolean, error?: string, modelId?: string }
-    assertIpcSuccess(result, '导入模型失败')
-    return result.modelId
+    const result: unknown = await ipcRenderer.invoke('model:import', sourcePath)
+    const data = unwrapIpcSuccessFields<{ success: true, modelId?: string }>(
+      result,
+      '导入模型失败',
+    )
+    return data.modelId
   },
 
   // 删除模型
   delete: async (modelId: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('model:delete', modelId) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('model:delete', modelId)
     assertIpcSuccess(result, '删除模型失败')
   },
 
   // 打开模型目录
   openFolder: async (): Promise<void> => {
-    const result = await ipcRenderer.invoke('model:open-folder') as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('model:open-folder')
     assertIpcSuccess(result, '打开模型目录失败')
   },
 

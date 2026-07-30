@@ -126,3 +126,14 @@ Renderer / Vue  ──仅──►  window.api（preload contextBridge）  ─�
 | 在 handler 中直接 `throw`（无 catch） | 中间件统一捕获 |
 | `ipcMain.on` 处理需要返回值的请求 | 改用 `ipcMain.handle` |
 | 业务 handler 返回形态三套并存且无文档 | 新代码统一 `IpcResult<T>` + preload `unwrapIpcResult`（存量逐步收） |
+
+---
+
+## 9. 传输层 vs 会话层 sendText
+
+| 层 | API | 语义 |
+| ---- | ---- | ---- |
+| 会话 / UI | `ConversationSession.sendText` / `appSendText` / `window.api.appSendText` | **用户话语**（utterance），会走连接保证、打断说话、`wake_word_detected` 等业务路径 |
+| 协议传输 | `Protocol.sendRawText` / `ProtocolManager.sendRawText` | **传输层文本帧**：已序列化的协议 JSON 字符串（hello / listen / abort / mcp / goodbye 等），**不是**用户输入 |
+
+禁止：在协议抽象上再叫 `sendText`，避免与会话「发用户文本」同名异义。preload `invoke` 结果以 `unknown` 进入 `unwrapIpcResult` / `assertIpcSuccess` / `unwrapIpcSuccessFields`，禁止 `as IpcResult<T> \| T`。

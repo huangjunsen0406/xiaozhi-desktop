@@ -40,7 +40,7 @@ export const mcpToolsApi = {
 
   /** 打开插件目录 */
   openFolder: async (): Promise<void> => {
-    const result = await ipcRenderer.invoke('mcp-tools:open-folder') as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:open-folder')
     assertIpcSuccess(result, '打开插件目录失败')
   },
 

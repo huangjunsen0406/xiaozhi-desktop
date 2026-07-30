@@ -244,11 +244,12 @@ export class ProtocolManager {
   }
 
   /**
-   * 发送文本消息
+   * 发送传输层文本帧（已序列化的协议 JSON 字符串），非用户话语。
+   * 用户话语请走 ConversationSession.sendText。
    */
-  async sendText(text: string): Promise<void> {
+  async sendRawText(text: string): Promise<void> {
     if (this.protocol) {
-      await this.protocol.sendText(text)
+      await this.protocol.sendRawText(text)
     }
   }
 

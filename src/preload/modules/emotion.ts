@@ -11,7 +11,7 @@ export const emotionApi = {
 
   // 上传自定义表情
   uploadCustom: async (emotionType: string, sourcePath: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('emotion:upload-custom', emotionType, sourcePath) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('emotion:upload-custom', emotionType, sourcePath)
     assertIpcSuccess(result, '上传表情失败')
   },
 
@@ -25,7 +25,7 @@ export const emotionApi = {
 
   // 重置表情（删除自定义）
   reset: async (emotionType: string): Promise<void> => {
-    const result = await ipcRenderer.invoke('emotion:reset', emotionType) as { success: boolean, error?: string }
+    const result: unknown = await ipcRenderer.invoke('emotion:reset', emotionType)
     assertIpcSuccess(result, '重置表情失败')
   },
 

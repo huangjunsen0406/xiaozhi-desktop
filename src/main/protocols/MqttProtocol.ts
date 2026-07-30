@@ -11,17 +11,14 @@ import dgram from 'node:dgram'
 import * as mqtt from 'mqtt'
 import { getAudioRuntime } from '../audio/AudioRuntime'
 import { getConfigManager } from '../services/configManagerDB'
+import {
+  isGoodbyeMessage,
+  parseMqttServerHello,
+} from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
 
 const logger = getLogger('MQTT')
-
-interface UdpConfig {
-  server: string
-  port: number
-  key: string
-  nonce: string
-}
 
 export class MqttProtocol extends Protocol {
   // MQTT 相关
@@ -197,7 +194,7 @@ export class MqttProtocol extends Protocol {
 
       // 发送 hello 消息
       const helloMessage = this.createHelloMessage()
-      const sent = await this.sendText(JSON.stringify(helloMessage))
+      const sent = await this.sendRawText(JSON.stringify(helloMessage))
       if (!sent) {
         logger.error('发送 hello 消息失败')
         return false
@@ -316,11 +313,21 @@ export class MqttProtocol extends Protocol {
 
   private handleMqttMessage(payload: string): void {
     try {
-      const data = JSON.parse(payload) as JsonMessage
+      const parsed: unknown = JSON.parse(payload)
+      if (typeof parsed !== 'object' || parsed === null) {
+        logger.error('MQTT 消息不是对象', payload)
+        return
+      }
+
+      const data = parsed as JsonMessage
       const msgType = data.type
 
       if (msgType === 'goodbye') {
-        const sessionId = (data as any).session_id
+        if (!isGoodbyeMessage(data)) {
+          logger.error('goodbye 消息形态无效', data)
+          return
+        }
+        const sessionId = data.session_id
         if (!sessionId || sessionId === this.sessionId) {
           this.handleGoodbye().catch((error) => {
             logger.error('处理 goodbye 失败:', error)
@@ -330,7 +337,7 @@ export class MqttProtocol extends Protocol {
       }
 
       if (msgType === 'hello') {
-        this.parseServerHello(data)
+        this.parseServerHello(parsed)
         return
       }
 
@@ -341,27 +348,29 @@ export class MqttProtocol extends Protocol {
     }
   }
 
-  private parseServerHello(data: any): void {
+  private parseServerHello(data: unknown): void {
     logger.info('收到服务器 hello 响应', data)
 
-    const transport = data.transport
-    if (transport !== 'udp') {
-      logger.error(`不支持的传输方式: ${transport}`)
+    const hello = parseMqttServerHello(data)
+    if (!hello) {
+      const transport = typeof data === 'object' && data !== null && 'transport' in data
+        ? (data as { transport?: unknown }).transport
+        : undefined
+      if (transport !== undefined && transport !== 'udp') {
+        logger.error(`不支持的传输方式: ${String(transport)}`)
+      }
+      else {
+        logger.error('UDP 配置缺失或 hello 消息无效')
+      }
       return
     }
 
-    this.sessionId = data.session_id || ''
+    this.sessionId = hello.sessionId
 
-    const udp: UdpConfig = data.udp
-    if (!udp) {
-      logger.error('UDP 配置缺失')
-      return
-    }
-
-    this.udpServer = udp.server
-    this.udpPort = udp.port
-    this.aesNonce = udp.nonce
-    this.aesKey = Buffer.from(udp.key, 'hex')
+    this.udpServer = hello.udp.server
+    this.udpPort = hello.udp.port
+    this.aesNonce = hello.udp.nonce
+    this.aesKey = Buffer.from(hello.udp.key, 'hex')
     this.localSequence = 0
 
     logger.info(`UDP 服务器: ${this.udpServer}:${this.udpPort}`)
@@ -479,7 +488,10 @@ export class MqttProtocol extends Protocol {
     return nonce
   }
 
-  async sendText(message: string): Promise<boolean> {
+  /**
+   * 发送传输层文本帧（已序列化的协议 JSON 字符串）
+   */
+  async sendRawText(message: string): Promise<boolean> {
     if (!this.mqttClient || !this.mqttClient.connected) {
       logger.error('MQTT 客户端未连接')
       return false
@@ -554,7 +566,7 @@ export class MqttProtocol extends Protocol {
           type: 'goodbye',
           session_id: this.sessionId,
         }
-        await this.sendText(JSON.stringify(goodbyeMsg))
+        await this.sendRawText(JSON.stringify(goodbyeMsg))
       }
 
       await this.handleGoodbye()
