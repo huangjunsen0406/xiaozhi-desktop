@@ -62,7 +62,7 @@ export class ConsoleFormatter implements LogFormatter {
  */
 export class FileFormatter implements LogFormatter {
   format(record: LogRecord): string {
-    const logObj: any = {
+    const logObj: Record<string, unknown> = {
       timestamp: record.timestamp.toISOString(),
       level: LogLevelName[record.level],
       module: record.module,
@@ -84,14 +84,13 @@ export class FileFormatter implements LogFormatter {
     return JSON.stringify(logObj)
   }
 
-  private safeStringify(obj: unknown): any {
+  /** 日志边界：序列化失败则降为 string，返回 JSON 友好值 */
+  private safeStringify(obj: unknown): unknown {
     try {
-      // 检查是否已经是字符串
       if (typeof obj === 'string') {
         return obj
       }
-      // 尝试序列化
-      return JSON.parse(JSON.stringify(obj))
+      return JSON.parse(JSON.stringify(obj)) as unknown
     }
     catch {
       return String(obj)

@@ -50,10 +50,16 @@ const DEFAULT_MUSIC_CONFIG: MusicConfig = {
 }
 
 /**
- * 按点分路径从对象中提取值
+ * 按点分路径从对象中提取值（无 any：逐级收窄为对象再索引）
  */
 function getByPath(obj: unknown, path: string): unknown {
-  return path.split('.').reduce((o: any, key) => o?.[key], obj)
+  return path.split('.').reduce<unknown>((o, key) => {
+    if (o === null || o === undefined)
+      return undefined
+    if (typeof o !== 'object')
+      return undefined
+    return (o as Record<string, unknown>)[key]
+  }, obj)
 }
 
 /**

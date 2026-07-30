@@ -100,7 +100,8 @@ async function loadModel(modelId: string): Promise<void> {
     console.log('[Live2D] 模型已添加到舞台')
 
     // 监听模型点击事件
-    model.on('hit', (hitAreas: string[]) => {
+    model.on('hit', (...args: unknown[]) => {
+      const hitAreas = args[0]
       console.log('[Live2D] Hit areas:', hitAreas)
     })
   }
@@ -306,13 +307,13 @@ function handleMouseMove(_e: MouseEvent): void {
     return
 
   // 整窗客户区可交互（与 Mini 一致），任意位置可右键唤起独立菜单窗
-  window.api?.setIgnoreMouseEvents(false)
+  window.api.setClickThrough('live2d', false)
 }
 
 function handleMouseLeave(): void {
   if (isDragging)
     return
-  window.api?.setIgnoreMouseEvents(true)
+  window.api.setClickThrough('live2d', true)
 }
 
 /**
@@ -325,7 +326,7 @@ function handleContextMenu(e: MouseEvent): void {
   if (isDragging)
     return
 
-  window.api?.setIgnoreMouseEvents(false)
+  window.api.setClickThrough('live2d', false)
   const screenX = e.screenX
   const screenY = e.screenY
   window.api?.showHoverFor?.('live2d', screenX, screenY)

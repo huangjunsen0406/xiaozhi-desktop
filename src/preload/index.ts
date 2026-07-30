@@ -19,6 +19,7 @@ const api = {
   toggleSettings: windowApi.toggleSettings,
   setIgnoreMouseEvents: windowApi.setIgnoreMouseEvents,
   setPetsIgnoreMouseEvents: windowApi.setPetsIgnoreMouseEvents,
+  setClickThrough: windowApi.setClickThrough,
   dragStart: windowApi.dragStart,
   dragMove: windowApi.dragMove,
   dragEnd: windowApi.dragEnd,

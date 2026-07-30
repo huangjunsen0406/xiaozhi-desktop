@@ -61,8 +61,12 @@ export interface RendererApi {
   switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => Promise<void>
   showActivation: () => void
   toggleSettings: () => void
+  /** @deprecated 使用 setClickThrough('live2d', ignore) */
   setIgnoreMouseEvents: (ignore: boolean) => void
+  /** @deprecated 使用 setClickThrough('pets', ignore) */
   setPetsIgnoreMouseEvents: (ignore: boolean) => void
+  /** 桌宠窗点击穿透（live2d | pets） */
+  setClickThrough: (target: 'live2d' | 'pets', ignore: boolean) => void
   dragStart: () => void
   dragMove: () => void
   dragEnd: () => void

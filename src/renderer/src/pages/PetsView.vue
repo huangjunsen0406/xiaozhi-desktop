@@ -193,7 +193,7 @@ function handleMouseMove(e: MouseEvent): void {
   }
 
   // 整窗可交互，右键可在客户区唤起独立 Hover 菜单窗
-  window.api?.setPetsIgnoreMouseEvents(false)
+  window.api.setClickThrough('pets', false)
 }
 
 function handleMouseLeave(): void {
@@ -202,7 +202,7 @@ function handleMouseLeave(): void {
   isHovered = false
   currentRow = 0
   currentFrame = 0
-  window.api?.setPetsIgnoreMouseEvents(true)
+  window.api.setClickThrough('pets', true)
 }
 
 /**
@@ -245,7 +245,7 @@ function handleContextMenu(e: MouseEvent): void {
   if (isDragging)
     return
 
-  window.api?.setPetsIgnoreMouseEvents(false)
+  window.api.setClickThrough('pets', false)
   window.api?.showHoverFor?.('pets', e.screenX, e.screenY)
 }
 
