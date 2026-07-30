@@ -277,7 +277,9 @@ export function registerConfigIpc(): void {
         const activationService = getActivationService()
         activationService.cancelActivation()
 
-        // 断开当前连接（不自动重连，用户手动唤醒时会建新连接）
+        // 系统网络/端点变更：断开旧连接并 reload 协议配置。
+        // 与音频编解码/MCP 的 reconnectIfConnectedKeepingIdle 不同——
+        // 此处不自动 idle 重连（OTA/激活流程可能改 token；由用户下次唤醒再建连）。
         const container = getServiceContainer()
         try {
           if (container.protocolManager.isAudioChannelOpened()) {

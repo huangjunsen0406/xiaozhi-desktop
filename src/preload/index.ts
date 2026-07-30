@@ -51,6 +51,8 @@ const api = {
   audioOnOpusDecoded: audioApi.onOpusDecoded,
   audioGetConfig: audioApi.getConfig,
   audioUpdateConfig: audioApi.updateConfig,
+  audioGetAecStatus: audioApi.getAecStatus,
+  audioReportAecCapture: audioApi.reportAecCapture,
   audioGetDefaultDeviceId: audioApi.getDefaultDeviceId,
   audioSystemGetVolume: audioApi.systemGetVolume,
   audioSystemSetVolume: audioApi.systemSetVolume,

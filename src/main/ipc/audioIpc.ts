@@ -1,9 +1,20 @@
-import type { AudioConfig, AudioSettings } from '@shared/types'
+import type { AecMode, AecStatus, AudioConfig, AudioSettings } from '@shared/types'
+import process from 'node:process'
 import { BrowserWindow } from 'electron'
+import {
+  aecModeFromLegacyEchoFlag,
+  legacyEchoFlagFromAecMode,
+  normalizeAecMode,
+  readAecBootMode,
+  writeAecBootMode,
+} from '../audio/AecPolicy'
 import { getAudioRuntime } from '../audio/AudioRuntime'
 import { OpusCodec } from '../audio/OpusCodec'
-import { getServiceContainer } from '../core/ServiceContainer'
 import { getDatabase } from '../services/database'
+import {
+  classifyAudioSettingsDiff,
+  reconnectIfConnectedKeepingIdle,
+} from '../services/settingsApply'
 import { getLogger } from '../utils/logger'
 import { SystemVolumeController } from '../utils/SystemVolumeController'
 import { createIpcHandler, failure, success } from './middleware'
@@ -16,16 +27,34 @@ let opusCodec: OpusCodec | null = null
 // 系统音量控制器实例
 const systemVolumeController = new SystemVolumeController()
 
+/** 采集窗最近一次上报的 track EC 状态 */
+let lastCaptureEchoApplied: boolean | undefined
+
 const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   enableNoiseReduction: true,
   enableEchoCancellation: true,
+  aecMode: 'app',
   conversationMode: 'auto',
+}
+
+function resolveAecModeFromPartial(
+  config: Partial<AudioSettings>,
+  previousMode: AecMode,
+): AecMode | undefined {
+  if (config.aecMode !== undefined)
+    return normalizeAecMode(config.aecMode, previousMode)
+  if ('enableEchoCancellation' in config && config.aecMode === undefined)
+    return aecModeFromLegacyEchoFlag(config.enableEchoCancellation)
+  return undefined
 }
 
 /**
  * 将 settings partial 映射为 DB 列更新
  */
-function settingsToDbUpdates(config: Partial<AudioSettings>): Record<string, unknown> {
+function settingsToDbUpdates(
+  config: Partial<AudioSettings>,
+  previousMode: AecMode = 'app',
+): Record<string, unknown> {
   const dbUpdates: Record<string, unknown> = {}
 
   if ('inputDeviceName' in config) {
@@ -37,9 +66,17 @@ function settingsToDbUpdates(config: Partial<AudioSettings>): Record<string, unk
   if ('enableNoiseReduction' in config) {
     dbUpdates.enable_noise_reduction = config.enableNoiseReduction
   }
-  if ('enableEchoCancellation' in config) {
+
+  const nextMode = resolveAecModeFromPartial(config, previousMode)
+  if (nextMode !== undefined) {
+    dbUpdates.aec_mode = nextMode
+    dbUpdates.enable_echo_cancellation = legacyEchoFlagFromAecMode(nextMode)
+  }
+  else if ('enableEchoCancellation' in config) {
+    // 仅旧字段且上面未解析到 mode 时（不应发生）；兜底双写
     dbUpdates.enable_echo_cancellation = config.enableEchoCancellation
   }
+
   if ('conversationMode' in config) {
     dbUpdates.conversation_mode = config.conversationMode
   }
@@ -59,11 +96,83 @@ function settingsToDbUpdates(config: Partial<AudioSettings>): Record<string, unk
   return dbUpdates
 }
 
-function affectsCodecParams(config: Partial<AudioSettings>): boolean {
-  return 'inputSampleRate' in config
-    || 'outputSampleRate' in config
-    || 'channels' in config
-    || 'frameDuration' in config
+function notifyBackgroundAudio(command: string): void {
+  const windows = BrowserWindow.getAllWindows()
+  windows.forEach((win) => {
+    if (win.isDestroyed())
+      return
+    const url = win.webContents.getURL()
+    if (url.includes('audio.html') || url.includes('#/audio')) {
+      win.webContents.send('audio:command', command)
+    }
+  })
+}
+
+/**
+ * 合并 previous 与 partial 为「保存后的期望快照」用于值 diff。
+ * aecMode / legacy 布尔按 resolve 规则归一。
+ */
+function mergeAudioSettingsSnapshot(
+  previous: AudioSettings,
+  partial: Partial<AudioSettings>,
+): AudioSettings {
+  const merged: AudioSettings = { ...previous, ...partial }
+  // 若 partial 只带 legacy 布尔，确保 aecMode 与之一致，便于 classify
+  if ('enableEchoCancellation' in partial && partial.aecMode === undefined) {
+    merged.aecMode = aecModeFromLegacyEchoFlag(partial.enableEchoCancellation)
+  }
+  if (partial.aecMode !== undefined) {
+    merged.aecMode = normalizeAecMode(partial.aecMode, previous.aecMode ?? 'app')
+    merged.enableEchoCancellation = legacyEchoFlagFromAecMode(merged.aecMode)
+  }
+  return merged
+}
+
+function buildAecStatus(): AecStatus {
+  const formatted = getDatabase().getFormattedAudioConfig()
+  const desired = normalizeAecMode(formatted.aecMode, 'app')
+  const bootMode = readAecBootMode()
+  const platform = process.platform
+
+  let effective: AecStatus['effective']
+  let reason: string | undefined
+  const requiresRelaunch = desired === 'system' && bootMode !== 'system'
+
+  if (desired === 'off') {
+    effective = 'off'
+  }
+  else if (desired === 'system') {
+    if (bootMode !== 'system') {
+      effective = 'app_fallback'
+      reason = 'system_features_need_relaunch'
+    }
+    else if (lastCaptureEchoApplied === false) {
+      effective = 'unavailable'
+      reason = 'track_echo_cancellation_false'
+    }
+    else {
+      effective = 'system'
+    }
+  }
+  else {
+    // app
+    if (lastCaptureEchoApplied === false) {
+      effective = 'unavailable'
+      reason = 'track_echo_cancellation_false'
+    }
+    else {
+      effective = 'app'
+    }
+  }
+
+  return {
+    desired,
+    effective,
+    reason,
+    echoCancellationApplied: lastCaptureEchoApplied,
+    platform,
+    requiresRelaunch,
+  }
 }
 
 /**
@@ -102,58 +211,104 @@ export function registerAudioIpc(): void {
     },
     handler: async (_event, ...args) => {
       const config = args[0] as Partial<AudioSettings>
-      const dbUpdates = settingsToDbUpdates(config)
+      const previous = db.getFormattedAudioConfig()
+      const previousMode = normalizeAecMode(previous.aecMode, 'app')
+      const dbUpdates = settingsToDbUpdates(config, previousMode)
+
+      // 按值 diff（UI 常全量提交；禁止「有 key 即 codec 变更 → 误重连」）
+      const expectedNext = mergeAudioSettingsSnapshot(previous, config)
+      const plan = classifyAudioSettingsDiff(previous, expectedNext)
 
       db.updateAudioConfig(dbUpdates)
       logger.info('音频设置已保存到数据库:', dbUpdates)
 
-      // Settings → Runtime：写 DB 后统一 reload
+      const nextFormatted = db.getFormattedAudioConfig()
+      const nextMode = normalizeAecMode(nextFormatted.aecMode, 'app')
+      writeAecBootMode(nextMode)
+
+      // Settings → Runtime：写 DB 后统一 reload（廉价；编解码热路径再 rebuild）
       getAudioRuntime().reload()
 
-      // 检查是否需要重建 OpusCodec（采样率或帧长度变化）
-      const needsRebuild = affectsCodecParams(config)
+      let codecRebuilt = false
+      let deviceSwitched = false
+      let captureReinitialized = false
+      let protocolReconnected = false
 
-      if (needsRebuild) {
-        // 重建 OpusCodec（读 runtime 新参数）
+      if (plan.needsCodecRebuild) {
         const codec = getOpusCodec()
         if (codec) {
           codec.rebuild()
+          codecRebuilt = true
           logger.info('✓ OpusCodec 已根据新配置重建')
-        }
-
-        // 通知后台音频窗口完整重建 AudioContext
-        const windows = BrowserWindow.getAllWindows()
-        let notified = false
-
-        windows.forEach((win) => {
-          if (win.isDestroyed())
-            return
-          // 判断是否是后台音频窗口（通过 URL 判断）
-          const url = win.webContents.getURL()
-          if (url.includes('audio.html') || url.includes('#/audio')) {
-            win.webContents.send('audio:command', 'reinitialize')
-            notified = true
-          }
-        })
-
-        if (notified) {
-          logger.info('✓ 已通知后台音频窗口重建 AudioContext')
-        }
-        else {
-          logger.warn('未找到后台音频窗口，配置将在下次初始化时生效')
-        }
-
-        // 触发协议重连，让新 hello 携带新的音频参数
-        try {
-          const container = getServiceContainer()
-          await container.reconnectProtocol()
-        }
-        catch (error) {
-          logger.error('音频参数变化后协议重连失败（不影响音频重建）:', error)
         }
       }
 
-      return success()
+      if (plan.audioWindowAction === 'reinitialize') {
+        notifyBackgroundAudio('reinitialize')
+        captureReinitialized = true
+        logger.info('✓ 已通知后台音频窗口 reinitialize（codec/AEC/NS）')
+      }
+      else if (plan.audioWindowAction === 'switchDevices') {
+        notifyBackgroundAudio('switchDevices')
+        deviceSwitched = true
+        logger.info('✓ 已通知后台音频窗口 switchDevices（仅设备）')
+      }
+
+      if (plan.needsProtocolReconnect) {
+        try {
+          protocolReconnected = await reconnectIfConnectedKeepingIdle()
+        }
+        catch (error) {
+          logger.error('编解码参数变化后协议重连失败（不影响音频重建）:', error)
+        }
+      }
+      else if (plan.devicesChanged || plan.processingChanged || plan.conversationModeChanged) {
+        logger.info('跳过协议重连（设备/AEC/NS/会话模式不进 hello audio_params）')
+      }
+
+      if (plan.requiresRelaunch) {
+        logger.info('AEC system forced_on 交叉，需重启应用完整生效')
+      }
+
+      return success({
+        requiresRelaunch: plan.requiresRelaunch,
+        aecMode: nextMode,
+        aecStatus: buildAecStatus(),
+        deviceSwitched,
+        captureReinitialized,
+        codecRebuilt,
+        protocolReconnected,
+        applied: {
+          devicesChanged: plan.devicesChanged,
+          codecParamsChanged: plan.codecParamsChanged,
+          processingChanged: plan.processingChanged,
+          conversationModeChanged: plan.conversationModeChanged,
+          audioWindowAction: plan.audioWindowAction,
+        },
+      })
+    },
+  })
+
+  createIpcHandler({
+    channel: 'audio:get-aec-status',
+    verbose: false,
+    handler: async () => {
+      return success(buildAecStatus())
+    },
+  })
+
+  createIpcHandler({
+    channel: 'audio:report-aec-capture',
+    verbose: false,
+    schema: {
+      payload: { type: 'object', required: true },
+    },
+    handler: async (_event, ...args) => {
+      const payload = args[0] as { echoCancellationApplied?: boolean }
+      if (typeof payload.echoCancellationApplied === 'boolean') {
+        lastCaptureEchoApplied = payload.echoCancellationApplied
+      }
+      return success(buildAecStatus())
     },
   })
 
@@ -237,12 +392,16 @@ export function getAudioSettings(): Partial<AudioSettings> {
  */
 export function updateAudioSettings(config: Partial<AudioSettings>): void {
   try {
-    const dbUpdates = settingsToDbUpdates(config)
+    const db = getDatabase()
+    const previousMode = normalizeAecMode(db.getFormattedAudioConfig().aecMode, 'app')
+    const dbUpdates = settingsToDbUpdates(config, previousMode)
     if (Object.keys(dbUpdates).length === 0) {
       return
     }
 
-    getDatabase().updateAudioConfig(dbUpdates)
+    db.updateAudioConfig(dbUpdates)
+    const nextMode = normalizeAecMode(db.getFormattedAudioConfig().aecMode, 'app')
+    writeAecBootMode(nextMode)
     getAudioRuntime().reload()
     logger.info('音频设置已更新并 reload runtime:', dbUpdates)
   }

@@ -75,6 +75,7 @@ mac:
     LSUIElement: false
     NSCameraUsageDescription: 小智桌面需要访问您的摄像头以提供视觉识别功能。
     NSMicrophoneUsageDescription: 小智桌面需要访问您的麦克风以进行语音交互。
+    NSAudioCaptureUsageDescription: 小智桌面在启用「系统级回声消除」时需要获取系统音频参考，以减少扬声器与其它应用声音造成的回声。
     NSDocumentsFolderUsageDescription: 小智桌面需要访问您的文档文件夹以保存和管理文件。
     NSDownloadsFolderUsageDescription: 小智桌面需要访问您的下载文件夹以保存下载的文件。
     NSDesktopFolderUsageDescription: 小智桌面需要访问您的桌面以保存文件。

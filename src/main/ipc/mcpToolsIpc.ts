@@ -15,6 +15,7 @@ import fs from 'fs-extra'
 import { getServiceContainer } from '../core/ServiceContainer'
 import { readPluginManifest } from '../mcp/plugins'
 import { getDatabase } from '../services/database'
+import { reconnectIfConnectedKeepingIdle } from '../services/settingsApply'
 import { getLogger } from '../utils/logger'
 import { getMcpPluginsDir, isPathInside } from '../utils/paths'
 
@@ -75,12 +76,8 @@ export function registerMcpToolsIpc(): void {
 
         let reconnected = false
         try {
-          const container = getServiceContainer()
-          // 仅在有活跃连接时 reconnectProtocol 才会真正重连
-          const hadActiveChannel = container.isAudioChannelOpened()
-          await container.reconnectProtocol()
-          // 重连成功后通道应重新打开；失败则仍记为未重连
-          reconnected = hadActiveChannel && container.isAudioChannelOpened()
+          // 工具集进 hello：已连接时 idle 重连；未连接仅 reload 配置
+          reconnected = await reconnectIfConnectedKeepingIdle()
         }
         catch (reconnectError) {
           logger.warn('保存后重连失败（禁用列表已落盘）', reconnectError)

@@ -57,6 +57,8 @@ export interface DbAudioConfig {
   output_device_name: string | null
   enable_noise_reduction: number
   enable_echo_cancellation: number
+  /** off | app | system；缺列时由 enable_echo_cancellation 推导 */
+  aec_mode?: string | null
   conversation_mode: string
   // 音频参数配置
   input_sample_rate: number

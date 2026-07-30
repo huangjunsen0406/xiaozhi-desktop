@@ -24,7 +24,7 @@ import { getDatabasePath } from '../utils/paths'
  *
  * 向前迁移时递增；现有 ad-hoc 迁移收敛进版本框架后 stamp 到此基线。
  */
-export const CONFIG_VERSION = 1
+export const CONFIG_VERSION = 2
 
 /**
  * 进程级数据库资源（显式初始化，禁止懒 getInstance 创建）
@@ -135,6 +135,7 @@ export class DatabaseManager {
         output_device_name TEXT,
         enable_noise_reduction INTEGER DEFAULT 1,
         enable_echo_cancellation INTEGER DEFAULT 1,
+        aec_mode TEXT DEFAULT 'app',
         conversation_mode TEXT DEFAULT 'auto',
         input_sample_rate INTEGER DEFAULT 16000,
         output_sample_rate INTEGER DEFAULT 24000,
@@ -423,6 +424,7 @@ export class DatabaseManager {
       this.migrateWakeWordConfig()
       this.migrateNetworkConfigDefaults()
       this.migrateMusicConfigUrlResponsePath()
+      this.migrateAudioAecMode()
       return
     }
 
@@ -437,10 +439,46 @@ export class DatabaseManager {
       this.logger.info('配置迁移 v0 → v1 完成')
     }
 
-    // 未来：if (current < 2) { ...; this.setConfigVersion(2) }
+    // v1 → v2：audio_config.aec_mode
+    if (current < 2) {
+      this.logger.info('执行配置迁移 v1 → v2 (aec_mode)...')
+      this.migrateAudioAecMode()
+      this.setConfigVersion(2)
+      current = 2
+      this.logger.info('配置迁移 v1 → v2 完成')
+    }
 
     if (current !== CONFIG_VERSION) {
       this.logger.warn(`配置版本 stamp 异常: current=${current}, expected=${CONFIG_VERSION}`)
+    }
+  }
+
+  /**
+   * 为 audio_config 增加 aec_mode，并由 enable_echo_cancellation 回填（不自动升 system）
+   */
+  private migrateAudioAecMode(): void {
+    try {
+      const tableInfo = this.db.prepare('PRAGMA table_info(audio_config)').all() as Array<{
+        name: string
+      }>
+      const hasAecMode = tableInfo.some(c => c.name === 'aec_mode')
+      if (!hasAecMode) {
+        this.db.exec(`ALTER TABLE audio_config ADD COLUMN aec_mode TEXT DEFAULT 'app'`)
+        this.logger.info('audio_config 已添加 aec_mode 列')
+      }
+
+      // 仅回填 NULL/空：off←echo=0，否则 app（永不写 system）
+      this.db.prepare(`
+        UPDATE audio_config
+        SET aec_mode = CASE
+          WHEN enable_echo_cancellation = 0 THEN 'off'
+          ELSE 'app'
+        END
+        WHERE aec_mode IS NULL OR TRIM(aec_mode) = ''
+      `).run()
+    }
+    catch (error) {
+      this.logger.error('migrateAudioAecMode 失败', error)
     }
   }
 
@@ -778,11 +816,11 @@ export class DatabaseManager {
 
     const result = this.db.prepare(`
       INSERT INTO audio_config (
-        enable_noise_reduction, enable_echo_cancellation, conversation_mode,
+        enable_noise_reduction, enable_echo_cancellation, aec_mode, conversation_mode,
         input_sample_rate, output_sample_rate, channels, frame_duration
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(1, 1, 'auto', 16000, 24000, 1, 20)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(1, 1, 'app', 'auto', 16000, 24000, 1, 20)
 
     return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioConfig
   }
@@ -827,6 +865,7 @@ export class DatabaseManager {
     outputDeviceName?: string
     enableNoiseReduction: boolean
     enableEchoCancellation: boolean
+    aecMode: 'off' | 'app' | 'system'
     conversationMode: 'realtime' | 'auto'
     inputSampleRate: ValidSampleRate
     outputSampleRate: ValidSampleRate
@@ -835,16 +874,27 @@ export class DatabaseManager {
   } {
     const VALID_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000]
     const isValidRate = (rate: number): rate is ValidSampleRate => VALID_RATES.includes(rate)
+    const VALID_AEC = new Set(['off', 'app', 'system'])
 
     const config = this.getOrCreateAudioConfig()
     const inputRate = config.input_sample_rate
     const outputRate = config.output_sample_rate
 
+    const rawMode = (config.aec_mode || '').trim()
+    let aecMode: 'off' | 'app' | 'system'
+    if (VALID_AEC.has(rawMode)) {
+      aecMode = rawMode as 'off' | 'app' | 'system'
+    }
+    else {
+      aecMode = config.enable_echo_cancellation ? 'app' : 'off'
+    }
+
     return {
       inputDeviceName: config.input_device_name || undefined,
       outputDeviceName: config.output_device_name || undefined,
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
-      enableEchoCancellation: Boolean(config.enable_echo_cancellation),
+      enableEchoCancellation: aecMode !== 'off',
+      aecMode,
       conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',
       inputSampleRate: isValidRate(inputRate) ? inputRate : 16000,
       outputSampleRate: isValidRate(outputRate) ? outputRate : 24000,

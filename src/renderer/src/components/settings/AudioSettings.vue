@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import type { AudioConfig } from '@shared/types'
+import type { AecMode, AecStatus, AudioConfig } from '@shared/types'
 import { NForm, NFormItem, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useDevices } from '../../composables/useDevices'
 
-// 获取 message 实例
 const message = useMessage()
 
-// 使用设备管理 Composable
 const {
   inputDevices,
   outputDevices,
@@ -21,19 +19,17 @@ const {
   getDeviceLabelById,
 } = useDevices()
 
-// 表单数据
 const speakerVolume = ref(70)
 const enableNoiseReduction = ref(true)
-const enableEchoCancellation = ref(true)
-const enableRealtimeConversation = ref(false) // 实时对话模式开关
+const aecMode = ref<AecMode>('app')
+const aecStatus = ref<AecStatus | null>(null)
+const enableRealtimeConversation = ref(false)
 
-// 高级音频参数
 const inputSampleRate = ref(16000)
 const outputSampleRate = ref(24000)
 const channels = ref(1)
 const frameDuration = ref(20)
 
-// 选项配置
 const sampleRateOptions = [
   { label: '8000 Hz', value: 8000 },
   { label: '16000 Hz', value: 16000 },
@@ -53,18 +49,57 @@ const frameDurationOptions = [
   { label: '60ms', value: 60 },
 ]
 
-// 系统音量控制支持标志
+const aecModeOptions = [
+  {
+    label: '关闭',
+    value: 'off' as const,
+  },
+  {
+    label: '应用内（推荐）',
+    value: 'app' as const,
+  },
+  {
+    label: '系统级（需授权）',
+    value: 'system' as const,
+  },
+]
+
+const aecModeHint = computed(() => {
+  switch (aecMode.value) {
+    case 'off':
+      return '不启用浏览器回声消除，扬声器声音更容易被麦克风拾取。'
+    case 'system':
+      return '尝试消除本应用与其它应用外放造成的回声。完整生效可能需要重启应用，并授予系统音频相关权限（macOS 14.2+ 更完整）。'
+    default:
+      return '使用 Chromium 应用级回声消除，主要抑制本应用播放（如语音播报）造成的回声。'
+  }
+})
+
+const aecEffectiveText = computed(() => {
+  const s = aecStatus.value
+  if (!s)
+    return ''
+  const map: Record<string, string> = {
+    off: '当前：已关闭',
+    app: '当前：应用内',
+    system: '当前：系统级',
+    app_fallback: '当前：已回退为应用内',
+    unavailable: '当前：回声消除不可用',
+  }
+  let text = map[s.effective] || `当前：${s.effective}`
+  if (s.reason === 'system_features_need_relaunch')
+    text += '（需重启应用以启用系统级参考）'
+  else if (s.reason === 'track_echo_cancellation_false')
+    text += '（采集轨道未启用 EC）'
+  return text
+})
+
 const systemVolumeSupported = ref(false)
 
-/**
- * 刷新音频设备列表
- */
 async function refreshDevices(): Promise<void> {
   try {
-    // 枚举设备
     const result = await enumerateDevices()
 
-    // 如果当前没有选中设备，自动选择
     if (!selectedInputDevice.value) {
       autoSelectInputDevice(result.defaultInputName, result.currentInputDeviceId)
     }
@@ -79,42 +114,40 @@ async function refreshDevices(): Promise<void> {
   }
 }
 
-/**
- * 加载音频配置
- */
+async function refreshAecStatus(): Promise<void> {
+  try {
+    aecStatus.value = await window.api.audioGetAecStatus()
+  }
+  catch (error) {
+    console.warn('获取 AEC 状态失败', error)
+  }
+}
+
 async function loadConfig(): Promise<void> {
   try {
-    // 检查系统音量控制是否支持
     systemVolumeSupported.value = await window.api.audioSystemVolumeSupported()
-    console.log('系统音量控制支持:', systemVolumeSupported.value)
 
     const config = await window.api.audioGetConfig()
 
-    // 加载配置
     enableNoiseReduction.value = config.enableNoiseReduction !== false
-    enableEchoCancellation.value = config.enableEchoCancellation !== false
+    if (config.aecMode === 'off' || config.aecMode === 'app' || config.aecMode === 'system') {
+      aecMode.value = config.aecMode
+    }
+    else {
+      aecMode.value = config.enableEchoCancellation === false ? 'off' : 'app'
+    }
     enableRealtimeConversation.value = config.conversationMode === 'realtime'
 
-    // 加载高级音频参数
     inputSampleRate.value = config.inputSampleRate || 16000
     outputSampleRate.value = config.outputSampleRate || 24000
     channels.value = config.channels || 1
     frameDuration.value = config.frameDuration || 20
 
-    // 从配置加载并匹配设备（使用当前组件的 composable 实例）
-    const { inputDeviceId, outputDeviceId } = await loadDevicesFromConfig()
-
-    // 更新选中的设备（loadDevicesFromConfig 已经设置了 selectedInputDevice/selectedOutputDevice）
-    console.log('从配置加载的设备:', {
-      input: inputDeviceId,
-      output: outputDeviceId,
-    })
+    await loadDevicesFromConfig()
 
     if (systemVolumeSupported.value) {
       try {
-        const systemVolume = await window.api.audioSystemGetVolume()
-        speakerVolume.value = systemVolume
-        console.log('从系统读取扬声器音量:', systemVolume)
+        speakerVolume.value = await window.api.audioSystemGetVolume()
       }
       catch (error) {
         console.warn('读取系统音量失败:', error)
@@ -122,24 +155,23 @@ async function loadConfig(): Promise<void> {
       }
     }
 
-    console.log('音频配置已加载:', config)
+    await refreshAecStatus()
   }
   catch (error) {
     console.error('加载音频配置失败:', error)
   }
 }
 
-/**
- * 保存配置
- */
 async function handleSave(): Promise<void> {
   try {
-    // 记录保存前的配置（用于判断是否需要重新初始化）
     const previousConfig = await window.api.audioGetConfig()
+    const previousMode = previousConfig.aecMode
+      ?? (previousConfig.enableEchoCancellation === false ? 'off' : 'app')
 
     const config: Partial<AudioConfig> = {
       enableNoiseReduction: enableNoiseReduction.value,
-      enableEchoCancellation: enableEchoCancellation.value,
+      aecMode: aecMode.value,
+      enableEchoCancellation: aecMode.value !== 'off',
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',
       inputSampleRate: inputSampleRate.value as AudioConfig['inputSampleRate'],
       outputSampleRate: outputSampleRate.value as AudioConfig['outputSampleRate'],
@@ -147,36 +179,40 @@ async function handleSave(): Promise<void> {
       frameDuration: frameDuration.value,
     }
 
-    // 使用 composable 提供的方法获取设备名称
     if (selectedInputDevice.value && selectedInputDevice.value !== 'default') {
       const label = getDeviceLabelById(selectedInputDevice.value, 'input')
-      if (label) {
+      if (label)
         config.inputDeviceName = label
-        console.log('保存麦克风设备名称:', label)
-      }
     }
 
     if (selectedOutputDevice.value && selectedOutputDevice.value !== 'default') {
       const label = getDeviceLabelById(selectedOutputDevice.value, 'output')
-      if (label) {
+      if (label)
         config.outputDeviceName = label
-        console.log('保存扬声器设备名称:', label)
-      }
     }
 
-    await window.api.audioUpdateConfig(config)
+    const result = await window.api.audioUpdateConfig(config)
 
-    console.log('音频配置已保存:', config)
+    const needsRelaunch = result?.requiresRelaunch
+      ?? ((previousMode === 'system') !== (aecMode.value === 'system'))
 
-    // 检查是否修改了采样率、声道数或帧长度（需要完整重建 AudioContext + 协议重连）
-    const needsReinitialization
-      = config.inputSampleRate !== previousConfig.inputSampleRate
-        || config.outputSampleRate !== previousConfig.outputSampleRate
-        || config.channels !== previousConfig.channels
-        || config.frameDuration !== previousConfig.frameDuration
+    if (result?.aecStatus)
+      aecStatus.value = result.aecStatus
+    else
+      await refreshAecStatus()
 
-    if (needsReinitialization) {
+    // 文案跟主进程 apply 结果，避免 UI 自猜误报「正在重连」
+    if (needsRelaunch) {
+      message.warning('回声消除模式已保存。系统级完整生效需要重启应用。', { duration: 5000 })
+    }
+    else if (result?.protocolReconnected || result?.codecRebuilt) {
       message.success('音频设置已保存，正在重新初始化音频和重连...', { duration: 3000 })
+    }
+    else if (result?.deviceSwitched) {
+      message.success('音频设置已保存，正在切换设备...', { duration: 2500 })
+    }
+    else if (result?.captureReinitialized) {
+      message.success('音频设置已保存，正在重建采集...', { duration: 2500 })
     }
     else {
       message.success('音频设置已保存')
@@ -188,32 +224,23 @@ async function handleSave(): Promise<void> {
   }
 }
 
-/**
- * 刷新设备列表
- */
 async function handleCustomButton(): Promise<void> {
   await refreshDevices()
   message.success('设备列表已刷新')
 }
 
-// 音量设置防抖定时器
 let volumeDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
-// 监听扬声器音量变化，实时设置系统音量（带防抖）
 watch(speakerVolume, (newVolume) => {
   if (!systemVolumeSupported.value)
     return
 
-  // 清除之前的定时器
-  if (volumeDebounceTimer) {
+  if (volumeDebounceTimer)
     clearTimeout(volumeDebounceTimer)
-  }
 
-  // 300ms 防抖：只在用户停止拖动后才设置系统音量
   volumeDebounceTimer = setTimeout(async () => {
     try {
       await window.api.audioSystemSetVolume(newVolume)
-      console.log(`系统音量已设置: ${newVolume}%`)
     }
     catch (error) {
       console.warn('设置系统音量失败:', error)
@@ -221,18 +248,15 @@ watch(speakerVolume, (newVolume) => {
   }, 300)
 })
 
-// 组件挂载时初始化
 onMounted(async () => {
   await loadConfig()
 })
 
-// 导出方法供父组件调用
 defineExpose({ handleSave, handleCustomButton })
 </script>
 
 <template>
   <NForm label-placement="left" :label-width="120">
-    <!-- 麦克风设置 -->
     <NFormItem label="麦克风设备">
       <NSelect
         v-model:value="selectedInputDevice"
@@ -243,7 +267,6 @@ defineExpose({ handleSave, handleCustomButton })
       />
     </NFormItem>
 
-    <!-- 扬声器设置 -->
     <NFormItem label="扬声器设备">
       <NSelect
         v-model:value="selectedOutputDevice"
@@ -267,25 +290,35 @@ defineExpose({ handleSave, handleCustomButton })
       </div>
     </NFormItem>
 
-    <!-- 音频处理设置 -->
     <NFormItem label="噪音抑制">
       <NSwitch v-model:value="enableNoiseReduction" />
     </NFormItem>
-    <NFormItem label="回声消除">
-      <NSwitch v-model:value="enableEchoCancellation" />
-    </NFormItem>
 
-    <!-- 对话模式设置 -->
-    <NFormItem label="开启实时对话">
-      <div style="display: flex; align-items: center; gap: 8px">
-        <NSwitch v-model:value="enableRealtimeConversation" />
-        <span style="color: #999; font-size: 12px">
-          {{ enableRealtimeConversation ? '实时对话模式（全双工）' : '自动对话模式（回合制）' }} 开启实时对话后会获取屏幕录制权限（默认开启）
+    <NFormItem label="回声消除">
+      <div style="display: flex; flex-direction: column; gap: 6px; width: 360px">
+        <NSelect
+          v-model:value="aecMode"
+          :options="aecModeOptions"
+          style="width: 300px"
+        />
+        <span style="color: #999; font-size: 12px; line-height: 1.4">
+          {{ aecModeHint }}
+        </span>
+        <span v-if="aecEffectiveText" style="color: #666; font-size: 12px">
+          {{ aecEffectiveText }}
         </span>
       </div>
     </NFormItem>
 
-    <!-- 高级音频参数 -->
+    <NFormItem label="开启实时对话">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <NSwitch v-model:value="enableRealtimeConversation" />
+        <span style="color: #999; font-size: 12px">
+          {{ enableRealtimeConversation ? '实时对话模式（全双工，可随时打断）' : '自动对话模式（回合制）' }}
+        </span>
+      </div>
+    </NFormItem>
+
     <NFormItem label=" " :show-label="false">
       <div style="color: #666; font-size: 14px; font-weight: 500; margin-top: 16px">
         高级音频参数
@@ -330,7 +363,6 @@ defineExpose({ handleSave, handleCustomButton })
       </div>
     </NFormItem>
 
-    <!-- 设备刷新提示 -->
     <NFormItem label=" " :show-label="false">
       <div style="color: #666; font-size: 12px">
         提示：如果设备未显示或更换了设备，请点击右下角"刷新设备"按钮

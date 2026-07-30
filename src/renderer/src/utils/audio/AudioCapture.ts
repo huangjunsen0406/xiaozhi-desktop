@@ -111,25 +111,44 @@ export class AudioCapture {
 
       // 获取音频配置
       const audioConfig = await window.api.audioGetConfig()
+      const aecMode = audioConfig.aecMode
+        ?? (audioConfig.enableEchoCancellation === false ? 'off' : 'app')
 
-      // 构建音频约束
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: audioConfig.enableEchoCancellation,
-        noiseSuppression: audioConfig.enableNoiseReduction,
+      // 构建音频约束（Chromium AEC：off 关 EC；app/system 开 EC）
+      // system 先尝试 ideal:'all'（新规范），失败再 boolean true
+      const baseConstraints: MediaTrackConstraints = {
+        noiseSuppression: audioConfig.enableNoiseReduction !== false,
         autoGainControl: true,
         sampleRate: this.sampleRate,
         channelCount: this.channels,
       }
-
-      // 如果指定了设备ID且不是 'default'，添加设备约束
       if (this.deviceId && this.deviceId !== 'default') {
-        audioConstraints.deviceId = { exact: this.deviceId }
+        baseConstraints.deviceId = { exact: this.deviceId }
       }
 
-      // 获取麦克风流
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-      })
+      const tryGum = async (echoCancellation: boolean | object) => {
+        const audioConstraints: MediaTrackConstraints = {
+          ...baseConstraints,
+          echoCancellation: echoCancellation as boolean,
+        }
+        return navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
+      }
+
+      if (aecMode === 'off') {
+        this.stream = await tryGum(false)
+      }
+      else if (aecMode === 'system') {
+        try {
+          this.stream = await tryGum({ ideal: 'all' })
+        }
+        catch (gumError) {
+          console.warn('[AEC] system ideal:all 失败，回退 echoCancellation:true', gumError)
+          this.stream = await tryGum(true)
+        }
+      }
+      else {
+        this.stream = await tryGum(true)
+      }
 
       // track 意外结束时自动重连（蓝牙切换、设备断连等）
       const track = this.stream.getAudioTracks()[0]
@@ -137,6 +156,22 @@ export class AudioCapture {
         track.onended = () => {
           console.warn('[AEC] 麦克风 track 意外结束，尝试重新采集...')
           this.start(this.deviceId).catch(e => console.error('[AEC] 重新采集失败:', e))
+        }
+
+        const settings = track.getSettings()
+        const echoApplied = settings.echoCancellation === true
+        console.log('[AEC] capture settings', {
+          aecMode,
+          echoCancellation: settings.echoCancellation,
+          noiseSuppression: settings.noiseSuppression,
+        })
+        try {
+          await window.api.audioReportAecCapture({
+            echoCancellationApplied: echoApplied,
+          })
+        }
+        catch (reportErr) {
+          console.warn('[AEC] 上报采集状态失败', reportErr)
         }
       }
 

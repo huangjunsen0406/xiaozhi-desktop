@@ -11,6 +11,36 @@ export interface AudioDeviceInfo {
 export type ValidSampleRate = 8000 | 12000 | 16000 | 24000 | 48000
 
 /**
+ * Chromium 回声消除模式（设置页下拉）
+ *
+ * - off：不请求 gUM echoCancellation
+ * - app：Chrome-wide 应用内参考（默认）
+ * - system：尝试系统 loopback 参考（forced_on，可能需重启 + 系统音频权限）
+ */
+export type AecMode = 'off' | 'app' | 'system'
+
+/**
+ * 运行时 AEC 有效状态（采集侧上报 + 主进程聚合）
+ */
+export type AecEffective =
+  | 'off'
+  | 'app'
+  | 'system'
+  | 'app_fallback'
+  | 'unavailable'
+
+export interface AecStatus {
+  desired: AecMode
+  effective: AecEffective
+  reason?: string
+  /** track.getSettings().echoCancellation */
+  echoCancellationApplied?: boolean
+  platform: NodeJS.Platform
+  /** 完整系统参考是否可能需重启应用 */
+  requiresRelaunch?: boolean
+}
+
+/**
  * 用户音频偏好（Settings DTO）
  *
  * 与主进程 AudioRuntime（编解码 / hello 参数缓存）分离。
@@ -23,7 +53,15 @@ export interface AudioSettings {
   microphoneVolume?: number
   speakerVolume?: number
   enableNoiseReduction?: boolean
-  /** 本地 AEC 开关（Chromium/采集侧）；不进入协议 hello features */
+  /**
+   * 回声消除模式（推荐）
+   * 未设置时由 enableEchoCancellation 兼容推导
+   */
+  aecMode?: AecMode
+  /**
+   * @deprecated 使用 aecMode；true→app，false→off（不会映射为 system）
+   * 读写时与 aecMode 双写保持兼容
+   */
   enableEchoCancellation?: boolean
   conversationMode?: 'realtime' | 'auto'
   // 高级音频参数（偏好；生效需 runtime.reload + codec rebuild）

@@ -1,4 +1,4 @@
-import type { AudioConfig, IpcResult } from '@shared/types'
+import type { AecStatus, AudioConfig, IpcResult } from '@shared/types'
 /**
  * 音频 API 模块
  */
@@ -7,6 +7,26 @@ import { ipcRenderer } from 'electron'
 import { unwrapIpcResult } from '../utils/ipc'
 
 export type { AudioConfig }
+
+export interface AudioUpdateConfigResult {
+  requiresRelaunch?: boolean
+  aecMode?: AudioConfig['aecMode']
+  aecStatus?: AecStatus
+  /** 仅设备变更时通知了 switchDevices */
+  deviceSwitched?: boolean
+  /** AEC/NS 或编解码参数触发了采集/上下文重建 */
+  captureReinitialized?: boolean
+  codecRebuilt?: boolean
+  /** 已连接且执行了协议 idle 重连 */
+  protocolReconnected?: boolean
+  applied?: {
+    devicesChanged?: boolean
+    codecParamsChanged?: boolean
+    processingChanged?: boolean
+    conversationModeChanged?: boolean
+    audioWindowAction?: 'none' | 'switchDevices' | 'reinitialize'
+  }
+}
 
 export const audioApi = {
   // PCM 数据发送
@@ -25,10 +45,20 @@ export const audioApi = {
     return unwrapIpcResult<AudioConfig>(result, '获取音频配置失败')
   },
 
-  // 更新音频配置
-  updateConfig: async (config: Partial<AudioConfig>): Promise<void> => {
-    const result = await ipcRenderer.invoke('audio:update-config', config) as IpcResult<void>
-    unwrapIpcResult(result, '更新音频配置失败')
+  // 更新音频配置（可能返回 requiresRelaunch）
+  updateConfig: async (config: Partial<AudioConfig>): Promise<AudioUpdateConfigResult | void> => {
+    const result = await ipcRenderer.invoke('audio:update-config', config) as IpcResult<AudioUpdateConfigResult | void>
+    return unwrapIpcResult(result, '更新音频配置失败')
+  },
+
+  getAecStatus: async (): Promise<AecStatus> => {
+    const result = await ipcRenderer.invoke('audio:get-aec-status') as IpcResult<AecStatus> | AecStatus
+    return unwrapIpcResult<AecStatus>(result, '获取 AEC 状态失败')
+  },
+
+  reportAecCapture: async (payload: { echoCancellationApplied?: boolean }): Promise<AecStatus> => {
+    const result = await ipcRenderer.invoke('audio:report-aec-capture', payload) as IpcResult<AecStatus> | AecStatus
+    return unwrapIpcResult<AecStatus>(result, '上报 AEC 采集状态失败')
   },
 
   // 获取默认设备 ID

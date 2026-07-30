@@ -91,7 +91,24 @@ export interface RendererApi {
   audioOnOpusDecoded: (callback: (pcm: Buffer) => void) => () => void
   // Audio Device APIs
   audioGetConfig: () => Promise<AudioConfig>
-  audioUpdateConfig: (config: Partial<AudioConfig>) => Promise<void>
+  audioUpdateConfig: (config: Partial<AudioConfig>) => Promise<{
+    requiresRelaunch?: boolean
+    aecMode?: AudioConfig['aecMode']
+    aecStatus?: import('@shared/types').AecStatus
+    deviceSwitched?: boolean
+    captureReinitialized?: boolean
+    codecRebuilt?: boolean
+    protocolReconnected?: boolean
+    applied?: {
+      devicesChanged?: boolean
+      codecParamsChanged?: boolean
+      processingChanged?: boolean
+      conversationModeChanged?: boolean
+      audioWindowAction?: 'none' | 'switchDevices' | 'reinitialize'
+    }
+  } | void>
+  audioGetAecStatus: () => Promise<import('@shared/types').AecStatus>
+  audioReportAecCapture: (payload: { echoCancellationApplied?: boolean }) => Promise<import('@shared/types').AecStatus>
   audioGetDefaultDeviceId: (kind: 'input' | 'output') => Promise<string | null>
   // System Volume Control APIs
   audioSystemGetVolume: () => Promise<number>

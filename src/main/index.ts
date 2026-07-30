@@ -4,6 +4,7 @@ import process from 'node:process'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage, session } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
+import { applyAecCommandLineFeatures } from './audio/AecPolicy'
 import { initializeAudioRuntime } from './audio/AudioRuntime'
 import { createServiceContainer, getServiceContainer } from './core/ServiceContainer'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
@@ -26,10 +27,9 @@ let isQuittingFlag = false
 
 app.setName(APP_DISPLAY_NAME)
 
-app.commandLine.appendSwitch(
-  'enable-features',
-  'ChromeWideEchoCancellation,SystemLoopbackAsAecReference',
-)
+// 按 aec-boot.json / 默认 app 设置 Chromium AEC features（须在 ready 前）
+const bootAecMode = applyAecCommandLineFeatures()
+console.info('[AecPolicy] boot aecMode=', bootAecMode)
 
 const isMacOS = process.platform === 'darwin'
 const hasDock = () => isMacOS && !!app.dock
