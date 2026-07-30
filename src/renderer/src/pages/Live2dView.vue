@@ -132,8 +132,10 @@ async function handleModelChange(newModelId: string): Promise<void> {
 onUnmounted(() => {
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousemove', handleMouseMove)
+    containerRef.value.removeEventListener('mouseleave', handleMouseLeave)
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
     containerRef.value.removeEventListener('dblclick', toggleCall)
+    containerRef.value.removeEventListener('contextmenu', handleContextMenu)
   }
   if (app) {
     app.destroy(true)
@@ -186,11 +188,13 @@ onMounted(async () => {
     const modelId = await getCurrentModelId()
     await loadModel(modelId)
 
-    // 监听鼠标移动事件(用于穿透控制)
+    // 监听鼠标事件(穿透控制 / 拖拽 / 右键菜单)
     if (containerRef.value) {
       containerRef.value.addEventListener('mousemove', handleMouseMove)
+      containerRef.value.addEventListener('mouseleave', handleMouseLeave)
       containerRef.value.addEventListener('mousedown', handleMouseDown)
       containerRef.value.addEventListener('dblclick', toggleCall)
+      containerRef.value.addEventListener('contextmenu', handleContextMenu)
     }
 
     // 启动口型同步
@@ -268,8 +272,13 @@ function isMouseOnModel(e: MouseEvent): boolean {
 }
 
 function handleMouseDown(e: MouseEvent): void {
+  // 仅左键拖拽；右键留给 contextmenu → 独立 Hover 菜单窗
+  if (e.button !== 0)
+    return
+
   if (isMouseOnModel(e)) {
     isDragging = true
+    window.api?.hideHover?.()
     window.api?.dragStart()
 
     const handleMouseMoveGlobal = () => {
@@ -292,19 +301,34 @@ function handleMouseDown(e: MouseEvent): void {
   }
 }
 
-function handleMouseMove(e: MouseEvent): void {
+function handleMouseMove(_e: MouseEvent): void {
   if (isDragging)
     return
 
-  // 检查鼠标是否在模型范围内
-  if (isMouseOnModel(e)) {
-    // 鼠标在模型上,禁用穿透
-    window.api?.setIgnoreMouseEvents(false)
-  }
-  else {
-    // 鼠标不在模型上,启用穿透
-    window.api?.setIgnoreMouseEvents(true)
-  }
+  // 整窗客户区可交互（与 Mini 一致），任意位置可右键唤起独立菜单窗
+  window.api?.setIgnoreMouseEvents(false)
+}
+
+function handleMouseLeave(): void {
+  if (isDragging)
+    return
+  window.api?.setIgnoreMouseEvents(true)
+}
+
+/**
+ * 窗口客户区内右键：显示与 Mini 相同的独立 Hover 菜单窗（屏幕坐标锚定，避免父窗裁切）
+ */
+function handleContextMenu(e: MouseEvent): void {
+  e.preventDefault()
+  e.stopPropagation()
+
+  if (isDragging)
+    return
+
+  window.api?.setIgnoreMouseEvents(false)
+  const screenX = e.screenX
+  const screenY = e.screenY
+  window.api?.showHoverFor?.('live2d', screenX, screenY)
 }
 
 /**

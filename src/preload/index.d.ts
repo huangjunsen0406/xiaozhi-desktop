@@ -68,6 +68,8 @@ export interface RendererApi {
   dragEnd: () => void
   showHover: () => void
   hideHover: () => void
+  /** 独立 Hover 菜单窗：按 mini/live2d/pets 锚点显示；xy 为屏幕坐标 */
+  showHoverFor: (anchor: 'mini' | 'live2d' | 'pets', screenX?: number, screenY?: number) => void
   repositionHover: () => void
   hoverMiniEnter: () => void
   hoverMiniLeave: () => void

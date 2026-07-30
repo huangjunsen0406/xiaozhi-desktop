@@ -167,46 +167,53 @@ async function toggleCall() {
 }
 
 /**
- * 鼠标移动处理（穿透控制）
+ * 鼠标移动处理（穿透控制 + 悬停动画）
  */
 function handleMouseMove(e: MouseEvent): void {
   if (isDragging)
     return
 
   const canvas = canvasRef.value
-  if (!canvas)
+  if (canvas) {
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    const onCanvas = x >= 0 && x <= rect.width && y >= 0 && y <= rect.height
+    if (onCanvas && !isHovered) {
+      hoverAnimRow = HOVER_ROWS[Math.floor(Math.random() * HOVER_ROWS.length)]
+      currentRow = hoverAnimRow
+      currentFrame = 0
+    }
+    else if (!onCanvas && isHovered) {
+      currentRow = 0
+      currentFrame = 0
+    }
+    isHovered = onCanvas
+  }
+
+  // 整窗可交互，右键可在客户区唤起独立 Hover 菜单窗
+  window.api?.setPetsIgnoreMouseEvents(false)
+}
+
+function handleMouseLeave(): void {
+  if (isDragging)
     return
-
-  const rect = canvas.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
-
-  const onCanvas = x >= 0 && x <= rect.width && y >= 0 && y <= rect.height
-  if (onCanvas && !isHovered) {
-    // 鼠标刚进入：随机选一个动画行
-    hoverAnimRow = HOVER_ROWS[Math.floor(Math.random() * HOVER_ROWS.length)]
-    currentRow = hoverAnimRow
-    currentFrame = 0
-  }
-  else if (!onCanvas && isHovered) {
-    // 鼠标离开：回到 idle
-    currentRow = 0
-    currentFrame = 0
-  }
-  isHovered = onCanvas
-  if (onCanvas) {
-    window.api?.setPetsIgnoreMouseEvents(false)
-  }
-  else {
-    window.api?.setPetsIgnoreMouseEvents(true)
-  }
+  isHovered = false
+  currentRow = 0
+  currentFrame = 0
+  window.api?.setPetsIgnoreMouseEvents(true)
 }
 
 /**
  * 鼠标按下处理（拖拽）
  */
-function handleMouseDown(_e: MouseEvent): void {
+function handleMouseDown(e: MouseEvent): void {
+  if (e.button !== 0)
+    return
+
   isDragging = true
+  window.api?.hideHover?.()
   window.api?.dragStart()
 
   const handleMouseMoveGlobal = (): void => {
@@ -228,11 +235,27 @@ function handleMouseDown(_e: MouseEvent): void {
   window.addEventListener('mouseup', handleMouseUpGlobal)
 }
 
+/**
+ * 窗口客户区内右键：独立 Hover 菜单窗（与 Mini 同一套，避免父窗裁切）
+ */
+function handleContextMenu(e: MouseEvent): void {
+  e.preventDefault()
+  e.stopPropagation()
+
+  if (isDragging)
+    return
+
+  window.api?.setPetsIgnoreMouseEvents(false)
+  window.api?.showHoverFor?.('pets', e.screenX, e.screenY)
+}
+
 onMounted(() => {
   if (containerRef.value) {
     containerRef.value.addEventListener('mousedown', handleMouseDown)
     containerRef.value.addEventListener('mousemove', handleMouseMove)
+    containerRef.value.addEventListener('mouseleave', handleMouseLeave)
     containerRef.value.addEventListener('dblclick', toggleCall)
+    containerRef.value.addEventListener('contextmenu', handleContextMenu)
   }
 
   // 监听宠物切换事件
@@ -246,7 +269,9 @@ onUnmounted(() => {
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
     containerRef.value.removeEventListener('mousemove', handleMouseMove)
+    containerRef.value.removeEventListener('mouseleave', handleMouseLeave)
     containerRef.value.removeEventListener('dblclick', toggleCall)
+    containerRef.value.removeEventListener('contextmenu', handleContextMenu)
   }
   if (removeChangedListener) {
     removeChangedListener()

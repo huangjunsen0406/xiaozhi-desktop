@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { DESKTOP_QUICK_MENU_ITEMS } from '../utils/desktopQuickActions'
 
 const open = ref(false)
 
@@ -16,16 +17,6 @@ function handleLeave() {
   window.api.hoverWindowLeave()
 }
 
-function handleMain() {
-  window.api.hideHover()
-  window.api.toggleToMain()
-}
-
-function handleSettings() {
-  window.api.hideHover()
-  window.api.toggleSettings()
-}
-
 onUnmounted(() => {
   window.api.hoverWindowLeave()
 })
@@ -38,11 +29,13 @@ onUnmounted(() => {
       :class="open ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-90'"
     >
       <div class="flex flex-col divide-y divide-black/5 dark:divide-white/10">
-        <button class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5" @click="handleMain">
-          主界面
-        </button>
-        <button class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5" @click="handleSettings">
-          设置
+        <button
+          v-for="item in DESKTOP_QUICK_MENU_ITEMS"
+          :key="item.id"
+          class="h-18 px-5 text-[16px] text-neutral-900 dark:text-neutral-200 text-left hover:bg-black/5 dark:hover:bg-white/5"
+          @click="item.run()"
+        >
+          {{ item.label }}
         </button>
       </div>
     </div>

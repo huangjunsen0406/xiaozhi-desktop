@@ -32,6 +32,7 @@ const api = {
   // Hover 控制 API
   showHover: hoverApi.showHover,
   hideHover: hoverApi.hideHover,
+  showHoverFor: hoverApi.showHoverFor,
   repositionHover: hoverApi.repositionHover,
   hoverMiniEnter: hoverApi.hoverMiniEnter,
   hoverMiniLeave: hoverApi.hoverMiniLeave,
