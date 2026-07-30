@@ -1,15 +1,15 @@
 import type { MqttInfo } from '../services/configManagerDB'
 import axios from 'axios'
-import { ipcMain } from 'electron'
 import { getServiceContainer } from '../core/ServiceContainer'
 import { getActivationService } from '../services/ActivationService'
 import { getConfigManager } from '../services/configManagerDB'
 import { getLogger } from '../utils/logger'
+import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('ConfigIpc')
 
 /**
- * 注册配置相关的 IPC 通道
+ * 注册配置相关的 IPC 通道（createIpcHandler + IpcResult）
  */
 export function registerConfigIpc(): void {
   const configManager = getConfigManager()
@@ -17,25 +17,26 @@ export function registerConfigIpc(): void {
   /**
    * 获取所有配置
    */
-  ipcMain.handle('config:get-all', () => {
-    try {
+  createIpcHandler({
+    channel: 'config:get-all',
+    handler: () => {
       const config = configManager.getAll()
       logger.info('获取所有配置', config)
-      return { success: true, data: config }
-    }
-    catch (error) {
-      logger.error('获取配置失败', error)
-      return { success: false, error: String(error) }
-    }
+      return success(config)
+    },
   })
 
   /**
    * 获取单个配置值
    */
-  ipcMain.handle('config:get', (_, key: string) => {
-    try {
+  createIpcHandler({
+    channel: 'config:get',
+    schema: {
+      key: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: (_event, keyUnknown: unknown) => {
+      const key = String(keyUnknown)
       let value: string | null | MqttInfo = null
-      // 根据 key 调用对应的方法
       switch (key) {
         case 'client_id':
           value = configManager.getClientId()
@@ -65,63 +66,67 @@ export function registerConfigIpc(): void {
           value = null
       }
       logger.info(`获取配置 ${key}`, value)
-      return { success: true, data: value }
-    }
-    catch (error) {
-      logger.error(`获取配置 ${key} 失败`, error)
-      return { success: false, error: String(error) }
-    }
+      return success(value)
+    },
   })
 
   /**
    * 设置单个配置值
    */
-  ipcMain.handle('config:set', (_, key: string, value: string | MqttInfo | null) => {
-    try {
-      let success = false
-      // 根据 key 调用对应的方法
+  createIpcHandler({
+    channel: 'config:set',
+    schema: {
+      key: { type: 'string', required: true, minLength: 1 },
+    },
+    handler: (_event, keyUnknown: unknown, value: unknown) => {
+      const key = String(keyUnknown)
+      let ok = false
       switch (key) {
         case 'client_id':
-          success = configManager.setClientId(value as string)
+          ok = configManager.setClientId(value as string)
           break
         case 'device_id':
-          success = configManager.setDeviceId(value as string)
+          ok = configManager.setDeviceId(value as string)
           break
         case 'ota_version_url':
-          success = configManager.setOtaVersionUrl(value as string)
+          ok = configManager.setOtaVersionUrl(value as string)
           break
         case 'websocket_url':
-          success = configManager.setWebsocketUrl(value as string)
+          ok = configManager.setWebsocketUrl(value as string)
           break
         case 'websocket_access_token':
-          success = configManager.setWebsocketAccessToken(value as string)
+          ok = configManager.setWebsocketAccessToken(value as string)
           break
         case 'mqtt_info':
-          success = configManager.setMqttInfo(value as MqttInfo | null)
+          ok = configManager.setMqttInfo(value as MqttInfo | null)
           break
         case 'activation_version':
-          success = configManager.setActivationVersion(value as string)
+          ok = configManager.setActivationVersion(value as string)
           break
         case 'authorization_url':
-          success = configManager.setAuthorizationUrl(value as string)
+          ok = configManager.setAuthorizationUrl(value as string)
           break
         default:
-          success = false
+          return failure(`未知配置项: ${key}`)
       }
-      logger.info(`设置配置 ${key}`, { value, success })
-      return { success }
-    }
-    catch (error) {
-      logger.error(`设置配置 ${key} 失败`, error)
-      return { success: false, error: String(error) }
-    }
+      logger.info(`设置配置 ${key}`, { value, success: ok })
+      if (!ok) {
+        return failure(`设置配置 ${key} 失败`)
+      }
+      return success()
+    },
   })
 
   /**
    * 批量更新配置
    */
-  ipcMain.handle('config:update-all', async (_, config: Record<string, string | undefined>) => {
-    try {
+  createIpcHandler({
+    channel: 'config:update-all',
+    schema: {
+      config: { type: 'object', required: true },
+    },
+    handler: async (_event, configUnknown: unknown) => {
+      const config = configUnknown as Record<string, string | undefined>
       logger.info('批量更新配置', config)
 
       // 连接相关的字段列表
@@ -304,12 +309,8 @@ export function registerConfigIpc(): void {
         container.protocolManager.reloadConfig()
       }
 
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('批量更新配置失败', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
   logger.info('配置相关 IPC 通道已注册')

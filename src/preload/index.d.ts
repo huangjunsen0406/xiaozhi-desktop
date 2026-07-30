@@ -1,6 +1,7 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   ActivationData,
+  ActivationInitResult,
   ActivationResult,
   ActivationStatus,
   AppStateSnapshot,
@@ -32,6 +33,7 @@ export type ActivationDeviceInfo = DeviceInfo
 // 导出共享类型供渲染进程使用
 export type {
   ActivationData,
+  ActivationInitResult,
   ActivationResult,
   ActivationStatus,
   AppStateSnapshot,
@@ -94,11 +96,11 @@ export interface RendererApi {
   bubbleSetAnchorOffset: (offsetY: number) => void
   bubbleOnSetArrowX: (callback: (x: number) => void) => () => void
   // Activation APIs
-  activationInitialize: () => Promise<{ success: boolean, error?: string }>
+  activationInitialize: () => Promise<ActivationInitResult>
   activationGetDeviceInfo: () => Promise<ActivationDeviceInfo>
   activationGetActivationData: () => Promise<ActivationData | null>
   activationStart: (data: ActivationData) => Promise<ActivationResult>
-  activationCancel: () => Promise<{ success: boolean, error?: string }>
+  activationCancel: () => Promise<ActivationResult>
   activationCheckStatus: () => Promise<ActivationStatus>
   // Audio APIs
   audioSendPCM: (pcm: Int16Array) => void

@@ -20,8 +20,8 @@ export interface ActivationStatus {
   message?: string
 }
 
+/** initialize 成功后的 data 载荷（外层由 IpcResult 包装） */
 export interface ActivationInitResult {
-  success: boolean
   need_activation_ui: boolean
-  error?: string
+  status_message?: string
 }
