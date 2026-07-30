@@ -1,109 +1,86 @@
 import type { IpcContext } from '../types/ipc'
 import { DeviceStateValue, ListeningModeValue } from '@shared/types'
-import { ipcMain } from 'electron'
 import { getLogger } from '../utils/logger'
+import { createIpcHandler, success } from './middleware'
 import { registerShortcutIpcChannels } from './shortcutIpc'
 import { registerWakeWordIpc } from './wakeWordIpc'
 
 const logger = getLogger('AppIpc')
 
 /**
- * 注册应用控制相关的 IPC 通道
- * @param context - IPC 上下文，包含 ServiceContainer 实例
+ * 注册应用控制相关的 IPC 通道（统一 createIpcHandler + IpcResult）
  */
 export function registerAppIpc(context: IpcContext): void {
   const { container } = context
-  logger.info('注册��用控制 IPC 通道...')
+  logger.info('注册应用控制 IPC 通道...')
 
-  // 注册唤醒词 IPC
   registerWakeWordIpc(context)
-
-  // 注册快捷键 IPC
   registerShortcutIpcChannels(container)
 
-  // 开始手动监听
-  ipcMain.handle('app:start-listening-manual', async () => {
-    try {
+  createIpcHandler({
+    channel: 'app:start-listening-manual',
+    handler: async () => {
       await container.startListeningManual()
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('开始手动监听失败:', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
-  // 停止手动监听
-  ipcMain.handle('app:stop-listening-manual', async () => {
-    try {
+  createIpcHandler({
+    channel: 'app:stop-listening-manual',
+    handler: async () => {
       await container.stopListeningManual()
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('停止手动监听失败:', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
-  // 开始自动对话
-  ipcMain.handle('app:start-auto-conversation', async () => {
-    try {
+  createIpcHandler({
+    channel: 'app:start-auto-conversation',
+    handler: async () => {
       await container.startAutoConversation()
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('开始自动对话失败:', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
-  // 停止自动对话
-  ipcMain.handle('app:stop-auto-conversation', async () => {
-    try {
+  createIpcHandler({
+    channel: 'app:stop-auto-conversation',
+    handler: async () => {
       await container.stopAutoConversation()
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('停止自动对话失败:', error)
-      return { success: false, error: String(error) }
-    }
+      return success()
+    },
   })
 
-  // 获取状态快照
-  ipcMain.handle('app:get-state', () => {
-    try {
-      return container.getStateSnapshot()
-    }
-    catch (error) {
-      logger.error('获取状态快照失败:', error)
-      return {
-        deviceState: DeviceStateValue.IDLE,
-        listeningMode: ListeningModeValue.MANUAL,
-        keepListening: false,
-        channelOpen: false,
+  createIpcHandler({
+    channel: 'app:get-state',
+    handler: () => {
+      try {
+        return success(container.getStateSnapshot())
       }
-    }
+      catch (error) {
+        logger.error('获取状态快照失败:', error)
+        return success({
+          deviceState: DeviceStateValue.IDLE,
+          listeningMode: ListeningModeValue.MANUAL,
+          keepListening: false,
+          channelOpen: false,
+        })
+      }
+    },
   })
 
-  // 发送文本消息
-  ipcMain.handle('app:send-text', async (_event, text: string) => {
-    try {
-      // 参数校验
-      if (!text || typeof text !== 'string') {
-        return { success: false, error: '文本内容不能为空' }
-      }
-
-      if (text.length > 500) {
-        return { success: false, error: '文本内容不能超过 500 字符' }
-      }
-
-      await container.sendText(text)
-      return { success: true }
-    }
-    catch (error) {
-      logger.error('发送文本消息失败:', error)
-      return { success: false, error: String(error) }
-    }
+  createIpcHandler({
+    channel: 'app:send-text',
+    schema: {
+      text: {
+        type: 'string',
+        required: true,
+        minLength: 1,
+        maxLength: 500,
+      },
+    },
+    handler: async (_event, text: unknown) => {
+      await container.sendText(String(text))
+      return success()
+    },
   })
 
   logger.info('应用控制 IPC 通道已注册')

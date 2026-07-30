@@ -1,10 +1,29 @@
-import type { ActivationData, MqttInfo, NetworkConfig } from '@shared/types'
+import type {
+  ActivationData,
+  MqttInfo,
+  NetworkConfig,
+  ServerAbortMessage,
+  ServerAlertMessage,
+  ServerGoodbyeMessage,
+  ServerHelloMessage,
+  ServerListenMessage,
+  ServerLlmMessage,
+  ServerMcpMessage,
+  ServerMcpPayload,
+  ServerMessage,
+  ServerSttMessage,
+  ServerTtsMessage,
+} from '@shared/types'
+import {
+  isServerLlmMessage,
+  isServerMcpMessage,
+  isServerSttMessage,
+  isServerTtsMessage,
+  parseServerMessage,
+} from '@shared/types'
 
-export interface JsonMessage {
-  type: string
-  session_id?: string
-  [key: string]: unknown
-}
+/** @deprecated 使用 ServerMessage；保留别名供 main 插件渐进迁移 */
+export type JsonMessage = ServerMessage
 
 /** MQTT/UDP hello 中的 UDP 传输配置 */
 export interface UdpTransportConfig {
@@ -14,7 +33,7 @@ export interface UdpTransportConfig {
   nonce: string
 }
 
-export interface HelloJsonMessage extends JsonMessage {
+export interface HelloJsonMessage {
   type: 'hello'
   version?: number
   transport?: string
@@ -27,11 +46,13 @@ export interface HelloJsonMessage extends JsonMessage {
   }
   /** MQTT + UDP 通道时由服务端下发 */
   udp?: UdpTransportConfig
+  [key: string]: unknown
 }
 
-export interface GoodbyeJsonMessage extends JsonMessage {
+export interface GoodbyeJsonMessage {
   type: 'goodbye'
   session_id?: string
+  [key: string]: unknown
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,88 +98,27 @@ export function parseMqttServerHello(data: unknown): {
   }
 }
 
-export interface TtsJsonMessage extends JsonMessage {
-  type: 'tts'
-  state: 'start' | 'stop' | 'sentence_start' | 'sentence_end'
-  text?: string
+
+// --- 与 shared ServerMessage 对齐的别名（main 历史命名）---
+export type TtsJsonMessage = ServerTtsMessage
+export type SttJsonMessage = ServerSttMessage
+export type LlmJsonMessage = ServerLlmMessage
+export type ListenJsonMessage = ServerListenMessage
+export type AbortJsonMessage = ServerAbortMessage
+export type McpJsonMessage = ServerMcpMessage
+export type AlertJsonMessage = ServerAlertMessage
+export type McpPayload = ServerMcpPayload
+export type HelloJsonMessageShared = ServerHelloMessage
+export type GoodbyeJsonMessageShared = ServerGoodbyeMessage
+export type ProtocolJsonMessage = ServerMessage
+
+export {
+  parseServerMessage,
+  isServerTtsMessage as isTtsMessage,
+  isServerSttMessage as isSttMessage,
+  isServerLlmMessage as isLlmMessage,
+  isServerMcpMessage as isMcpMessage,
 }
 
-export interface ListenJsonMessage extends JsonMessage {
-  type: 'listen'
-  state: 'start' | 'stop' | 'detect'
-  mode?: string
-  text?: string
-}
-
-export interface AbortJsonMessage extends JsonMessage {
-  type: 'abort'
-  reason?: string
-}
-
-export interface McpJsonMessage extends JsonMessage {
-  type: 'mcp'
-  payload: McpPayload
-}
-
-export interface McpPayload {
-  jsonrpc: string
-  id?: string | number
-  method?: string
-  params?: Record<string, unknown>
-  result?: unknown
-  error?: {
-    code: number
-    message: string
-    data?: unknown
-  }
-}
-
-export interface SttJsonMessage extends JsonMessage {
-  type: 'stt'
-  text: string
-}
-
-export interface LlmJsonMessage extends JsonMessage {
-  type: 'llm'
-  emotion?: string
-  text?: string
-}
-
-export interface AlertJsonMessage extends JsonMessage {
-  type: 'alert'
-  message?: string
-  code?: string
-}
-
-export type ProtocolJsonMessage
-  = | HelloJsonMessage
-    | TtsJsonMessage
-    | ListenJsonMessage
-    | AbortJsonMessage
-    | McpJsonMessage
-    | SttJsonMessage
-    | LlmJsonMessage
-    | AlertJsonMessage
-    | JsonMessage
-
-export function isTtsMessage(msg: JsonMessage): msg is TtsJsonMessage {
-  return msg.type === 'tts' && typeof (msg as TtsJsonMessage).state === 'string'
-}
-
-export function isSttMessage(msg: JsonMessage): msg is SttJsonMessage {
-  return msg.type === 'stt' && typeof (msg as SttJsonMessage).text === 'string'
-}
-
-export function isLlmMessage(msg: JsonMessage): msg is LlmJsonMessage {
-  return msg.type === 'llm'
-}
-
-export function isMcpMessage(msg: JsonMessage): msg is McpJsonMessage {
-  return msg.type === 'mcp' && (msg as McpJsonMessage).payload !== undefined
-}
-
-export function isAlertMessage(msg: JsonMessage): msg is AlertJsonMessage {
-  return msg.type === 'alert'
-}
 
 export type { ActivationData, MqttInfo, NetworkConfig }

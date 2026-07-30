@@ -1,9 +1,9 @@
 import type { PluginCommands, PluginContext, StateChangeData } from '../core'
-import type { JsonMessage } from '../types/protocol'
 import type { AudioPlugin } from './AudioPlugin'
 import { ListeningModeValue } from '@shared/types'
 import { webContents } from 'electron'
 import { Events } from '../core'
+import { parseServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
 
@@ -38,9 +38,11 @@ export class UIPlugin extends Plugin {
   async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
     await super.setup(ctx, cmd)
 
-    // 订阅 JSON 消息事件
+    // 订阅 JSON 消息事件（收窄为 ServerMessage 再广播）
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      const message = data as JsonMessage
+      const message = parseServerMessage(data)
+      if (!message)
+        return
       this.broadcastToRenderer('server:message', message)
     })
 

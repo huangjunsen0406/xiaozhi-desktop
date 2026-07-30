@@ -39,8 +39,11 @@ export const appApi = {
     unwrapIpcResult(result, '发送文本消息失败')
   },
 
-  // 获取状态快照
-  getState: (): Promise<AppStateSnapshot> => ipcRenderer.invoke('app:get-state'),
+  // 获取状态快照（IpcResult 包装）
+  getState: async (): Promise<AppStateSnapshot> => {
+    const result: unknown = await ipcRenderer.invoke('app:get-state')
+    return unwrapIpcResult<AppStateSnapshot>(result, '获取状态快照失败')
+  },
 
   // 监听状态变化
   onStateChanged: (callback: (state: AppStateSnapshot) => void): () => void => {

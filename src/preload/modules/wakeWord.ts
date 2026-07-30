@@ -1,6 +1,6 @@
 import type { WakeWordConfig } from '@shared/types'
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess, unwrapIpcResult, unwrapIpcSuccessFields } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 // 导出共享类型
 export type { WakeWordConfig }
@@ -27,14 +27,11 @@ export const wakeWordApi = {
 
   /**
    * 测试唤醒词（模拟触发）
-   * 特殊 shape：`{ success, keyword?, error? }`（keyword 在顶层，非 data）
+   * 标准 IpcResult：`{ success, data: { keyword } }`
    */
   test: async (): Promise<string | undefined> => {
     const result: unknown = await ipcRenderer.invoke('wake-word:test')
-    const data = unwrapIpcSuccessFields<{ success: true, keyword?: string }>(
-      result,
-      '测试唤醒词失败',
-    )
-    return data.keyword
+    const data = unwrapIpcResult<{ keyword?: string }>(result, '测试唤醒词失败')
+    return data?.keyword
   },
 }
