@@ -20,14 +20,10 @@ interface SnapConfig {
   threshold: number
   /** 是否启用吸附 */
   enabled: boolean
-  /** 吸附动画时长 (ms) */
-  animationDuration: number
 }
 
 // 拖动状态映射
 const dragState = new WeakMap<BrowserWindow, DragState>()
-// 吸附定时器映射
-const snapTimer = new WeakMap<BrowserWindow, NodeJS.Timeout>()
 // 吸附配置映射
 const snapConfig = new WeakMap<BrowserWindow, SnapConfig>()
 
@@ -35,48 +31,6 @@ const snapConfig = new WeakMap<BrowserWindow, SnapConfig>()
 const DEFAULT_SNAP_CONFIG: SnapConfig = {
   threshold: 100,
   enabled: true,
-  animationDuration: 240,
-}
-
-/**
- * 停止吸附动画
- */
-function stopSnap(win: BrowserWindow): void {
-  const timer = snapTimer.get(win)
-  if (timer) {
-    clearInterval(timer)
-    snapTimer.delete(win)
-  }
-}
-
-/**
- * 执行吸附动画
- */
-function animateSnapTo(win: BrowserWindow, targetX?: number, targetY?: number): void {
-  stopSnap(win)
-
-  const config = snapConfig.get(win) || DEFAULT_SNAP_CONFIG
-  const interval = 16
-  const maxSteps = Math.ceil(config.animationDuration / interval)
-  let steps = 0
-
-  const timer = setInterval(() => {
-    steps += 1
-    const [cx, cy] = win.getPosition()
-    const nextX = targetX == null ? cx : Math.round(cx + (targetX - cx) * 0.35)
-    const nextY = targetY == null ? cy : Math.round(cy + (targetY - cy) * 0.35)
-    win.setPosition(nextX, nextY)
-
-    const doneX = targetX == null || Math.abs(nextX - targetX) <= 1
-    const doneY = targetY == null || Math.abs(nextY - targetY) <= 1
-
-    if ((doneX && doneY) || steps >= maxSteps) {
-      win.setPosition(targetX ?? nextX, targetY ?? nextY)
-      stopSnap(win)
-    }
-  }, interval)
-
-  snapTimer.set(win, timer)
 }
 
 /**
@@ -173,9 +127,9 @@ function shouldEnableSnap(win: BrowserWindow): boolean {
     return false
   }
 
-  // 默认只对 mini 窗口启用吸附
+  // 默认仅对三种悬浮窗口启用吸附。
   const url = win.webContents.getURL()
-  return url.includes('#/mini')
+  return url.includes('#/mini') || url.includes('#/live2d') || url.includes('#/pets')
 }
 
 /**
@@ -188,7 +142,6 @@ export function registerDragBehavior(): void {
     if (!win)
       return
 
-    stopSnap(win)
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
     dragState.set(win, { offsetX: cursor.x - wx, offsetY: cursor.y - wy })
@@ -211,8 +164,7 @@ export function registerDragBehavior(): void {
     // 检查是否启用吸附
     if (shouldEnableSnap(win)) {
       const [w, h] = win.getSize()
-      const nextRect = { x: nextX, y: nextY, width: w, height: h }
-      const workArea = screen.getDisplayMatching(nextRect).workArea
+      const workArea = screen.getDisplayNearestPoint(cursor).workArea
       const config = snapConfig.get(win) || DEFAULT_SNAP_CONFIG
 
       const snapped = calculateSnappedPosition(nextX, nextY, w, h, workArea, config.threshold)
@@ -231,18 +183,18 @@ export function registerDragBehavior(): void {
 
     dragState.delete(win)
 
-    // 结束时若在吸附范围内，补一个短动画缓到边缘
+    // 结束时直接落到目标边缘，确保下一次拖动不会被残留动画打断。
     if (shouldEnableSnap(win)) {
       const [w, h] = win.getSize()
       const [cx, cy] = win.getPosition()
-      const currentRect = { x: cx, y: cy, width: w, height: h }
-      const workArea = screen.getDisplayMatching(currentRect).workArea
+      const cursor = screen.getCursorScreenPoint()
+      const workArea = screen.getDisplayNearestPoint(cursor).workArea
       const config = snapConfig.get(win) || DEFAULT_SNAP_CONFIG
 
       const { targetX, targetY } = calculateSnapTarget(cx, cy, w, h, workArea, config.threshold)
 
       if (targetX != null || targetY != null) {
-        animateSnapTo(win, targetX, targetY)
+        win.setPosition(targetX ?? cx, targetY ?? cy)
       }
     }
   })
@@ -274,7 +226,6 @@ export function disableWindowSnap(win: BrowserWindow): void {
  * 清理窗口拖动状态
  */
 export function cleanupDragState(win: BrowserWindow): void {
-  stopSnap(win)
   dragState.delete(win)
   snapConfig.delete(win)
 }
