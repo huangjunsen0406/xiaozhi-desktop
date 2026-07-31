@@ -1,4 +1,10 @@
-import type { AecMode, AecStatus, AudioConfig, AudioSettings } from '@shared/types'
+import type {
+  AecCaptureReport,
+  AecMode,
+  AecStatus,
+  AudioSettings,
+  AudioUpdateSettingsResult,
+} from '@shared/types'
 import process from 'node:process'
 import { BrowserWindow } from 'electron'
 import {
@@ -129,7 +135,7 @@ function mergeAudioSettingsSnapshot(
 }
 
 function buildAecStatus(): AecStatus {
-  const formatted = getDatabase().getFormattedAudioConfig()
+  const formatted = getDatabase().getFormattedAudioSettings()
   const desired = normalizeAecMode(formatted.aecMode, 'app')
   const bootMode = readAecBootMode()
   const platform = process.platform
@@ -199,7 +205,7 @@ export function registerAudioIpc(): void {
     channel: 'audio:get-config',
     verbose: false,
     handler: async () => {
-      const config = db.getFormattedAudioConfig()
+      const config = db.getFormattedAudioSettings()
       return success(config)
     },
   })
@@ -211,7 +217,7 @@ export function registerAudioIpc(): void {
     },
     handler: async (_event, ...args) => {
       const config = args[0] as Partial<AudioSettings>
-      const previous = db.getFormattedAudioConfig()
+      const previous = db.getFormattedAudioSettings()
       const previousMode = normalizeAecMode(previous.aecMode, 'app')
       const dbUpdates = settingsToDbUpdates(config, previousMode)
 
@@ -219,10 +225,10 @@ export function registerAudioIpc(): void {
       const expectedNext = mergeAudioSettingsSnapshot(previous, config)
       const plan = classifyAudioSettingsDiff(previous, expectedNext)
 
-      db.updateAudioConfig(dbUpdates)
+      db.updateAudioSettings(dbUpdates)
       logger.info('音频设置已保存到数据库:', dbUpdates)
 
-      const nextFormatted = db.getFormattedAudioConfig()
+      const nextFormatted = db.getFormattedAudioSettings()
       const nextMode = normalizeAecMode(nextFormatted.aecMode, 'app')
       writeAecBootMode(nextMode)
 
@@ -270,7 +276,7 @@ export function registerAudioIpc(): void {
         logger.info('AEC system forced_on 交叉，需重启应用完整生效')
       }
 
-      return success({
+      const result: AudioUpdateSettingsResult = {
         requiresRelaunch: plan.requiresRelaunch,
         aecMode: nextMode,
         aecStatus: buildAecStatus(),
@@ -285,7 +291,8 @@ export function registerAudioIpc(): void {
           conversationModeChanged: plan.conversationModeChanged,
           audioWindowAction: plan.audioWindowAction,
         },
-      })
+      }
+      return success(result)
     },
   })
 
@@ -304,7 +311,7 @@ export function registerAudioIpc(): void {
       payload: { type: 'object', required: true },
     },
     handler: async (_event, ...args) => {
-      const payload = args[0] as { echoCancellationApplied?: boolean }
+      const payload = args[0] as AecCaptureReport
       if (typeof payload.echoCancellationApplied === 'boolean') {
         lastCaptureEchoApplied = payload.echoCancellationApplied
       }
@@ -323,7 +330,7 @@ export function registerAudioIpc(): void {
         return failure('kind 必须是 input 或 output')
       }
 
-      const config = db.getFormattedAudioConfig()
+      const config = db.getFormattedAudioSettings()
 
       if (kind === 'input') {
         return success(config.inputDeviceName || null)
@@ -378,7 +385,7 @@ export function getOpusCodec(): OpusCodec | null {
  */
 export function getAudioSettings(): Partial<AudioSettings> {
   try {
-    return getDatabase().getFormattedAudioConfig()
+    return getDatabase().getFormattedAudioSettings()
   }
   catch (error) {
     logger.error('获取音频设置失败:', error)
@@ -393,14 +400,14 @@ export function getAudioSettings(): Partial<AudioSettings> {
 export function updateAudioSettings(config: Partial<AudioSettings>): void {
   try {
     const db = getDatabase()
-    const previousMode = normalizeAecMode(db.getFormattedAudioConfig().aecMode, 'app')
+    const previousMode = normalizeAecMode(db.getFormattedAudioSettings().aecMode, 'app')
     const dbUpdates = settingsToDbUpdates(config, previousMode)
     if (Object.keys(dbUpdates).length === 0) {
       return
     }
 
-    db.updateAudioConfig(dbUpdates)
-    const nextMode = normalizeAecMode(db.getFormattedAudioConfig().aecMode, 'app')
+    db.updateAudioSettings(dbUpdates)
+    const nextMode = normalizeAecMode(db.getFormattedAudioSettings().aecMode, 'app')
     writeAecBootMode(nextMode)
     getAudioRuntime().reload()
     logger.info('音频设置已更新并 reload runtime:', dbUpdates)
@@ -408,18 +415,4 @@ export function updateAudioSettings(config: Partial<AudioSettings>): void {
   catch (error) {
     logger.error('设置音频配置失败:', error)
   }
-}
-
-/**
- * @deprecated 使用 getAudioSettings()
- */
-export function getAudioConfig(): Partial<AudioConfig> {
-  return getAudioSettings()
-}
-
-/**
- * @deprecated 使用 updateAudioSettings()
- */
-export function setAudioConfig(config: Partial<AudioConfig>): void {
-  updateAudioSettings(config)
 }

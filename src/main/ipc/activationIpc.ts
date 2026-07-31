@@ -1,8 +1,13 @@
+import type { ActivationData } from '@shared/types'
 import { getActivationService } from '../services/ActivationService'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('ActivationIpc')
+
+function isActivationData(value: unknown): value is ActivationData {
+  return typeof value === 'object' && value !== null
+}
 
 /**
  * 注册激活相关的 IPC 通道（createIpcHandler + IpcResult）
@@ -74,10 +79,17 @@ export function registerActivationIpc(): void {
   createIpcHandler({
     channel: 'activation:start',
     schema: {
-      activationData: { type: 'object', required: true },
+      activationData: {
+        type: 'object',
+        required: true,
+        custom: value => isActivationData(value) || 'activationData 必须是对象',
+      },
     },
     handler: async (_event, activationDataUnknown: unknown) => {
-      const activationData = activationDataUnknown as import('@shared/types').ActivationData
+      if (!isActivationData(activationDataUnknown)) {
+        return failure('activationData 必须是对象')
+      }
+      const activationData = activationDataUnknown
       logger.info('开始激活流程', activationData)
       const ok = await activationService.startActivation(activationData)
       logger.info('激活流程完成', ok)

@@ -5,6 +5,8 @@ export interface AudioDeviceInfo {
   label: string
 }
 
+export type PcmAudioData = Uint8Array
+
 /**
  * Opus 支持的有效采样率
  */
@@ -22,12 +24,12 @@ export type AecMode = 'off' | 'app' | 'system'
 /**
  * 运行时 AEC 有效状态（采集侧上报 + 主进程聚合）
  */
-export type AecEffective =
-  | 'off'
-  | 'app'
-  | 'system'
-  | 'app_fallback'
-  | 'unavailable'
+export type AecEffective
+  = | 'off'
+    | 'app'
+    | 'system'
+    | 'app_fallback'
+    | 'unavailable'
 
 export interface AecStatus {
   desired: AecMode
@@ -38,6 +40,11 @@ export interface AecStatus {
   platform: NodeJS.Platform
   /** 完整系统参考是否可能需重启应用 */
   requiresRelaunch?: boolean
+}
+
+/** AEC 采集侧回传给主进程的状态。 */
+export interface AecCaptureReport {
+  echoCancellationApplied?: boolean
 }
 
 /**
@@ -71,10 +78,22 @@ export interface AudioSettings {
   frameDuration?: number
 }
 
-/**
- * @deprecated 使用 AudioSettings；IPC 与 shared 兼容别名
- */
-export type AudioConfig = AudioSettings
+export interface AudioUpdateSettingsResult {
+  requiresRelaunch?: boolean
+  aecMode?: AecMode
+  aecStatus?: AecStatus
+  deviceSwitched?: boolean
+  captureReinitialized?: boolean
+  codecRebuilt?: boolean
+  protocolReconnected?: boolean
+  applied?: {
+    devicesChanged?: boolean
+    codecParamsChanged?: boolean
+    processingChanged?: boolean
+    conversationModeChanged?: boolean
+    audioWindowAction?: 'none' | 'switchDevices' | 'reinitialize'
+  }
+}
 
 export interface AudioDeviceList {
   inputs: AudioDeviceInfo[]

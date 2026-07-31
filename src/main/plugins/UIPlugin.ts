@@ -1,3 +1,10 @@
+import type {
+  ChatMessageAddedEvent,
+  ChatMessagesBatchAddedEvent,
+  ChatSessionCreatedEvent,
+  ImageCapturedEvent,
+  ImageSourceType,
+} from '@shared/types'
 import type { PluginCommands, PluginContext, StateChangeData } from '../core'
 import type { AudioPlugin } from './AudioPlugin'
 import { ListeningModeValue } from '@shared/types'
@@ -82,8 +89,8 @@ export class UIPlugin extends Plugin {
    * @param imageBase64 - base64 编码的图片数据
    * @param sourceType - 图片来源类型：screenshot 或 camera
    */
-  broadcastImage(imageBase64: string, sourceType: 'screenshot' | 'camera'): void {
-    const payload = {
+  broadcastImage(imageBase64: string, sourceType: ImageSourceType): void {
+    const payload: ImageCapturedEvent = {
       type: sourceType,
       imageBase64,
       timestamp: Date.now(),
@@ -118,7 +125,7 @@ export class UIPlugin extends Plugin {
    * @param role - 消息角色
    */
   broadcastMessageAdded(messageId: number, sessionId: string, role: 'user' | 'assistant'): void {
-    const payload = {
+    const payload: ChatMessageAddedEvent = {
       messageId,
       sessionId,
       role,
@@ -133,7 +140,7 @@ export class UIPlugin extends Plugin {
    * @param sessionId - 会话 ID
    */
   broadcastMessagesBatchAdded(messageIds: number[], sessionId: string): void {
-    const payload = {
+    const payload: ChatMessagesBatchAddedEvent = {
       messageIds,
       sessionId,
       timestamp: Date.now(),
@@ -146,7 +153,7 @@ export class UIPlugin extends Plugin {
    * @param sessionId - 会话 ID
    */
   broadcastSessionCreated(sessionId: string): void {
-    const payload = {
+    const payload: ChatSessionCreatedEvent = {
       sessionId,
       timestamp: Date.now(),
     }

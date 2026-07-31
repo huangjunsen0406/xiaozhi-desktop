@@ -6,6 +6,7 @@ import type {
   ServerAlertMessage,
   ServerGoodbyeMessage,
   ServerHelloMessage,
+  ServerImageMessage,
   ServerListenMessage,
   ServerLlmMessage,
   ServerMcpMessage,
@@ -13,8 +14,10 @@ import type {
   ServerMessage,
   ServerSttMessage,
   ServerTtsMessage,
+  ServerUdpTransportConfig,
 } from '@shared/types'
 import {
+  isServerImageMessage,
   isServerLlmMessage,
   isServerMcpMessage,
   isServerSttMessage,
@@ -25,35 +28,10 @@ import {
 /** @deprecated 使用 ServerMessage；保留别名供 main 插件渐进迁移 */
 export type JsonMessage = ServerMessage
 
-/** MQTT/UDP hello 中的 UDP 传输配置 */
-export interface UdpTransportConfig {
-  server: string
-  port: number
-  key: string
-  nonce: string
-}
-
-export interface HelloJsonMessage {
-  type: 'hello'
-  version?: number
-  transport?: string
-  session_id?: string
-  audio_params?: {
-    format: string
-    sample_rate: number
-    channels: number
-    frame_duration: number
-  }
-  /** MQTT + UDP 通道时由服务端下发 */
-  udp?: UdpTransportConfig
-  [key: string]: unknown
-}
-
-export interface GoodbyeJsonMessage {
-  type: 'goodbye'
-  session_id?: string
-  [key: string]: unknown
-}
+/** MQTT/UDP hello 中验证完整后的 UDP 传输配置。 */
+export type UdpTransportConfig = Required<ServerUdpTransportConfig>
+export type HelloJsonMessage = ServerHelloMessage
+export type GoodbyeJsonMessage = ServerGoodbyeMessage
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -98,7 +76,6 @@ export function parseMqttServerHello(data: unknown): {
   }
 }
 
-
 // --- 与 shared ServerMessage 对齐的别名（main 历史命名）---
 export type TtsJsonMessage = ServerTtsMessage
 export type SttJsonMessage = ServerSttMessage
@@ -107,18 +84,19 @@ export type ListenJsonMessage = ServerListenMessage
 export type AbortJsonMessage = ServerAbortMessage
 export type McpJsonMessage = ServerMcpMessage
 export type AlertJsonMessage = ServerAlertMessage
+export type ImageJsonMessage = ServerImageMessage
 export type McpPayload = ServerMcpPayload
 export type HelloJsonMessageShared = ServerHelloMessage
 export type GoodbyeJsonMessageShared = ServerGoodbyeMessage
 export type ProtocolJsonMessage = ServerMessage
 
 export {
-  parseServerMessage,
-  isServerTtsMessage as isTtsMessage,
-  isServerSttMessage as isSttMessage,
+  isServerImageMessage as isImageMessage,
   isServerLlmMessage as isLlmMessage,
   isServerMcpMessage as isMcpMessage,
+  isServerSttMessage as isSttMessage,
+  isServerTtsMessage as isTtsMessage,
+  parseServerMessage,
 }
-
 
 export type { ActivationData, MqttInfo, NetworkConfig }

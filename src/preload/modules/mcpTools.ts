@@ -2,6 +2,7 @@
  * MCP 工具设置 API 模块
  */
 import type {
+  FileDialogResult,
   McpPluginImportResult,
   McpToolCatalogItem,
   McpToolsSaveResult,
@@ -29,9 +30,9 @@ export const mcpToolsApi = {
   },
 
   /** 选择插件文件夹 */
-  selectFolder: async (): Promise<Electron.OpenDialogReturnValue> => {
+  selectFolder: async (): Promise<FileDialogResult> => {
     const result: unknown = await ipcRenderer.invoke('mcp-tools:select-folder')
-    return unwrapIpcResult<Electron.OpenDialogReturnValue>(result, '选择插件文件夹失败')
+    return unwrapIpcResult<FileDialogResult>(result, '选择插件文件夹失败')
   },
 
   /** 导入插件 */

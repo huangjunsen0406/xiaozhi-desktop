@@ -2,7 +2,6 @@
  * Preload 脚本入口
  * 使用模块化 API 结构
  */
-import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
 import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
@@ -17,8 +16,6 @@ const api = {
   switchDisplayMode: windowApi.switchDisplayMode,
   showActivation: windowApi.showActivation,
   toggleSettings: windowApi.toggleSettings,
-  setIgnoreMouseEvents: windowApi.setIgnoreMouseEvents,
-  setPetsIgnoreMouseEvents: windowApi.setPetsIgnoreMouseEvents,
   setClickThrough: windowApi.setClickThrough,
   dragStart: windowApi.dragStart,
   dragMove: windowApi.dragMove,
@@ -30,7 +27,7 @@ const api = {
   close: windowApi.close,
   openExternal: windowApi.openExternal,
 
-  // 环境信息（替代 window.electron.process）
+  // 环境信息
   getPlatform: appEnvApi.getPlatform,
   getProcessVersions: appEnvApi.getProcessVersions,
 
@@ -186,7 +183,6 @@ const api = {
 // eslint-disable-next-line node/prefer-global/process
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   }
   catch (error) {
@@ -194,8 +190,6 @@ if (process.contextIsolated) {
   }
 }
 else {
-  // @ts-expect-error (type mismatch in activation/app modules)
-  window.electron = electronAPI
   // @ts-expect-error (type mismatch in activation/app modules)
   window.api = api
 }

@@ -16,7 +16,7 @@ import { DeviceStateValue, ListeningModeValue } from '@shared/types'
 import { Events } from '../core/EventBus'
 import { getAudioSettings } from '../ipc/audioIpc'
 import { AbortReason as AbortReasonEnum } from '../protocols/Protocol'
-import { isTtsMessage } from '../types/protocol'
+import { isTtsMessage, parseServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('ConversationSession')
@@ -57,8 +57,11 @@ export class ConversationSession {
       this.taskManager.spawn(this.onAudioChannelClosed(), 'session:channel-closed').catch(() => {})
     }
     const onJson = (data?: unknown) => {
+      const message = parseServerMessage(data)
+      if (!message)
+        return
       this.taskManager.spawn(
-        this.onIncomingJson(data as JsonMessage),
+        this.onIncomingJson(message),
         'session:incoming-json',
       ).catch(() => {})
     }

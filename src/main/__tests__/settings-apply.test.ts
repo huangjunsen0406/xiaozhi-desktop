@@ -3,9 +3,9 @@
  * 运行：npx tsx --test src/main/__tests__/settings-apply.test.ts
  */
 
+import type { AudioSettings } from '@shared/types'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { AudioSettings } from '@shared/types'
 
 describe('settingsApply', () => {
   it('device-only change → switchDevices, no protocol reconnect', async () => {
@@ -179,7 +179,7 @@ describe('settingsApply', () => {
 
   it('legacy enableEchoCancellation false maps to off processing change', async () => {
     const { classifyAudioSettingsDiff, resolveAecModeFromSettings } = await import(
-      '../services/settingsApply'
+      '../services/settingsApply',
     )
     assert.equal(resolveAecModeFromSettings({ enableEchoCancellation: false }), 'off')
     assert.equal(resolveAecModeFromSettings({ enableEchoCancellation: true }), 'app')

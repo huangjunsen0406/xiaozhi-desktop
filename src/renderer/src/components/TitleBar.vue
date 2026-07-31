@@ -8,10 +8,6 @@ withDefaults(defineProps<{ title?: string }>(), {
   title: '小智桌面',
 })
 
-// const platform = window.electron.process.platform
-// const isMac = platform === 'darwin'
-// const isWindows = platform === 'win32'
-
 function handleMinimize(): void {
   window.api.minimize()
 }

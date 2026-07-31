@@ -1,5 +1,5 @@
 import type { AudioListener } from '@shared/types'
-import type { KeywordSpotter, KeywordSpotterStream } from '../types/database'
+import type { KeywordSpotter, KeywordSpotterStream } from 'sherpa-onnx-node'
 import path from 'node:path'
 import sherpa_onnx from 'sherpa-onnx-node'
 import { getLogger } from '../utils/logger'

@@ -9,7 +9,7 @@ export const clipboardApi = {
    * 复制文本到剪贴板
    */
   writeText: async (text: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('clipboard:writeText', text)
+    const result: unknown = await ipcRenderer.invoke('clipboard:write-text', text)
     assertIpcSuccess(result, '复制到剪贴板失败')
   },
 
@@ -17,7 +17,7 @@ export const clipboardApi = {
    * 从剪贴板读取文本
    */
   readText: async (): Promise<string> => {
-    const result: unknown = await ipcRenderer.invoke('clipboard:readText')
+    const result: unknown = await ipcRenderer.invoke('clipboard:read-text')
     return unwrapIpcResult<string>(result, '从剪贴板读取失败') ?? ''
   },
 }

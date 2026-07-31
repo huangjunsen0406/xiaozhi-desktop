@@ -1,4 +1,4 @@
-import type { PetInfo } from '@shared/types'
+import type { FileDialogResult, PetInfo } from '@shared/types'
 /**
  * Pets (精灵宠物管理) API 模块
  */
@@ -28,7 +28,7 @@ export const petsApi = {
   },
 
   // 打开文件夹选择器
-  selectFolder: async (): Promise<Electron.OpenDialogReturnValue> => {
+  selectFolder: async (): Promise<FileDialogResult> => {
     const result: unknown = await ipcRenderer.invoke('pets:select-folder')
     return unwrapIpcResult(result, '选择宠物文件夹失败')
   },

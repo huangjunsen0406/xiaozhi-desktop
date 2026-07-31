@@ -1,8 +1,10 @@
+import type { ImageSourceType } from '@shared/types'
 import type { PluginCommands, PluginContext } from '../core'
 import type { McpServer } from '../mcp/McpServer'
-import type { JsonMessage } from '../types/protocol'
+import type { McpJsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Events } from '../core'
+import { isMcpMessage, parseServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -67,7 +69,7 @@ export class McpPlugin extends Plugin {
       this.mcpServer.setSendCallback(sendCallback)
 
       // 设置图片广播回调：通过 UIPlugin 广播图片到渲染进程
-      const imageBroadcastCallback = (imageBase64: string, sourceType: 'screenshot' | 'camera'): void => {
+      const imageBroadcastCallback = (imageBase64: string, sourceType: ImageSourceType): void => {
         try {
           const uiPlugin = this.getDep<UIPlugin>('UIPlugin')
           uiPlugin.broadcastImage(imageBase64, sourceType)
@@ -94,8 +96,8 @@ export class McpPlugin extends Plugin {
 
       // 订阅 JSON 消息事件
       ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-        const message = data as JsonMessage
-        if (message.type === 'mcp') {
+        const message = parseServerMessage(data)
+        if (message && isMcpMessage(message)) {
           this.handleMcpMessage(message).catch((error) => {
             logger.error('处理 MCP 消息失败', error)
           })
@@ -116,7 +118,7 @@ export class McpPlugin extends Plugin {
   /**
    * 处理 MCP 消息
    */
-  private async handleMcpMessage(message: JsonMessage): Promise<void> {
+  private async handleMcpMessage(message: McpJsonMessage): Promise<void> {
     const payload = message.payload
     if (!payload) {
       logger.warn('MCP 消息缺少 payload')
@@ -124,7 +126,7 @@ export class McpPlugin extends Plugin {
     }
 
     if (this.mcpServer) {
-      await this.mcpServer.parseMessage(payload as Record<string, unknown>)
+      await this.mcpServer.parseMessage({ ...payload })
     }
     else {
       logger.error('McpServer 未初始化')

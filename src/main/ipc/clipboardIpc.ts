@@ -12,7 +12,7 @@ const logger = getLogger('ClipboardIpc')
  */
 export function registerClipboardIpcChannels(): void {
   createIpcHandler({
-    channel: 'clipboard:writeText',
+    channel: 'clipboard:write-text',
     schema: {
       text: { type: 'string', required: true },
     },
@@ -24,7 +24,7 @@ export function registerClipboardIpcChannels(): void {
   })
 
   createIpcHandler({
-    channel: 'clipboard:readText',
+    channel: 'clipboard:read-text',
     handler: async () => {
       const text = clipboard.readText()
       return success(text)

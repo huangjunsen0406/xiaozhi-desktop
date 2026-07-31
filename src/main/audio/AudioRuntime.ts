@@ -6,8 +6,8 @@ const logger = getLogger('AudioRuntime')
 
 const VALID_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000]
 
-function isValidRate(rate: number): rate is ValidSampleRate {
-  return VALID_RATES.includes(rate)
+function isValidRate(rate: unknown): rate is ValidSampleRate {
+  return typeof rate === 'number' && VALID_RATES.includes(rate)
 }
 
 /**
@@ -43,7 +43,7 @@ const DEFAULT_PARAMS: AudioRuntimeParams = {
 function loadParamsFromDb(): AudioRuntimeParams {
   try {
     const db = getDatabase()
-    const dbConfig = db.getFormattedAudioConfig()
+    const dbConfig = db.getFormattedAudioSettings()
 
     return {
       inputSampleRate: isValidRate(dbConfig.inputSampleRate) ? dbConfig.inputSampleRate : DEFAULT_PARAMS.inputSampleRate,

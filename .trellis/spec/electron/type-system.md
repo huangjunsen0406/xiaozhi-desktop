@@ -102,6 +102,7 @@ function parseHello(data: unknown): HelloMessage {
 * IPC 入参/出参、事件 payload 优先 `src/shared/types`
 * 禁止 main 与 renderer 各定义一份结构相同的 interface
 * DB 行类型留在 `src/main/types`，对外经 formatter 转为 shared DTO
+* 类型只用文件顶部的静态 `import type`；禁止 `import('...').Type` 查询式类型，避免依赖关系隐藏在字段签名和断言里
 
 ### 联合类型提取复用
 

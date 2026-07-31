@@ -9,3 +9,9 @@ export interface IpcResultError {
 }
 
 export type IpcResult<T = unknown> = IpcResultSuccess<T> | IpcResultError
+
+export interface FileDialogResult {
+  canceled: boolean
+  filePaths: string[]
+  bookmarks?: string[]
+}

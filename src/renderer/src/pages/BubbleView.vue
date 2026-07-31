@@ -88,7 +88,7 @@ watch(bubbleText, (newVal) => {
 onMounted(() => {
   removeStateListener = window.api.appOnStateChanged(handleStateChanged)
   removeMessageListener = window.api.appOnServerMessage(handleServerMessage)
-  // 主进程下发箭头位置（勿再用 window.electron.ipcRenderer）
+  // 主进程经 preload 下发箭头位置
   removeArrowListener = window.api.bubbleOnSetArrowX((x) => {
     arrowX.value = x
   })

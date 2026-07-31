@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import WebSocket from 'ws'
 import { getAudioRuntime } from '../audio/AudioRuntime'
 import { getConfigManager } from '../services/configManagerDB'
+import { parseServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
 import { isCleanCloseCode } from './wsCloseCodes'
@@ -340,7 +341,12 @@ export class WebSocketProtocol extends Protocol {
       if (typeof data === 'string' || Buffer.isBuffer(data)) {
         const message = data.toString()
         try {
-          const jsonData = JSON.parse(message)
+          const parsed: unknown = JSON.parse(message)
+          const jsonData = parseServerMessage(parsed)
+          if (!jsonData) {
+            logger.warn('收到无效 JSON 消息，已忽略', parsed)
+            return
+          }
           const msgType = jsonData.type
 
           if (msgType === 'hello') {

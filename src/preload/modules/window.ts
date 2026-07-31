@@ -20,17 +20,6 @@ export const windowApi = {
   // 设置窗口
   toggleSettings: (): void => ipcRenderer.send('window:toggle-settings'),
 
-  /**
-   * 桌宠窗点击穿透（live2d / pets 同一能力）
-   * @deprecated 使用 setClickThrough('live2d', ignore)
-   */
-  setIgnoreMouseEvents: (ignore: boolean): void =>
-    ipcRenderer.send('window:set-click-through', 'live2d', ignore),
-  /**
-   * @deprecated 使用 setClickThrough('pets', ignore)
-   */
-  setPetsIgnoreMouseEvents: (ignore: boolean): void =>
-    ipcRenderer.send('window:set-click-through', 'pets', ignore),
   /** 统一 click-through：target 为桌宠窗口类型 */
   setClickThrough: (target: 'live2d' | 'pets', ignore: boolean): void =>
     ipcRenderer.send('window:set-click-through', target, ignore),

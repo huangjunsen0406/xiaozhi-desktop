@@ -113,7 +113,7 @@ export function registerBasicIpcChannels(): void {
     toggleToLive2d()
   })
 
-  // 统一 click-through（live2d / pets）；保留旧 channel 作别名
+  // 统一 click-through（live2d / pets）。
   const setPetClickThrough = (target: 'live2d' | 'pets', ignore: boolean): void => {
     const win = target === 'live2d' ? getLive2dWindow() : getPetsWindow()
     if (win)
@@ -126,19 +126,9 @@ export function registerBasicIpcChannels(): void {
     setPetClickThrough(target, ignore)
   })
 
-  ipcMain.on('live2d:set-ignore-mouse', (_, ignore: boolean) => {
-    if (typeof ignore === 'boolean')
-      setPetClickThrough('live2d', ignore)
-  })
-
   // 精灵宠物窗口
   ipcMain.on('window:toggle-pets', () => {
     toggleToPets()
-  })
-
-  ipcMain.on('pets:set-ignore-mouse', (_, ignore: boolean) => {
-    if (typeof ignore === 'boolean')
-      setPetClickThrough('pets', ignore)
   })
 
   // 显示模式切换

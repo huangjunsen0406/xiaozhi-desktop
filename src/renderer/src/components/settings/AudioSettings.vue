@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AecMode, AecStatus, AudioConfig } from '@shared/types'
+import type { AecMode, AecStatus, AudioSettings as AudioSettingsDto } from '@shared/types'
 import { NForm, NFormItem, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useDevices } from '../../composables/useDevices'
@@ -168,13 +168,13 @@ async function handleSave(): Promise<void> {
     const previousMode = previousConfig.aecMode
       ?? (previousConfig.enableEchoCancellation === false ? 'off' : 'app')
 
-    const config: Partial<AudioConfig> = {
+    const config: Partial<AudioSettingsDto> = {
       enableNoiseReduction: enableNoiseReduction.value,
       aecMode: aecMode.value,
       enableEchoCancellation: aecMode.value !== 'off',
       conversationMode: enableRealtimeConversation.value ? 'realtime' : 'auto',
-      inputSampleRate: inputSampleRate.value as AudioConfig['inputSampleRate'],
-      outputSampleRate: outputSampleRate.value as AudioConfig['outputSampleRate'],
+      inputSampleRate: inputSampleRate.value as AudioSettingsDto['inputSampleRate'],
+      outputSampleRate: outputSampleRate.value as AudioSettingsDto['outputSampleRate'],
       channels: channels.value,
       frameDuration: frameDuration.value,
     }

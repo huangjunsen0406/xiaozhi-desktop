@@ -213,19 +213,19 @@ function handleMouseDown(e: MouseEvent): void {
     return
 
   isDragging = true
-  window.api?.hideHover?.()
-  window.api?.dragStart()
+  window.api.hideHover()
+  window.api.dragStart()
 
   const handleMouseMoveGlobal = (): void => {
     if (isDragging) {
-      window.api?.dragMove()
+      window.api.dragMove()
     }
   }
 
   const handleMouseUpGlobal = (): void => {
     if (isDragging) {
       isDragging = false
-      window.api?.dragEnd()
+      window.api.dragEnd()
       window.removeEventListener('mousemove', handleMouseMoveGlobal)
       window.removeEventListener('mouseup', handleMouseUpGlobal)
     }
@@ -246,7 +246,7 @@ function handleContextMenu(e: MouseEvent): void {
     return
 
   window.api.setClickThrough('pets', false)
-  window.api?.showHoverFor?.('pets', e.screenX, e.screenY)
+  window.api.showHoverFor('pets', e.screenX, e.screenY)
 }
 
 onMounted(() => {
@@ -259,7 +259,7 @@ onMounted(() => {
   }
 
   // 监听宠物切换事件
-  removeChangedListener = window.api?.petsOnChanged?.(handlePetChange) ?? null
+  removeChangedListener = window.api.petsOnChanged(handlePetChange)
 
   loadSpritesheet()
 })

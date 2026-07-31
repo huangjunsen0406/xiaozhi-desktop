@@ -1,29 +1,39 @@
-import type { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   ActivationData,
   ActivationInitResult,
   ActivationResult,
   ActivationStatus,
+  AddMessageParams,
+  AecCaptureReport,
+  AecStatus,
   AppStateSnapshot,
-  AudioConfig,
+  AudioSettings,
+  AudioUpdateSettingsResult,
   BackgroundAudioStateUpdate,
   BackgroundAudioStatus,
   CameraConfig,
   ChatMessage,
+  ChatMessageAddedEvent,
+  ChatMessagesBatchAddedEvent,
   ChatSession,
+  ChatSessionCreatedEvent,
+  CreateSessionParams,
   DeviceInfo,
+  FileDialogResult,
+  HoverAnchor,
+  ImageCapturedEvent,
   McpPluginImportResult,
   McpToolCatalogItem,
   McpToolsSaveResult,
   ModelInfo,
   MusicConfig,
+  PcmAudioData,
   PetInfo,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
   WakeWordConfig,
 } from '@shared/types'
-import type { Buffer } from 'node:buffer'
 
 /**
  * 激活设备信息
@@ -36,19 +46,30 @@ export type {
   ActivationInitResult,
   ActivationResult,
   ActivationStatus,
+  AecCaptureReport,
+  AecStatus,
   AppStateSnapshot,
-  AudioConfig,
+  AudioSettings,
+  AudioUpdateSettingsResult,
   BackgroundAudioStateUpdate,
   BackgroundAudioStatus,
   CameraConfig,
   ChatMessage,
+  ChatMessageAddedEvent,
+  ChatMessagesBatchAddedEvent,
   ChatSession,
+  ChatSessionCreatedEvent,
+  CreateSessionParams,
   DeviceInfo,
+  FileDialogResult,
+  HoverAnchor,
+  ImageCapturedEvent,
   McpPluginImportResult,
   McpToolCatalogItem,
   McpToolsSaveResult,
   ModelInfo,
   MusicConfig,
+  PcmAudioData,
   PetInfo,
   ServerMessage,
   ShortcutConfig,
@@ -63,10 +84,6 @@ export interface RendererApi {
   switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => Promise<void>
   showActivation: () => void
   toggleSettings: () => void
-  /** @deprecated 使用 setClickThrough('live2d', ignore) */
-  setIgnoreMouseEvents: (ignore: boolean) => void
-  /** @deprecated 使用 setClickThrough('pets', ignore) */
-  setPetsIgnoreMouseEvents: (ignore: boolean) => void
   /** 桌宠窗点击穿透（live2d | pets） */
   setClickThrough: (target: 'live2d' | 'pets', ignore: boolean) => void
   dragStart: () => void
@@ -75,7 +92,7 @@ export interface RendererApi {
   showHover: () => void
   hideHover: () => void
   /** 独立 Hover 菜单窗：按 mini/live2d/pets 锚点显示；xy 为屏幕坐标 */
-  showHoverFor: (anchor: 'mini' | 'live2d' | 'pets', screenX?: number, screenY?: number) => void
+  showHoverFor: (anchor: HoverAnchor, screenX?: number, screenY?: number) => void
   repositionHover: () => void
   hoverMiniEnter: () => void
   hoverMiniLeave: () => void
@@ -87,7 +104,7 @@ export interface RendererApi {
   toggleMaximize: () => void
   close: () => void
   openExternal: (string: string) => void
-  /** process.platform；勿再用 window.electron.process.platform */
+  /** process.platform */
   getPlatform: () => NodeJS.Platform | string
   getProcessVersions: () => Partial<NodeJS.ProcessVersions> & Record<string, string | undefined>
   // Bubble APIs（独立气泡窗，禁止 renderer 裸打 bubble:*）
@@ -104,27 +121,12 @@ export interface RendererApi {
   activationCheckStatus: () => Promise<ActivationStatus>
   // Audio APIs
   audioSendPCM: (pcm: Int16Array) => void
-  audioOnOpusDecoded: (callback: (pcm: Buffer) => void) => () => void
+  audioOnOpusDecoded: (callback: (pcm: PcmAudioData) => void) => () => void
   // Audio Device APIs
-  audioGetConfig: () => Promise<AudioConfig>
-  audioUpdateConfig: (config: Partial<AudioConfig>) => Promise<{
-    requiresRelaunch?: boolean
-    aecMode?: AudioConfig['aecMode']
-    aecStatus?: import('@shared/types').AecStatus
-    deviceSwitched?: boolean
-    captureReinitialized?: boolean
-    codecRebuilt?: boolean
-    protocolReconnected?: boolean
-    applied?: {
-      devicesChanged?: boolean
-      codecParamsChanged?: boolean
-      processingChanged?: boolean
-      conversationModeChanged?: boolean
-      audioWindowAction?: 'none' | 'switchDevices' | 'reinitialize'
-    }
-  } | void>
-  audioGetAecStatus: () => Promise<import('@shared/types').AecStatus>
-  audioReportAecCapture: (payload: { echoCancellationApplied?: boolean }) => Promise<import('@shared/types').AecStatus>
+  audioGetConfig: () => Promise<AudioSettings>
+  audioUpdateConfig: (config: Partial<AudioSettings>) => Promise<AudioUpdateSettingsResult | void>
+  audioGetAecStatus: () => Promise<AecStatus>
+  audioReportAecCapture: (payload: AecCaptureReport) => Promise<AecStatus>
   audioGetDefaultDeviceId: (kind: 'input' | 'output') => Promise<string | null>
   // System Volume Control APIs
   audioSystemGetVolume: () => Promise<number>
@@ -151,7 +153,7 @@ export interface RendererApi {
   sendAudioState: (state: BackgroundAudioStateUpdate) => void
   backgroundAudioGetStatus: () => Promise<BackgroundAudioStatus>
   // Emotion APIs
-  emotionSelectImage: () => Promise<Electron.OpenDialogReturnValue>
+  emotionSelectImage: () => Promise<FileDialogResult>
   emotionUploadCustom: (emotionType: string, sourcePath: string) => Promise<void>
   emotionGetMapping: () => Promise<Record<string, string>>
   emotionGetCustomPath: (emotionType: string) => Promise<string | null>
@@ -169,24 +171,16 @@ export interface RendererApi {
   // Chat APIs
   chatGetSessions: (limit?: number, offset?: number) => Promise<ChatSession[]>
   chatGetSession: (sessionId: string) => Promise<ChatSession | null>
-  chatCreateSession: (data: { session_id: string, title?: string, started_at?: number }) => Promise<ChatSession>
+  chatCreateSession: (data: CreateSessionParams) => Promise<ChatSession>
   chatGetMessages: (sessionId: string, limit?: number, offset?: number) => Promise<ChatMessage[]>
-  chatAddMessage: (data: {
-    session_id: string
-    role: 'user' | 'assistant'
-    content: string
-    emotion?: string
-    sourceType: string
-    image_data?: Uint8Array
-    timestamp?: number
-  }) => Promise<ChatMessage>
+  chatAddMessage: (data: AddMessageParams) => Promise<ChatMessage>
   chatUpdateSessionTitle: (sessionId: string, title: string) => Promise<void>
   chatDeleteSession: (sessionId: string) => Promise<void>
   chatClearMessages: (sessionId: string) => Promise<void>
-  chatOnImageCaptured: (callback: (data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => void) => () => void
-  chatOnMessageAdded: (callback: (data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => void) => () => void
-  chatOnMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => () => void
-  chatOnSessionCreated: (callback: (data: { sessionId: string, timestamp: number }) => void) => () => void
+  chatOnImageCaptured: (callback: (data: ImageCapturedEvent) => void) => () => void
+  chatOnMessageAdded: (callback: (data: ChatMessageAddedEvent) => void) => () => void
+  chatOnMessagesBatchAdded: (callback: (data: ChatMessagesBatchAddedEvent) => void) => () => void
+  chatOnSessionCreated: (callback: (data: ChatSessionCreatedEvent) => void) => () => void
   // Shortcut APIs
   shortcutGetAll: () => Promise<ShortcutConfig[]>
   shortcutUpdate: (action: string, accelerator: string | null) => Promise<void>
@@ -205,7 +199,7 @@ export interface RendererApi {
   modelGetList: () => Promise<ModelInfo[]>
   modelGetCurrent: () => Promise<string>
   modelSetCurrent: (modelId: string) => Promise<void>
-  modelSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
+  modelSelectFolder: () => Promise<FileDialogResult>
   modelImport: (sourcePath: string) => Promise<string | undefined>
   modelDelete: (modelId: string) => Promise<void>
   modelOpenFolder: () => Promise<void>
@@ -216,7 +210,7 @@ export interface RendererApi {
   petsGetList: () => Promise<PetInfo[]>
   petsGetCurrent: () => Promise<string>
   petsSetCurrent: (petId: string) => Promise<void>
-  petsSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
+  petsSelectFolder: () => Promise<FileDialogResult>
   petsImport: (sourcePath: string) => Promise<string | undefined>
   petsDelete: (petId: string) => Promise<void>
   petsGetFolderPath: () => Promise<string>
@@ -228,7 +222,7 @@ export interface RendererApi {
   mcpToolsGetCatalog: () => Promise<McpToolCatalogItem[]>
   mcpToolsGetDisabled: () => Promise<string[]>
   mcpToolsSaveDisabled: (disabledNames: string[]) => Promise<McpToolsSaveResult>
-  mcpToolsSelectFolder: () => Promise<Electron.OpenDialogReturnValue>
+  mcpToolsSelectFolder: () => Promise<FileDialogResult>
   mcpToolsImportPlugin: (sourcePath: string) => Promise<McpPluginImportResult>
   mcpToolsOpenFolder: () => Promise<void>
   mcpToolsGetFolderPath: () => Promise<string>
@@ -245,7 +239,6 @@ export interface RendererApi {
 
 declare global {
   interface Window {
-    electron: ElectronAPI
     api: RendererApi
   }
 }

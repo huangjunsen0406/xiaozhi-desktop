@@ -4,8 +4,8 @@
 export { activationApi } from './activation'
 
 export { appApi } from './app'
-export { audioApi } from './audio'
 export { appEnvApi } from './appEnv'
+export { audioApi } from './audio'
 export { backgroundAudioApi } from './backgroundAudio'
 export { bubbleApi } from './bubble'
 export { cameraApi } from './cameraApi'

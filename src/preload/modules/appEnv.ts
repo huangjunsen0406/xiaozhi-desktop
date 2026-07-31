@@ -1,7 +1,8 @@
 /**
- * 渲染进程只读环境信息（替代 window.electron.process.*）
+ * 渲染进程只读环境信息
  * 在 preload 侧读取 process，经 contextBridge 暴露为 window.api
  */
+import process from 'node:process'
 
 export type AppPlatform = NodeJS.Platform | string
 

@@ -46,7 +46,7 @@ export type IpcResponse<T = unknown> = IpcResult<T> & {
 /**
  * IPC 处理器配置
  */
-export interface IpcHandlerConfig {
+export interface IpcHandlerConfig<T = unknown> {
   /** IPC 通道名称 */
   channel: string
   /** 参数验证规则（可选） */
@@ -54,7 +54,7 @@ export interface IpcHandlerConfig {
   /** 是否输出详细日志 */
   verbose?: boolean
   /** 处理函数 */
-  handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<unknown> | unknown
+  handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<IpcResponse<T>> | IpcResponse<T>
 }
 
 /**
@@ -232,7 +232,7 @@ export function createSimpleHandler<T>(
 ): void {
   createIpcHandler({
     channel,
-    handler,
+    handler: async (event, ...args) => success(await handler(event, ...args)),
   })
 }
 

@@ -1,6 +1,6 @@
 /**
  * 气泡窗口 API（桌宠/Live2D 上方对话气泡）
- * Renderer 禁止直接 window.electron.ipcRenderer 打 bubble:* channel
+ * Renderer 只通过 window.api 调用气泡能力
  */
 import { ipcRenderer } from 'electron'
 

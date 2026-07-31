@@ -2,7 +2,7 @@
  * 音频播放类
  * 负责接收解码后的 PCM 数据并无缝播放
  */
-import type { Buffer } from 'node:buffer'
+import type { PcmAudioData } from '@shared/types'
 
 export class AudioPlayback {
   private audioContext: AudioContext | null = null
@@ -68,7 +68,7 @@ export class AudioPlayback {
         this.removeOpusDecodedListener = null
       }
 
-      this.removeOpusDecodedListener = window.api.audioOnOpusDecoded((pcmBuffer: Buffer) => {
+      this.removeOpusDecodedListener = window.api.audioOnOpusDecoded((pcmBuffer: PcmAudioData) => {
         this.playPCM(pcmBuffer)
       })
 
@@ -167,9 +167,9 @@ export class AudioPlayback {
 
   /**
    * 播放 PCM 数据
-   * @param pcmBuffer Buffer 包含 Int16 PCM 数据
+   * @param pcmBuffer Uint8Array 包含 Int16 PCM 数据
    */
-  private playPCM(pcmBuffer: Buffer): void {
+  private playPCM(pcmBuffer: PcmAudioData): void {
     if (!this.audioContext) {
       console.error('AudioContext 未初始化')
       return

@@ -1,4 +1,9 @@
 export type SourceType = 'text' | 'voice' | 'tts' | 'image'
+export type ImageSourceType = 'screenshot' | 'camera'
+
+export function isImageSourceType(value: unknown): value is ImageSourceType {
+  return value === 'screenshot' || value === 'camera'
+}
 
 export interface ChatMessage {
   id?: number
@@ -26,10 +31,10 @@ export interface AddMessageParams {
   session_id: string
   role: 'user' | 'assistant'
   content: string
-  sourceType?: SourceType
+  sourceType: SourceType
   emotion?: string
   image_data?: Uint8Array
-  timestamp: number
+  timestamp?: number
 }
 
 export interface CreateSessionParams {
@@ -39,7 +44,25 @@ export interface CreateSessionParams {
 }
 
 export interface ImageCapturedEvent {
-  type: 'screenshot' | 'camera'
+  type: ImageSourceType
   imageBase64: string
+  timestamp: number
+}
+
+export interface ChatMessageAddedEvent {
+  messageId: number
+  sessionId: string
+  role: 'user' | 'assistant'
+  timestamp: number
+}
+
+export interface ChatMessagesBatchAddedEvent {
+  messageIds: number[]
+  sessionId: string
+  timestamp: number
+}
+
+export interface ChatSessionCreatedEvent {
+  sessionId: string
   timestamp: number
 }

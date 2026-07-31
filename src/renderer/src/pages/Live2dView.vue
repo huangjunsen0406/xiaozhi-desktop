@@ -41,7 +41,7 @@ let lipSyncAnimationId: number | null = null
  */
 async function getCurrentModelId(): Promise<string> {
   try {
-    const modelId = await window.api?.modelGetCurrent()
+    const modelId = await window.api.modelGetCurrent()
     return modelId || DEFAULT_MODEL
   }
   catch (error) {
@@ -203,7 +203,7 @@ onMounted(async () => {
     console.log('口型同步已启动')
 
     // 监听模型切换事件
-    removeModelChangedListener = window.api?.modelOnChanged?.(handleModelChange) ?? null
+    removeModelChangedListener = window.api.modelOnChanged(handleModelChange)
     console.log('[Live2D] 模型切换监听已注册')
   }
   catch (error) {
@@ -279,19 +279,19 @@ function handleMouseDown(e: MouseEvent): void {
 
   if (isMouseOnModel(e)) {
     isDragging = true
-    window.api?.hideHover?.()
-    window.api?.dragStart()
+    window.api.hideHover()
+    window.api.dragStart()
 
     const handleMouseMoveGlobal = () => {
       if (isDragging) {
-        window.api?.dragMove()
+        window.api.dragMove()
       }
     }
 
     const handleMouseUpGlobal = () => {
       if (isDragging) {
         isDragging = false
-        window.api?.dragEnd()
+        window.api.dragEnd()
         window.removeEventListener('mousemove', handleMouseMoveGlobal)
         window.removeEventListener('mouseup', handleMouseUpGlobal)
       }
@@ -329,7 +329,7 @@ function handleContextMenu(e: MouseEvent): void {
   window.api.setClickThrough('live2d', false)
   const screenX = e.screenX
   const screenY = e.screenY
-  window.api?.showHoverFor?.('live2d', screenX, screenY)
+  window.api.showHoverFor('live2d', screenX, screenY)
 }
 
 /**
@@ -337,10 +337,10 @@ function handleContextMenu(e: MouseEvent): void {
  */
 function setupLipSync(): void {
   // 监听音频音量数据
-  removeAudioVolumeListener = window.api?.live2dOnAudioVolume?.((volume: number) => {
+  removeAudioVolumeListener = window.api.live2dOnAudioVolume((volume: number) => {
     // 更新目标嘴巴开合度
     targetMouthValue = volume
-  }) ?? null
+  })
 
   // 启动平滑动画循环
   startLipSyncAnimation()

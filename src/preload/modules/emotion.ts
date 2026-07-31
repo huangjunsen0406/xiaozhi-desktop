@@ -1,12 +1,13 @@
 /**
  * Emotion (表情) API 模块
  */
+import type { FileDialogResult } from '@shared/types'
 import { ipcRenderer } from 'electron'
 import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 export const emotionApi = {
   // 打开文件选择器
-  selectImage: async (): Promise<Electron.OpenDialogReturnValue> => {
+  selectImage: async (): Promise<FileDialogResult> => {
     const result: unknown = await ipcRenderer.invoke('emotion:select-image')
     return unwrapIpcResult(result, '选择表情图片失败')
   },

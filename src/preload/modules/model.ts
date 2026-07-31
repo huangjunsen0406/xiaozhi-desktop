@@ -1,4 +1,4 @@
-import type { ModelInfo } from '@shared/types'
+import type { FileDialogResult, ModelInfo } from '@shared/types'
 /**
  * Model (模型管理) API 模块
  */
@@ -28,7 +28,7 @@ export const modelApi = {
   },
 
   // 打开文件夹选择器
-  selectFolder: async (): Promise<Electron.OpenDialogReturnValue> => {
+  selectFolder: async (): Promise<FileDialogResult> => {
     const result: unknown = await ipcRenderer.invoke('model:select-folder')
     return unwrapIpcResult(result, '选择模型文件夹失败')
   },
