@@ -40,7 +40,7 @@ export const Events = {
   AUDIO_CHANNEL_CLOSED: 'audio:channel_closed',
 
   /** ━━━ 消息 ━━━ */
-  /** 收到服务端 JSON 消息 */
+  /** 收到服务端 JSON 消息（payload 已是 parseServerMessage 后的 ServerMessage；订阅方禁止再 parse） */
   INCOMING_JSON: 'message:incoming_json',
 
   /** ━━━ 音乐 ━━━ */

@@ -10,7 +10,7 @@ import type { AudioPlugin } from './AudioPlugin'
 import { ListeningModeValue } from '@shared/types'
 import { webContents } from 'electron'
 import { Events } from '../core'
-import { parseServerMessage } from '../types/protocol'
+import { isServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
 
@@ -45,12 +45,11 @@ export class UIPlugin extends Plugin {
   async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
     await super.setup(ctx, cmd)
 
-    // 订阅 JSON 消息事件（收窄为 ServerMessage 再广播）
+    // 协议层已 parse 一次；直接广播已归一化的 ServerMessage
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      const message = parseServerMessage(data)
-      if (!message)
+      if (!isServerMessage(data))
         return
-      this.broadcastToRenderer('server:message', message)
+      this.broadcastToRenderer('server:message', data)
     })
 
     // 订阅设备状态变化事件

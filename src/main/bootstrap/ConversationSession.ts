@@ -16,7 +16,7 @@ import { DeviceStateValue, ListeningModeValue } from '@shared/types'
 import { Events } from '../core/EventBus'
 import { getAudioSettings } from '../ipc/audioIpc'
 import { AbortReason as AbortReasonEnum } from '../protocols/Protocol'
-import { isTtsMessage, parseServerMessage } from '../types/protocol'
+import { isServerMessage, isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('ConversationSession')
@@ -57,11 +57,11 @@ export class ConversationSession {
       this.taskManager.spawn(this.onAudioChannelClosed(), 'session:channel-closed').catch(() => {})
     }
     const onJson = (data?: unknown) => {
-      const message = parseServerMessage(data)
-      if (!message)
+      // 协议层已 parse 一次；此处只 guard，不再二次 parse
+      if (!isServerMessage(data))
         return
       this.taskManager.spawn(
-        this.onIncomingJson(message),
+        this.onIncomingJson(data),
         'session:incoming-json',
       ).catch(() => {})
     }

@@ -6,7 +6,7 @@ import { Buffer } from 'node:buffer'
 import { isImageSourceType } from '@shared/types'
 import { Events } from '../core'
 import { getDatabase } from '../services/database'
-import { isImageMessage, isTtsMessage, parseServerMessage } from '../types/protocol'
+import { isImageMessage, isServerMessage, isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -52,12 +52,11 @@ export class ChatPlugin extends Plugin {
     await super.setup(ctx, cmd)
     logger.info('初始化...')
 
-    // 订阅 JSON 消息事件
+    // 协议层已 parse 一次；此处只做非破坏性 guard，避免 unknown 二次归一化
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      const message = parseServerMessage(data)
-      if (!message)
+      if (!isServerMessage(data))
         return
-      this.onIncomingJson(message).catch((error) => {
+      this.onIncomingJson(data).catch((error) => {
         logger.error('处理 JSON 消息失败', error)
       })
     })

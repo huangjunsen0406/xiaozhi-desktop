@@ -4,7 +4,7 @@ import type { McpServer } from '../mcp/McpServer'
 import type { McpJsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Events } from '../core'
-import { isMcpMessage, parseServerMessage } from '../types/protocol'
+import { isMcpMessage, isServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -94,11 +94,10 @@ export class McpPlugin extends Plugin {
 
       this.mcpServer.setThemeBroadcastCallback(themeBroadcastCallback)
 
-      // 订阅 JSON 消息事件
+      // 协议层已 parse 一次；订阅方只做 type guard
       ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-        const message = parseServerMessage(data)
-        if (message && isMcpMessage(message)) {
-          this.handleMcpMessage(message).catch((error) => {
+        if (isServerMessage(data) && isMcpMessage(data)) {
+          this.handleMcpMessage(data).catch((error) => {
             logger.error('处理 MCP 消息失败', error)
           })
         }
