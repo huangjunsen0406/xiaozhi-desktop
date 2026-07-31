@@ -168,13 +168,12 @@ export class ProtocolManager {
   /**
    * 处理接收到的 JSON 消息
    *
-   * 入参已是协议层 parseServerMessage 的结果；此处只日志 + 广播。
-   * 订阅方应使用 isServerMessage / isTtsMessage 等 guard，禁止再次 parse。
+   * 仅负责日志与事件广播；TTS 状态迁移已迁至 ConversationSession。
    */
   private async handleIncomingJson(jsonData: JsonMessage): Promise<void> {
     try {
       logger.info(`收到 JSON 消息: type=${jsonData.type}`, jsonData)
-      // 广播给插件与 ConversationSession（契约：ServerMessage，只 parse 一次）
+      // 广播给插件与 ConversationSession
       await this.eventBus.emit(Events.INCOMING_JSON, jsonData)
     }
     catch (error) {

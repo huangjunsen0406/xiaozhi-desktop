@@ -245,12 +245,13 @@ defineExpose({
         <template #extra>
           <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
             <p>请将宠物文件夹（包含 pet.json 和 spritesheet.webp）导入</p>
-            <p class="mt-1">或点击上方"导入宠物"按钮</p>
+            <p class="mt-1">
+              或点击上方"导入宠物"按钮
+            </p>
           </div>
         </template>
       </NEmpty>
     </NSpin>
-
   </div>
 </template>
 

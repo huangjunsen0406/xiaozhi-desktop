@@ -52,7 +52,7 @@ export class ChatPlugin extends Plugin {
     await super.setup(ctx, cmd)
     logger.info('初始化...')
 
-    // 协议层已 parse 一次；此处只做非破坏性 guard，避免 unknown 二次归一化
+    // 订阅 JSON 消息事件
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
       if (!isServerMessage(data))
         return

@@ -1,10 +1,7 @@
 /**
  * 服务端下行 JSON 消息（跨 main / preload / renderer）
  *
- * 以 `type` 为判别字段的联合类型。
- * 解析契约：仅在协议入口（WS/MQTT）对 raw JSON 调用 parseServerMessage 一次；
- * EventBus `INCOMING_JSON` 及下游用 isServerMessage / isServer*Message，禁止再次 parse
- *（会把 type:'unknown' 的 originalType 二次抹掉）。
+ * 以 `type` 为判别字段的联合类型；解析未知 JSON 时用 parseServerMessage。
  * 传输层帧发送见 Protocol.sendRawText；用户话语见 ConversationSession.sendText。
  */
 

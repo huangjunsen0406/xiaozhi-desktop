@@ -57,7 +57,6 @@ export class ConversationSession {
       this.taskManager.spawn(this.onAudioChannelClosed(), 'session:channel-closed').catch(() => {})
     }
     const onJson = (data?: unknown) => {
-      // 协议层已 parse 一次；此处只 guard，不再二次 parse
       if (!isServerMessage(data))
         return
       this.taskManager.spawn(
