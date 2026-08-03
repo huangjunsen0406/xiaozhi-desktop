@@ -10,6 +10,7 @@ import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
 import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
 import { registerCameraConfigIpc } from './cameraConfigIpc'
+import { registerCareReminderIpc } from './careReminderIpc'
 import { registerChatIpc } from './chatIpc'
 import { registerClipboardIpcChannels } from './clipboardIpc'
 import { registerConfigIpc } from './configIpc'
@@ -45,6 +46,7 @@ export function registerBasicIpcChannels(): void {
 
   registerModelIpc()
   registerPetsIpc()
+  registerCareReminderIpc()
   registerMcpToolsIpc()
   registerClipboardIpcChannels()
 

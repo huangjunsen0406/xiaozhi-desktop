@@ -9,6 +9,10 @@ import { initializeAudioRuntime } from './audio/AudioRuntime'
 import { createServiceContainer, getServiceContainer } from './core/ServiceContainer'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { ActivationService } from './services/ActivationService'
+import {
+  startCareReminderService,
+  stopCareReminderService,
+} from './services/CareReminderService'
 import { initializeConfigManager } from './services/configManagerDB'
 import { initializeDatabase } from './services/database'
 import { initializeDeviceFingerprint } from './services/deviceFingerprintDB'
@@ -237,6 +241,14 @@ app.whenReady().then(async () => {
       break
   }
 
+  // 桌宠本地关怀提醒（无语音/不写对话；依赖 display mode + deviceState）
+  try {
+    await startCareReminderService()
+  }
+  catch (error) {
+    logger.error('启动关怀提醒服务失败', error)
+  }
+
   // 异步检查激活状态
   activationService.checkActivationStatus().then((result) => {
     if (result.error) {
@@ -306,6 +318,14 @@ app.on('before-quit', async (event) => {
   }
   catch (error) {
     logger.error('清理后台音频系统失败', error)
+  }
+
+  // 停止本地关怀提醒调度
+  try {
+    stopCareReminderService()
+  }
+  catch (error) {
+    logger.error('停止关怀提醒服务失败', error)
   }
 
   // 关闭 ServiceContainer（插件、协议、任务等）

@@ -3,7 +3,7 @@
  * 使用模块化 API 结构
  */
 import { contextBridge } from 'electron'
-import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -39,6 +39,13 @@ const api = {
   bubbleSetAnchorOffset: bubbleApi.setAnchorOffset,
   bubbleSetContentSize: bubbleApi.setContentSize,
   bubbleOnSetArrowX: bubbleApi.onSetArrowX,
+  bubbleOnShowLocal: bubbleApi.onShowLocal,
+  bubbleOnHideLocal: bubbleApi.onHideLocal,
+
+  // 关怀提醒配置
+  careReminderGetConfig: careReminderApi.getConfig,
+  careReminderUpdateConfig: careReminderApi.updateConfig,
+  careReminderDemo: careReminderApi.demo,
 
   // Hover 控制 API
   showHover: hoverApi.showHover,

@@ -253,6 +253,13 @@ export function getPetsConfigFile(): string {
 }
 
 /**
+ * 桌宠关怀提醒配置（本地 JSON，不进对话库）
+ */
+export function getCareRemindersConfigFile(): string {
+  return path.join(getUserDataDir(), 'care-reminders.json')
+}
+
+/**
  * 应用当前 PATHS 覆盖（env 仍优先）
  *
  * @param next 覆盖项（空字符串视为清除该项）

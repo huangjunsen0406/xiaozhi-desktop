@@ -2,8 +2,29 @@
  * 气泡窗口 API（桌宠/Live2D 上方对话气泡）
  * Renderer 只通过 window.api 调用气泡能力
  */
-import type { PetSurfaceContentSize, PetSurfaceId } from '@shared/types'
+import type {
+  BubbleLocalShowPayload,
+  PetSurfaceContentSize,
+  PetSurfaceId,
+} from '@shared/types'
 import { ipcRenderer } from 'electron'
+
+function parseLocalShowPayload(raw: unknown): BubbleLocalShowPayload | null {
+  if (raw == null || typeof raw !== 'object')
+    return null
+  const obj = raw as Record<string, unknown>
+  if (typeof obj.text !== 'string' || obj.text.length === 0)
+    return null
+  if (obj.source !== 'reminder')
+    return null
+  const payload: BubbleLocalShowPayload = {
+    text: obj.text,
+    source: 'reminder',
+  }
+  if (typeof obj.durationMs === 'number' && Number.isFinite(obj.durationMs) && obj.durationMs > 0)
+    payload.durationMs = obj.durationMs
+  return payload
+}
 
 export const bubbleApi = {
   /** 显示气泡窗（贴当前宠物/模型窗） */
@@ -60,5 +81,31 @@ export const bubbleApi = {
     }
     ipcRenderer.on('bubble:set-arrow-x', handler)
     return () => ipcRenderer.off('bubble:set-arrow-x', handler)
+  },
+
+  /**
+   * 本地关怀提醒等非会话气泡（不写聊天、不要求 deviceState）
+   * @returns 取消订阅
+   */
+  onShowLocal: (callback: (payload: BubbleLocalShowPayload) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+      const payload = parseLocalShowPayload(raw)
+      if (payload)
+        callback(payload)
+    }
+    ipcRenderer.on('bubble:show-local', handler)
+    return () => ipcRenderer.off('bubble:show-local', handler)
+  },
+
+  /**
+   * 主进程可选：强制结束本地气泡
+   * @returns 取消订阅
+   */
+  onHideLocal: (callback: () => void): (() => void) => {
+    const handler = (): void => {
+      callback()
+    }
+    ipcRenderer.on('bubble:hide-local', handler)
+    return () => ipcRenderer.off('bubble:hide-local', handler)
   },
 }

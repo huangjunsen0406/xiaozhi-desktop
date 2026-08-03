@@ -428,24 +428,24 @@ const PET_SURFACE_PAD: Record<PetSurfaceId, number> = {
   pets: 8,
   // Live2D：小 pad 即可；过大 min/pad 会在矮模型头顶上方留空，气泡脱节
   live2d: 4,
-  // 气泡：略松于角色窗。中文行盒/亚像素常让 DOM 比 measure 高 1–2px；
-  // pad 过紧时 BrowserWindow 客户区矮于内容 → 文档级竖向滚动条贴在白卡片右侧。
-  bubble: 6,
+  // 气泡：pad 必须为 0。渲染进程 measure 已含 CSS padding + BUBBLE_HEIGHT_SAFETY_PX；
+  // 主进程再加 pad 会把客户区撑宽，.bubble width:100% 居中后左右出现透明空隙。
+  bubble: 0,
 }
 const PET_SURFACE_MIN: Record<PetSurfaceId, { width: number, height: number }> = {
   pets: { width: 96, height: 104 },
   // 最小高度只保证可点，不强迫矮模型窗变高产生头顶空白
   live2d: { width: 80, height: 80 },
-  // 短中文状态（「连接中...」）也需横向 pill，勿用过窄 min 把文案挤成竖条
-  bubble: { width: 96, height: 40 },
+  // 仅作零宽/异常回退；短文案由固有宽度驱动，勿抬高 min 造成左右空白
+  bubble: { width: 48, height: 28 },
 }
 const PET_SURFACE_MAX: Record<PetSurfaceId, { width: number, height: number }> = {
   // displayWidth max 224 → 精灵 h≈243 + pad；留余量
   pets: { width: 400, height: 480 },
   // displayWidth 224 → Live2D 视口 400×800；max 需覆盖 + pad（480×720 不够高）
   live2d: { width: 480, height: 820 },
-  // 文案固有宽 cap 320 + pad；与 pets/live2d 窗宽完全解耦
-  bubble: { width: 340, height: 200 },
+  // 文案 cap 320 + 渲染端 BUBBLE_WIDTH_SAFETY_PX(10)；与 pets/live2d 窗宽完全解耦
+  bubble: { width: 330, height: 200 },
 }
 
 function getAnchorOffsetForTarget(target: BrowserWindow): number {

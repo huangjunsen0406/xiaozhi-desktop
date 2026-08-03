@@ -11,7 +11,10 @@ import type {
   AudioUpdateSettingsResult,
   BackgroundAudioStateUpdate,
   BackgroundAudioStatus,
+  BubbleLocalShowPayload,
   CameraConfig,
+  CareReminderConfig,
+  CareReminderDemoResult,
   ChatMessage,
   ChatMessageAddedEvent,
   ChatMessagesBatchAddedEvent,
@@ -56,7 +59,10 @@ export type {
   AudioUpdateSettingsResult,
   BackgroundAudioStateUpdate,
   BackgroundAudioStatus,
+  BubbleLocalShowPayload,
   CameraConfig,
+  CareReminderConfig,
+  CareReminderDemoResult,
   ChatMessage,
   ChatMessageAddedEvent,
   ChatMessagesBatchAddedEvent,
@@ -125,6 +131,14 @@ export interface RendererApi {
    */
   bubbleSetContentSize: (surface: PetSurfaceId, size: PetSurfaceContentSize) => void
   bubbleOnSetArrowX: (callback: (x: number) => void) => () => void
+  /** 本地关怀提醒等非会话气泡 */
+  bubbleOnShowLocal: (callback: (payload: BubbleLocalShowPayload) => void) => () => void
+  bubbleOnHideLocal: (callback: () => void) => () => void
+  // Care reminder APIs
+  careReminderGetConfig: () => Promise<CareReminderConfig>
+  careReminderUpdateConfig: (config: Partial<CareReminderConfig>) => Promise<CareReminderConfig>
+  /** 演示一轮四类提醒（绕过正式间隔/静默/开关） */
+  careReminderDemo: () => Promise<CareReminderDemoResult>
   // Activation APIs
   activationInitialize: () => Promise<ActivationInitResult>
   activationGetDeviceInfo: () => Promise<ActivationDeviceInfo>
