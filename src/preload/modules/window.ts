@@ -1,17 +1,31 @@
 /**
  * 窗口控制 API 模块
  */
+import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
-import { assertIpcSuccess } from '../utils/ipc'
+import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
+
+export type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
 
 export const windowApi = {
   // 面板控制
   togglePanel: (): void => ipcRenderer.send('panel:toggle'),
   toggleToMini: (): void => ipcRenderer.send('window:toggle-to-mini'),
   toggleToMain: (): void => ipcRenderer.send('window:toggle-to-main'),
-  switchDisplayMode: async (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets'): Promise<void> => {
+  getDisplayMode: async (): Promise<DisplayMode> => {
+    const result: unknown = await ipcRenderer.invoke('window:get-display-mode')
+    return unwrapIpcResult<DisplayMode>(result, '获取显示模式失败')
+  },
+  switchDisplayMode: async (mode: DisplayMode): Promise<void> => {
     const result: unknown = await ipcRenderer.invoke('window:switch-display-mode', mode)
     assertIpcSuccess(result, '切换显示模式失败')
+  },
+  onDisplayModeChanged: (callback: (mode: DisplayMode) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, mode: DisplayMode) => {
+      callback(mode)
+    }
+    ipcRenderer.on('window:display-mode-changed', handler)
+    return () => ipcRenderer.off('window:display-mode-changed', handler)
   },
 
   // 激活窗口

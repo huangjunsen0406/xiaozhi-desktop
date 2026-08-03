@@ -4,6 +4,59 @@ export type PetSpriteVersion = 1 | 2
 /** 宠物来源：本地可写目录 vs Codex 只读目录 */
 export type PetSource = 'local' | 'codex'
 
+/**
+ * 桌宠显示宽度（CSS px），对齐 Codex `avatar-overlay-mascot-width-px`。
+ * 全局一份，同时作用于 Sprite Pets 与 Live2D。
+ */
+export const PET_DISPLAY_WIDTH_MIN = 80
+export const PET_DISPLAY_WIDTH_MAX = 224
+export const PET_DISPLAY_WIDTH_DEFAULT = 112
+
+/** 精灵图单元格宽高（Codex atlas cell） */
+export const PET_SPRITE_FRAME_W = 192
+export const PET_SPRITE_FRAME_H = 208
+
+/** Live2D 在默认 displayWidth=112 时的经典视口 */
+export const LIVE2D_BASE_VIEWPORT_W = 200
+export const LIVE2D_BASE_VIEWPORT_H = 400
+
+/**
+ * 将用户/配置中的显示宽度夹到 Codex 合法区间。
+ */
+export function clampPetDisplayWidth(width: number): number {
+  if (!Number.isFinite(width))
+    return PET_DISPLAY_WIDTH_DEFAULT
+  return Math.round(
+    Math.min(PET_DISPLAY_WIDTH_MAX, Math.max(PET_DISPLAY_WIDTH_MIN, width)),
+  )
+}
+
+/**
+ * 精灵显示高度：ceil(width * 208/192)，与 Codex mascot 纵横比一致。
+ */
+export function petDisplayHeightFromWidth(widthPx: number): number {
+  const w = clampPetDisplayWidth(widthPx)
+  return Math.ceil(w * PET_SPRITE_FRAME_H / PET_SPRITE_FRAME_W)
+}
+
+/**
+ * Live2D 视口：按 displayWidth / 112 相对默认 200×400 缩放。
+ */
+export function live2dViewportFromDisplayWidth(widthPx: number): { width: number, height: number } {
+  const w = clampPetDisplayWidth(widthPx)
+  return {
+    width: Math.round(LIVE2D_BASE_VIEWPORT_W * w / PET_DISPLAY_WIDTH_DEFAULT),
+    height: Math.round(LIVE2D_BASE_VIEWPORT_H * w / PET_DISPLAY_WIDTH_DEFAULT),
+  }
+}
+
+/** pets-config.json 持久化结构 */
+export interface PetsConfigFile {
+  currentPet: string
+  /** 显示宽度 CSS px；缺省 112 */
+  displayWidthPx?: number
+}
+
 /** 精灵宠物信息 */
 export interface PetInfo {
   /** 宠物唯一标识 */

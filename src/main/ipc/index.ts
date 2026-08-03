@@ -3,7 +3,7 @@ import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
-import { getLive2dWindow, getPetsWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
+import { getCurrentDisplayMode, getLive2dWindow, getPetsWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
 
 import { registerAppIpc } from './appIpc'
@@ -129,6 +129,14 @@ export function registerBasicIpcChannels(): void {
   // 精灵宠物窗口
   ipcMain.on('window:toggle-pets', () => {
     toggleToPets()
+  })
+
+  // 读取当前显示模式
+  createIpcHandler({
+    channel: 'window:get-display-mode',
+    handler: async () => {
+      return success(getCurrentDisplayMode())
+    },
   })
 
   // 显示模式切换

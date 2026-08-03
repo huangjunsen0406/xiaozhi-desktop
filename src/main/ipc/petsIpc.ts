@@ -1,12 +1,38 @@
 /**
  * 精灵宠物管理 IPC 处理器（createIpcHandler + IpcResult）
  */
+import {
+  PET_DISPLAY_WIDTH_MAX,
+  PET_DISPLAY_WIDTH_MIN,
+} from '@shared/types'
 import { BrowserWindow, dialog, shell } from 'electron'
-import { deletePet, getCurrentPet, getPetsFolderPath, getPetSpritesheet, importPet, scanPets, setCurrentPet } from '../services/PetsManager'
+import {
+  deletePet,
+  getCurrentPet,
+  getDisplayWidth,
+  getPetsFolderPath,
+  getPetSpritesheet,
+  importPet,
+  scanPets,
+  setCurrentPet,
+  setDisplayWidth,
+} from '../services/PetsManager'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('PetsIpc')
+
+/**
+ * 向所有窗口广播事件（宠物切换 / 显示尺寸）
+ */
+function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
+  const windows = BrowserWindow.getAllWindows()
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, ...args)
+    }
+  }
+}
 
 /**
  * 注册精灵宠物管理 IPC 处理器
@@ -40,14 +66,38 @@ export function registerPetsIpc(): void {
       }
 
       // 广播宠物切换事件给所有窗口
-      const windows = BrowserWindow.getAllWindows()
-      for (const win of windows) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('pets:changed', petId)
-        }
-      }
+      broadcastToAllWindows('pets:changed', petId)
 
       return success()
+    },
+  })
+
+  createIpcHandler({
+    channel: 'pets:get-display-size',
+    handler: async () => {
+      return success(await getDisplayWidth())
+    },
+  })
+
+  createIpcHandler({
+    channel: 'pets:set-display-size',
+    schema: {
+      width: {
+        type: 'number',
+        required: true,
+        min: PET_DISPLAY_WIDTH_MIN,
+        max: PET_DISPLAY_WIDTH_MAX,
+      },
+    },
+    handler: async (_event, widthUnknown: unknown) => {
+      const result = await setDisplayWidth(Number(widthUnknown))
+      if (!result.success) {
+        return failure(result.error || '设置宠物大小失败')
+      }
+
+      // 实时通知 pets / live2d / 设置页
+      broadcastToAllWindows('pets:display-size-changed', result.width)
+      return success(result.width)
     },
   })
 

@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import type { Ref } from 'vue'
 import * as pixiFnPatch from '@pixi/unsafe-eval'
+import {
+  clampPetDisplayWidth,
+  live2dViewportFromDisplayWidth,
+  PET_DISPLAY_WIDTH_DEFAULT,
+} from '@shared/types'
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import * as PIXI from 'pixi.js'
 import { onMounted, onUnmounted, ref } from 'vue'
@@ -12,11 +18,14 @@ pixiFnPatch.install(PIXI)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 /**
- * Live2D 固定视口（经典 framing）。
- * 全身装进 200×400；不按 mesh/getBounds 收缩画布或窗口，避免半身裁切。
+ * Live2D 视口：默认 200×400（displayWidth=112），
+ * 按 displayWidth/112 缩放（80→~143×286，224→400×800 再被主进程 max 夹取）。
+ * 不按 mesh/getBounds 收缩画布，避免半身裁切。
  */
-const VIEWPORT = { width: 200, height: 400 } as const
-const canvasSize = VIEWPORT
+const displayWidthPx = ref(PET_DISPLAY_WIDTH_DEFAULT)
+const canvasSize: Ref<{ width: number, height: number }> = ref(
+  live2dViewportFromDisplayWidth(PET_DISPLAY_WIDTH_DEFAULT),
+)
 const appStore = useAppStore()
 
 // 默认模型（首次加载或配置为空时使用）
@@ -28,10 +37,16 @@ let isDragging = false
 let currentModelId = '' // 当前加载的模型ID
 let removeAudioVolumeListener: (() => void) | null = null
 let removeModelChangedListener: (() => void) | null = null
+let removeDisplayWidthListener: (() => void) | null = null
 /** 最近一次 click-through 状态，避免每帧重复 IPC */
 let lastClickThroughIgnore: boolean | null = null
 /** 取消进行中的锚点复测（模型切换时） */
 let layoutToken = 0
+
+/** 当前逻辑视口（与 canvasSize 同步） */
+function getViewport(): { width: number, height: number } {
+  return canvasSize.value
+}
 
 const status = ref({
   canvas: false,
@@ -138,6 +153,46 @@ async function handleModelChange(newModelId: string): Promise<void> {
   }
 }
 
+/**
+ * 同步 PIXI 渲染缓冲到当前逻辑视口（CSS px）。
+ * 只走 renderer.resize；禁止 Vue 写 canvas width/height 属性，
+ * 否则会与 autoDensity/devicePixelRatio 抢 backing store → 只显示局部裁切。
+ */
+function resizeRendererToViewport(viewport: { width: number, height: number }): void {
+  if (!app)
+    return
+  try {
+    // 用 screen（逻辑 CSS px），不要用 renderer.width（retina 下可能是 buffer 像素）
+    const screenW = app.screen.width
+    const screenH = app.screen.height
+    if (screenW === viewport.width && screenH === viewport.height)
+      return
+    app.renderer.resize(viewport.width, viewport.height)
+  }
+  catch (error) {
+    console.warn('[Live2D] resize renderer 失败', error)
+  }
+}
+
+/**
+ * 应用全局显示宽度：缩放视口、resize renderer、重布局模型并上报 content size
+ */
+function applyDisplayWidth(width: number): void {
+  const next = clampPetDisplayWidth(width)
+  const viewport = live2dViewportFromDisplayWidth(next)
+
+  displayWidthPx.value = next
+  canvasSize.value = viewport
+
+  // 先 resize 缓冲，再 framing；窗尺寸始终报完整视口，永不按 mesh AABB 缩窗
+  resizeRendererToViewport(viewport)
+
+  if (model)
+    setupModel(model)
+  else
+    reportFixedViewportContentSize(0)
+}
+
 // 注册清理函数(必须在 async 之前)
 onUnmounted(() => {
   if (containerRef.value) {
@@ -165,6 +220,10 @@ onUnmounted(() => {
     removeModelChangedListener()
     removeModelChangedListener = null
   }
+  if (removeDisplayWidthListener) {
+    removeDisplayWidthListener()
+    removeDisplayWidthListener = null
+  }
 })
 
 onMounted(async () => {
@@ -181,17 +240,28 @@ onMounted(async () => {
   status.value.canvas = true
 
   try {
-    // 固定 200×400 视口；不随后续 measure 改 renderer 尺寸
+    // 先读全局显示宽度，再创建与之匹配的 PIXI 视口
+    try {
+      const width = await window.api.petsGetDisplayWidth()
+      displayWidthPx.value = clampPetDisplayWidth(width)
+      canvasSize.value = live2dViewportFromDisplayWidth(displayWidthPx.value)
+    }
+    catch {
+      displayWidthPx.value = PET_DISPLAY_WIDTH_DEFAULT
+      canvasSize.value = live2dViewportFromDisplayWidth(PET_DISPLAY_WIDTH_DEFAULT)
+    }
+
+    const initialViewport = canvasSize.value
     app = new PIXI.Application({
       view: canvasRef.value,
       autoStart: true,
       autoDensity: true,
-      width: canvasSize.width,
-      height: canvasSize.height,
+      width: initialViewport.width,
+      height: initialViewport.height,
       resolution: window.devicePixelRatio,
       backgroundAlpha: 0,
     })
-    console.log('PIXI Application created')
+    console.log('PIXI Application created', initialViewport)
     status.value.app = true
 
     // 获取当前配置的模型并加载
@@ -217,6 +287,11 @@ onMounted(async () => {
     // 监听模型切换事件
     removeModelChangedListener = window.api.modelOnChanged(handleModelChange)
     console.log('[Live2D] 模型切换监听已注册')
+
+    // 设置页实时改大小
+    removeDisplayWidthListener = window.api.petsOnDisplayWidthChanged((width) => {
+      applyDisplayWidth(width)
+    })
   }
   catch (error) {
     console.error('Failed to initialize', error)
@@ -293,7 +368,7 @@ function boundsArea(b: ModelBounds): number {
 
 /**
  * 可见网格 AABB：仅用于头顶锚点 / 可选命中收紧。
- * 窗尺寸固定 VIEWPORT；装载 framing 用 getBounds，mesh 绝不驱动缩窗。
+ * 窗尺寸跟 displayWidth 视口；装载 framing 用 getBounds，mesh 绝不驱动缩窗。
  */
 function measureVisibleModelBounds(modelInstance: Live2DModel): ModelBounds | null {
   // pixi-live2d-display 内部 API：按 mesh 顶点收紧包围盒
@@ -418,33 +493,41 @@ function isVisibleFullBodyReliable(visible: ModelBounds, full: ModelBounds): boo
 }
 
 /**
- * 固定视口 content size + 头顶锚点。
- * width/height 始终 VIEWPORT（200×400）；anchorOffsetY 仅影响气泡位置。
+ * 当前视口 content size + 头顶锚点。
+ * width/height 随 displayWidth 缩放；anchorOffsetY 仅影响气泡位置。
  */
 function reportFixedViewportContentSize(headOffsetY: number): void {
-  const anchorY = Math.max(0, Math.min(Math.round(headOffsetY), VIEWPORT.height))
-  console.log('[Live2D] fixed viewport content:', {
-    width: VIEWPORT.width,
-    height: VIEWPORT.height,
+  const viewport = getViewport()
+  const anchorY = Math.max(0, Math.min(Math.round(headOffsetY), viewport.height))
+  console.log('[Live2D] viewport content:', {
+    width: viewport.width,
+    height: viewport.height,
     anchorOffsetY: anchorY,
+    displayWidthPx: displayWidthPx.value,
   })
   window.api.bubbleSetContentSize('live2d', {
-    width: VIEWPORT.width,
-    height: VIEWPORT.height,
+    width: viewport.width,
+    height: viewport.height,
     anchorOffsetY: anchorY,
   })
   window.api.bubbleSetAnchorOffset(anchorY)
 }
 
 /**
- * 经典 framing：整身 fit 进固定 200×400，水平居中、垂直底对齐。
- * 不收缩画布/窗口；mesh 仅可选修正气泡头顶 Y。
+ * 经典 framing：整身 fit 进当前视口，水平居中、垂直底对齐。
+ * - 视口始终是 displayWidth 派生的固定宽高比（200×400 @ 112）
+ * - scale 基于 **完整 getBounds**，禁止用 mesh 可见 AABB 驱动缩放（否则只剩头）
+ * - 上报 content size = 完整视口，永不按半身 mesh 缩窗
  */
 function setupModel(modelInstance: Live2DModel): void {
   layoutToken += 1
   const token = layoutToken
+  const viewport = getViewport()
 
-  // 复位，避免切换模型残留 transform
+  // 确保 renderer 与当前视口一致（模型切换 / 首次加载路径）
+  resizeRendererToViewport(viewport)
+
+  // 复位，避免切换模型或改宽后残留 transform
   modelInstance.scale.set(1)
   modelInstance.position.set(0, 0)
   const anchorPoint = (modelInstance as unknown as {
@@ -455,18 +538,42 @@ function setupModel(modelInstance: Live2DModel): void {
   const rawBounds = readModelBounds(modelInstance)
   console.log('Model original bounds:', rawBounds)
 
-  // scale = min(200/w, 400/h, 1) — 保证全身入画，不放大
+  // 防御：bounds 未就绪时先报完整视口，下一帧再 framing，避免用半身 AABB 算 scale
+  if (
+    !Number.isFinite(rawBounds.width)
+    || !Number.isFinite(rawBounds.height)
+    || rawBounds.width < 2
+    || rawBounds.height < 2
+  ) {
+    console.warn('[Live2D] raw bounds 未就绪，延迟 framing', rawBounds)
+    reportFixedViewportContentSize(0)
+    requestAnimationFrame(() => {
+      if (token !== layoutToken || model !== modelInstance)
+        return
+      setupModel(modelInstance)
+    })
+    return
+  }
+
+  // scale = min(vw/w, vh/h) — 全身 fit 当前视口；随 displayWidth 放大/缩小
+  // 不用 cap 1：大 displayWidth 时需要 scale 随视口变大（模型原生画布通常远大于 200×400）
   const scale = Math.min(
-    VIEWPORT.width / Math.max(rawBounds.width, 1),
-    VIEWPORT.height / Math.max(rawBounds.height, 1),
-    1,
+    viewport.width / rawBounds.width,
+    viewport.height / rawBounds.height,
   )
+  if (!Number.isFinite(scale) || scale <= 0) {
+    console.warn('[Live2D] 无效 scale，跳过 framing', { scale, rawBounds, viewport })
+    reportFixedViewportContentSize(0)
+    return
+  }
   modelInstance.scale.set(scale)
   console.log('Model scale:', scale)
 
   const layoutAndReport = (): void => {
     if (token !== layoutToken || model !== modelInstance)
       return
+
+    const vp = getViewport()
 
     // 每次从「仅缩放、位置归零」重算，避免 rAF 复测时累加平移
     modelInstance.position.set(0, 0)
@@ -475,14 +582,15 @@ function setupModel(modelInstance: Live2DModel): void {
     console.log('Model scaled bounds:', scaled)
 
     // 水平居中、垂直底对齐（经典可靠 framing）
-    modelInstance.x = (VIEWPORT.width - scaled.width) / 2 - scaled.x
-    modelInstance.y = VIEWPORT.height - scaled.height - scaled.y
+    modelInstance.x = (vp.width - scaled.width) / 2 - scaled.x
+    modelInstance.y = vp.height - scaled.height - scaled.y
 
     const framed = readModelBounds(modelInstance)
     console.log('Model framed bounds:', framed)
 
     // 头顶锚点：优先可见 mesh 顶边；不可靠则用 getBounds 顶边
     // 底对齐后 bounds.y 通常 > 0（头顶上方透明区）
+    // mesh 只影响气泡 Y，绝不回写窗高
     let headOffsetY = Math.max(0, Math.round(framed.y))
     const visible = measureVisibleModelBounds(modelInstance)
     if (visible && isVisibleHeadAnchorReliable(visible, framed)) {
@@ -496,14 +604,14 @@ function setupModel(modelInstance: Live2DModel): void {
     console.log('Model positioned at:', {
       x: modelInstance.x,
       y: modelInstance.y,
-      viewport: VIEWPORT,
+      viewport: vp,
       headOffsetY,
     })
 
     reportFixedViewportContentSize(headOffsetY)
   }
 
-  // 一次布局 + 可选 1 rAF 复测头顶（drawable 可能稍晚就绪）；不改窗尺寸
+  // 一次布局 + 可选 1 rAF 复测头顶（drawable 可能稍晚就绪）
   layoutAndReport()
   requestAnimationFrame(() => {
     if (token !== layoutToken)
@@ -687,11 +795,13 @@ function startLipSyncAnimation(): void {
     class="live2d-container"
     :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px` }"
   >
+    <!--
+      不绑定 canvas width/height 属性：PIXI autoDensity 会按 devicePixelRatio 写 backing store。
+      Vue 若再写 CSS 像素属性，会把缓冲裁成「窄条/半身」。只同步 CSS 显示尺寸。
+    -->
     <canvas
       id="live2d-canvas"
       ref="canvasRef"
-      :width="canvasSize.width"
-      :height="canvasSize.height"
       :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px` }"
     />
   </div>
@@ -705,7 +815,7 @@ function startLipSyncAnimation(): void {
   overflow: hidden;
   cursor: move;
   background: transparent;
-  /* 固定 200×400 视口：全身 fit + 底对齐，不按 mesh 收缩 */
+  /* 视口随 displayWidth 缩放；全身 fit + 底对齐，不按 mesh 收缩 */
 }
 
 #live2d-canvas {

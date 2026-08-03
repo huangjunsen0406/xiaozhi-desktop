@@ -4,7 +4,14 @@
  * 窗口壳（content bounds / click-through / bubble）已由既有逻辑负责，这里只做动画。
  */
 import type { DeviceState, PetAnimationState, PetSpriteVersion } from '@shared/types'
-import { onMounted, onUnmounted, ref } from 'vue'
+import {
+  clampPetDisplayWidth,
+  PET_DISPLAY_WIDTH_DEFAULT,
+  PET_SPRITE_FRAME_H,
+  PET_SPRITE_FRAME_W,
+  petDisplayHeightFromWidth,
+} from '@shared/types'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAppStore } from '../stores/app'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -12,11 +19,12 @@ const containerRef = ref<HTMLDivElement | null>(null)
 const appStore = useAppStore()
 
 // —— Atlas 常量（Codex 兼容，8 列）——
-const FRAME_W = 192
-const FRAME_H = 208
-/** 画布显示尺寸（CSS px）— 主进程窗 bounds 以此为内容尺寸 */
-const CANVAS_DISPLAY_W = 138
-const CANVAS_DISPLAY_H = 145
+const FRAME_W = PET_SPRITE_FRAME_W
+const FRAME_H = PET_SPRITE_FRAME_H
+/** 画布显示宽度（CSS px，Codex petSize 80–224） */
+const displayWidthPx = ref(PET_DISPLAY_WIDTH_DEFAULT)
+const canvasDisplayW = computed(() => clampPetDisplayWidth(displayWidthPx.value))
+const canvasDisplayH = computed(() => petDisplayHeightFromWidth(displayWidthPx.value))
 
 /** 建立拖动方向的阈值（屏幕 delta，px） */
 const DRAG_DIR_THRESHOLD = 4
@@ -115,6 +123,7 @@ let lastTimestamp = 0
 /** 最近一次 click-through 状态，避免每帧重复 IPC */
 let lastClickThroughIgnore: boolean | null = null
 let removeChangedListener: (() => void) | null = null
+let removeDisplayWidthListener: (() => void) | null = null
 
 /**
  * deviceState → 基础动画（无 drag / look 时）
@@ -221,11 +230,19 @@ function computeLookIndex(clientX: number, clientY: number): number | null {
  */
 function reportContentSize(): void {
   window.api.bubbleSetContentSize('pets', {
-    width: CANVAS_DISPLAY_W,
-    height: CANVAS_DISPLAY_H,
+    width: canvasDisplayW.value,
+    height: canvasDisplayH.value,
     // 精灵贴底绘制，头顶约在 canvas 顶
     anchorOffsetY: 0,
   })
+}
+
+/**
+ * 应用显示宽度并上报 content bounds（设置页实时同步）
+ */
+function applyDisplayWidth(width: number): void {
+  displayWidthPx.value = clampPetDisplayWidth(width)
+  reportContentSize()
 }
 
 function setPetsClickThrough(ignore: boolean): void {
@@ -560,7 +577,7 @@ function handleDblClick(e: MouseEvent): void {
   void toggleCall()
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (containerRef.value) {
     containerRef.value.addEventListener('mousedown', handleMouseDown)
     containerRef.value.addEventListener('mouseenter', handleMouseEnter)
@@ -571,9 +588,20 @@ onMounted(() => {
   }
 
   removeChangedListener = window.api.petsOnChanged(handlePetChange)
+  removeDisplayWidthListener = window.api.petsOnDisplayWidthChanged((width) => {
+    applyDisplayWidth(width)
+  })
 
   setPetsClickThrough(true)
-  reportContentSize()
+
+  try {
+    const width = await window.api.petsGetDisplayWidth()
+    applyDisplayWidth(width)
+  }
+  catch {
+    applyDisplayWidth(PET_DISPLAY_WIDTH_DEFAULT)
+  }
+
   loadSpritesheet()
 })
 
@@ -591,16 +619,21 @@ onUnmounted(() => {
     removeChangedListener()
     removeChangedListener = null
   }
+  if (removeDisplayWidthListener) {
+    removeDisplayWidthListener()
+    removeDisplayWidthListener = null
+  }
 })
 </script>
 
 <template>
   <div ref="containerRef" class="pets-container">
-    <!-- 精灵 Canvas -->
+    <!-- 精灵 Canvas：内部 buffer = 显示 CSS 尺寸；atlas 仍按 192×208 采样后缩放 -->
     <canvas
       ref="canvasRef"
-      :width="CANVAS_DISPLAY_W"
-      :height="CANVAS_DISPLAY_H"
+      :width="canvasDisplayW"
+      :height="canvasDisplayH"
+      :style="{ width: `${canvasDisplayW}px`, height: `${canvasDisplayH}px` }"
     />
   </div>
 </template>
@@ -621,7 +654,5 @@ onUnmounted(() => {
 canvas {
   image-rendering: pixelated;
   cursor: move;
-  width: 138px;
-  height: 145px;
 }
 </style>

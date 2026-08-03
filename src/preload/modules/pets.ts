@@ -1,8 +1,9 @@
-import type { FileDialogResult, PetInfo, PetSpritesheetPayload } from '@shared/types'
 /**
  * Pets (精灵宠物管理) API 模块
  */
+import type { FileDialogResult, PetInfo, PetSpritesheetPayload } from '@shared/types'
 import type { IpcRendererEvent } from 'electron'
+import { PET_DISPLAY_WIDTH_DEFAULT } from '@shared/types'
 import { ipcRenderer } from 'electron'
 import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
@@ -55,13 +56,25 @@ export const petsApi = {
   // 获取宠物目录路径
   getFolderPath: async (): Promise<string> => {
     const result: unknown = await ipcRenderer.invoke('pets:get-folder-path')
-    return unwrapIpcResult<string>(result, '获取宠物目录路径失败')
+    return unwrapIpcResult<string>(result, '获取宠物目录路径失败') ?? ''
   },
 
   // 获取精灵图 dataUrl + 版本 + 像素尺寸（Codex v1/v2）
   getSpritesheet: async (petId: string): Promise<PetSpritesheetPayload | null> => {
     const result: unknown = await ipcRenderer.invoke('pets:get-spritesheet', petId)
     return unwrapIpcResult<PetSpritesheetPayload | null>(result, '获取精灵图失败') ?? null
+  },
+
+  // 全局显示宽度（CSS px，80–224，默认 112）
+  getDisplayWidth: async (): Promise<number> => {
+    const result: unknown = await ipcRenderer.invoke('pets:get-display-size')
+    return unwrapIpcResult<number>(result, '获取宠物大小失败') ?? PET_DISPLAY_WIDTH_DEFAULT
+  },
+
+  // 设置全局显示宽度；主进程会广播 pets:display-size-changed
+  setDisplayWidth: async (width: number): Promise<number> => {
+    const result: unknown = await ipcRenderer.invoke('pets:set-display-size', width)
+    return unwrapIpcResult<number>(result, '设置宠物大小失败') ?? PET_DISPLAY_WIDTH_DEFAULT
   },
 
   // 监听宠物切换事件
@@ -71,5 +84,14 @@ export const petsApi = {
     }
     ipcRenderer.on('pets:changed', handler)
     return () => ipcRenderer.off('pets:changed', handler)
+  },
+
+  // 监听显示宽度变更（设置页 / 其它窗实时同步）
+  onDisplayWidthChanged: (callback: (width: number) => void): () => void => {
+    const handler = (_event: IpcRendererEvent, width: number) => {
+      callback(width)
+    }
+    ipcRenderer.on('pets:display-size-changed', handler)
+    return () => ipcRenderer.off('pets:display-size-changed', handler)
   },
 }

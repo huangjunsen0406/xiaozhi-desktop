@@ -1,8 +1,7 @@
 import type { PetSurfaceContentSize, PetSurfaceId } from '@shared/types'
-import type { BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import process from 'node:process'
-import { ipcMain, screen } from 'electron'
+import { BrowserWindow, ipcMain, screen } from 'electron'
 import { hide as hideHover } from '../hover/controller'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -28,7 +27,7 @@ const windowRefs = {
 }
 
 // 显示模式状态管理
-type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
+export type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
 
 function getDisplayModeFilePath(): string {
   return getDisplayModeFile()
@@ -78,6 +77,17 @@ export function getCurrentDisplayMode(): DisplayMode {
 }
 
 /**
+ * 广播显示模式变更给所有渲染进程（设置页等需实时同步）
+ */
+function broadcastDisplayModeChanged(mode: DisplayMode): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('window:display-mode-changed', mode)
+    }
+  }
+}
+
+/**
  * 设置显示模式（内部使用，更新状态并触发回调，同时持久化到磁盘）
  */
 function setDisplayMode(mode: DisplayMode): void {
@@ -90,6 +100,9 @@ function setDisplayMode(mode: DisplayMode): void {
     if (onDisplayModeChanged) {
       onDisplayModeChanged(mode)
     }
+
+    // 通知设置页等 renderer 同步 select
+    broadcastDisplayModeChanged(mode)
   }
 }
 
@@ -198,7 +211,8 @@ function setupPositionMemory(win: BrowserWindow, key: string): void {
 
 /**
  * 从 DB 读取共享中心位置并应用到窗口（按窗口当前尺寸反推左上角）
- * 用于切换时把窗口对齐到最新的共享位置；无记录时返回 false 由调用方走兜底
+ * 用于切换时把窗口对齐到最新的共享位置；无记录时返回 false 由调用方走兜底。
+ * 应用后夹进 workArea，避免 pets 贴底切换到高 Live2D 时沉入 Dock。
  */
 function applySharedCenterPosition(win: BrowserWindow, key: string): boolean {
   if (win.isDestroyed())
@@ -208,6 +222,11 @@ function applySharedCenterPosition(win: BrowserWindow, key: string): boolean {
     if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
       const [w, h] = win.getSize()
       win.setPosition(Math.round(saved.x - w / 2), Math.round(saved.y - h / 2))
+      // pet-shared：夹 workArea 后写回实际中心，避免下次再读到屏外中心
+      if (key === 'pet-shared')
+        clampPetWindowToWorkAreaAndPersist(win)
+      else
+        clampWindowToWorkArea(win)
       return true
     }
   }
@@ -230,9 +249,15 @@ function setupSharedCenterPosition(win: BrowserWindow, key: string): void {
     const seed = computeSeedPosition(win)
     if (seed) {
       win.setPosition(seed.x, seed.y)
+      // 种子也可能在 Dock 下（从其它模式中心推算）；先夹 workArea
+      if (key === 'pet-shared')
+        clampPetWindowToWorkAreaAndPersist(win)
+      else
+        clampWindowToWorkArea(win)
+      const [x, y] = win.getPosition()
       const [w, h] = win.getSize()
-      const cx = Math.round(seed.x + w / 2)
-      const cy = Math.round(seed.y + h / 2)
+      const cx = Math.round(x + w / 2)
+      const cy = Math.round(y + h / 2)
       try {
         getDatabase().setWindowPosition(key, cx, cy)
       }
@@ -415,8 +440,10 @@ const PET_SURFACE_MIN: Record<PetSurfaceId, { width: number, height: number }> =
   bubble: { width: 96, height: 40 },
 }
 const PET_SURFACE_MAX: Record<PetSurfaceId, { width: number, height: number }> = {
+  // displayWidth max 224 → 精灵 h≈243 + pad；留余量
   pets: { width: 400, height: 480 },
-  live2d: { width: 480, height: 720 },
+  // displayWidth 224 → Live2D 视口 400×800；max 需覆盖 + pad（480×720 不够高）
+  live2d: { width: 480, height: 820 },
   // 文案固有宽 cap 320 + pad；与 pets/live2d 窗宽完全解耦
   bubble: { width: 340, height: 200 },
 }
@@ -452,6 +479,70 @@ function getPetSurfaceWindow(surface: PetSurfaceId): BrowserWindow | null {
   if (surface === 'live2d')
     return windowRefs.live2d.current
   return windowRefs.bubble.current
+}
+
+/**
+ * 将桌宠窗位置夹进当前显示器 workArea，避免长高 Live2D 在保中心后沉入 Dock 下无法拖回。
+ * 窗比 workArea 更大时钉在 workArea 左上角。
+ * @returns 是否发生了位移
+ */
+function clampWindowToWorkArea(win: BrowserWindow): boolean {
+  if (win.isDestroyed())
+    return false
+
+  const bounds = win.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const wa = display.workArea
+  let nextX = bounds.x
+  let nextY = bounds.y
+
+  if (bounds.width >= wa.width) {
+    nextX = wa.x
+  }
+  else {
+    const minX = wa.x
+    const maxX = wa.x + wa.width - bounds.width
+    nextX = Math.min(Math.max(bounds.x, minX), maxX)
+  }
+
+  if (bounds.height >= wa.height) {
+    nextY = wa.y
+  }
+  else {
+    const minY = wa.y
+    const maxY = wa.y + wa.height - bounds.height
+    nextY = Math.min(Math.max(bounds.y, minY), maxY)
+  }
+
+  nextX = Math.round(nextX)
+  nextY = Math.round(nextY)
+  if (nextX === bounds.x && nextY === bounds.y)
+    return false
+
+  win.setPosition(nextX, nextY)
+  return true
+}
+
+/**
+ * 夹进 workArea 后，若是 pets/live2d，把实际视觉中心写回 pet-shared。
+ */
+function clampPetWindowToWorkAreaAndPersist(win: BrowserWindow): void {
+  if (!clampWindowToWorkArea(win) || win.isDestroyed())
+    return
+  if (win !== windowRefs.live2d.current && win !== windowRefs.pets.current)
+    return
+  try {
+    const [x, y] = win.getPosition()
+    const [w, h] = win.getSize()
+    getDatabase().setWindowPosition(
+      'pet-shared',
+      Math.round(x + w / 2),
+      Math.round(y + h / 2),
+    )
+  }
+  catch (error) {
+    logger.warn('保存 pet-shared 中心失败（workArea clamp）', error)
+  }
 }
 
 /**
@@ -519,6 +610,10 @@ export function setPetSurfaceContentSize(
       }
     }
   }
+
+  // 无论是否改尺寸：保中心/增高后都可能压进 Dock；夹回 workArea
+  if (!isWindowDragging(win))
+    clampPetWindowToWorkAreaAndPersist(win)
 
   if (currentBubbleTarget === win && windowRefs.bubble.current?.isVisible())
     positionBubbleAbove(win)
@@ -812,6 +907,9 @@ export function toggleToLive2d(): void {
   // 每次切到 live2d 都重新从 DB 应用共享位置：
   // 避免“窗口已存在”的路径下错过 pets 拖动后的最新位置
   applySharedCenterPosition(win, 'pet-shared')
+  // 再夹一次：content-size 可能尚未上报时窗仍是 builder 默认高，
+  // 或上次残留在 Dock 下的位置需要拉回可见区
+  clampPetWindowToWorkAreaAndPersist(win)
   // Codex：showInactive 不抢焦点；reassert floating + moveTop 防止被 IDE 盖住
   reassertPetSurfaceTop(win)
   win.showInactive()
@@ -843,6 +941,7 @@ export function toggleToPets(): void {
   // 每次切到 pets 都重新从 DB 应用共享位置：
   // 避免“窗口已存在”的路径下错过 live2d 拖动后的最新位置
   applySharedCenterPosition(win, 'pet-shared')
+  clampPetWindowToWorkAreaAndPersist(win)
   // Codex：showInactive 不抢焦点；reassert floating + moveTop 防止被 IDE 盖住
   reassertPetSurfaceTop(win)
   win.showInactive()

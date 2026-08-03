@@ -13,7 +13,9 @@ const api = {
   togglePanel: windowApi.togglePanel,
   toggleToMini: windowApi.toggleToMini,
   toggleToMain: windowApi.toggleToMain,
+  getDisplayMode: windowApi.getDisplayMode,
   switchDisplayMode: windowApi.switchDisplayMode,
+  onDisplayModeChanged: windowApi.onDisplayModeChanged,
   showActivation: windowApi.showActivation,
   toggleSettings: windowApi.toggleSettings,
   setClickThrough: windowApi.setClickThrough,
@@ -162,7 +164,10 @@ const api = {
   petsOpenFolder: petsApi.openFolder,
   petsGetFolderPath: petsApi.getFolderPath,
   petsGetSpritesheet: petsApi.getSpritesheet,
+  petsGetDisplayWidth: petsApi.getDisplayWidth,
+  petsSetDisplayWidth: petsApi.setDisplayWidth,
   petsOnChanged: petsApi.onChanged,
+  petsOnDisplayWidthChanged: petsApi.onDisplayWidthChanged,
 
   // MCP 工具 API
   mcpToolsGetCatalog: mcpToolsApi.getCatalog,

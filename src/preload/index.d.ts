@@ -87,7 +87,9 @@ export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
   toggleToMain: () => void
+  getDisplayMode: () => Promise<'main' | 'mini' | 'chat' | 'live2d' | 'pets'>
   switchDisplayMode: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => Promise<void>
+  onDisplayModeChanged: (callback: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => void) => () => void
   showActivation: () => void
   toggleSettings: () => void
   /** 桌宠窗点击穿透（live2d | pets） */
@@ -226,8 +228,14 @@ export interface RendererApi {
   petsDelete: (petId: string) => Promise<void>
   petsGetFolderPath: () => Promise<string>
   petsGetSpritesheet: (petId: string) => Promise<PetSpritesheetPayload | null>
+  /** 全局桌宠显示宽度 CSS px（80–224，默认 112） */
+  petsGetDisplayWidth: () => Promise<number>
+  /** 设置全局显示宽度；返回夹取后的值 */
+  petsSetDisplayWidth: (width: number) => Promise<number>
   petsOpenFolder: () => Promise<void>
   petsOnChanged: (callback: (petId: string) => void) => () => void
+  /** 显示宽度变更广播（设置页 / pets / live2d 实时同步） */
+  petsOnDisplayWidthChanged: (callback: (width: number) => void) => () => void
 
   // MCP 工具 APIs
   mcpToolsGetCatalog: () => Promise<McpToolCatalogItem[]>

@@ -5,11 +5,23 @@
  * 额外只读来源：~/.codex/pets 或 $CODEX_HOME/pets（扫描引用，不复制）
  * 同 id 时 local 优先
  */
-import type { PetInfo, PetSource, PetSpritesheetPayload, PetSpriteVersion } from '@shared/types'
+import type {
+  PetInfo,
+  PetsConfigFile,
+  PetSource,
+  PetSpritesheetPayload,
+  PetSpriteVersion,
+} from '@shared/types'
 import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import {
+  clampPetDisplayWidth,
+  PET_DISPLAY_WIDTH_DEFAULT,
+  PET_SPRITE_FRAME_H,
+  PET_SPRITE_FRAME_W,
+} from '@shared/types'
 import fs from 'fs-extra'
 import sharp from 'sharp'
 import { getLogger } from '../utils/logger'
@@ -22,8 +34,8 @@ import {
 const logger = getLogger('PetsManager')
 
 /** 精灵图参数（Codex 兼容） */
-const FRAME_WIDTH = 192
-const FRAME_HEIGHT = 208
+const FRAME_WIDTH = PET_SPRITE_FRAME_W
+const FRAME_HEIGHT = PET_SPRITE_FRAME_H
 /** v1 atlas 高 1872（8×9）；v2 高 2288（8×11） */
 const V1_ATLAS_HEIGHT = FRAME_HEIGHT * 9
 const V2_ATLAS_HEIGHT = FRAME_HEIGHT * 11
@@ -34,9 +46,7 @@ const PREVIEW_HEIGHT = 104
 
 const CODEX_DELETE_ERROR = 'Codex 来源宠物不可删除，请在本地导入副本或到 ~/.codex/pets 管理'
 
-interface PetsConfig {
-  currentPet: string
-}
+type PetsConfig = PetsConfigFile
 
 interface PetJsonManifest {
   id?: string
@@ -190,19 +200,34 @@ async function ensurePetsDir(): Promise<void> {
 }
 
 /**
+ * 规范化配置：补齐 currentPet，夹取 displayWidthPx
+ */
+function normalizeConfig(raw: unknown): PetsConfig {
+  const obj = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  const currentPet = typeof obj.currentPet === 'string' ? obj.currentPet : ''
+  const hasWidth = typeof obj.displayWidthPx === 'number' && Number.isFinite(obj.displayWidthPx)
+  return {
+    currentPet,
+    displayWidthPx: hasWidth
+      ? clampPetDisplayWidth(obj.displayWidthPx as number)
+      : PET_DISPLAY_WIDTH_DEFAULT,
+  }
+}
+
+/**
  * 读取宠物配置
  */
 async function getConfig(): Promise<PetsConfig> {
   try {
     const configFile = getConfigFilePath()
     if (await fs.pathExists(configFile)) {
-      return await fs.readJson(configFile)
+      return normalizeConfig(await fs.readJson(configFile))
     }
   }
   catch (error) {
     logger.error('读取宠物配置失败', error)
   }
-  return { currentPet: '' }
+  return { currentPet: '', displayWidthPx: PET_DISPLAY_WIDTH_DEFAULT }
 }
 
 /**
@@ -210,7 +235,8 @@ async function getConfig(): Promise<PetsConfig> {
  */
 async function saveConfig(config: PetsConfig): Promise<void> {
   const configFile = getConfigFilePath()
-  await fs.writeJson(configFile, config, { spaces: 2 })
+  const normalized = normalizeConfig(config)
+  await fs.writeJson(configFile, normalized, { spaces: 2 })
 }
 
 /**
@@ -527,6 +553,36 @@ export async function setCurrentPet(petId: string): Promise<{ success: boolean, 
   catch (error) {
     logger.error('设置当前宠物失败', error)
     return { success: false, error: String(error) }
+  }
+}
+
+/**
+ * 获取全局桌宠显示宽度（CSS px，80–224，默认 112）
+ */
+export async function getDisplayWidth(): Promise<number> {
+  const config = await getConfig()
+  return clampPetDisplayWidth(config.displayWidthPx ?? PET_DISPLAY_WIDTH_DEFAULT)
+}
+
+/**
+ * 设置全局桌宠显示宽度并持久化。返回夹取后的值。
+ */
+export async function setDisplayWidth(widthPx: number): Promise<{ success: boolean, width: number, error?: string }> {
+  try {
+    const width = clampPetDisplayWidth(widthPx)
+    const config = await getConfig()
+    config.displayWidthPx = width
+    await saveConfig(config)
+    logger.info(`桌宠显示宽度: ${width}px`)
+    return { success: true, width }
+  }
+  catch (error) {
+    logger.error('设置桌宠显示宽度失败', error)
+    return {
+      success: false,
+      width: clampPetDisplayWidth(widthPx),
+      error: String(error),
+    }
   }
 }
 
