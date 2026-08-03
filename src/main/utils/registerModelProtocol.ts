@@ -8,7 +8,7 @@ import path from 'node:path'
 import { net, protocol } from 'electron'
 import fs from 'fs-extra'
 
-import { getCodexPetsDir } from '../services/PetsManager'
+import { getCodexPetsDir, resolvePetDir } from '../services/PetsManager'
 import { getLogger } from './logger'
 import {
   isPathInside,
@@ -109,35 +109,38 @@ export function registerModelProtocolHandler(): void {
   logger.info('live2d-model:// 协议处理器已注册')
 
   // 注册 sprite-pet:// 协议处理器（local 优先，其次 codex 只读）
+  // 通过 resolvePetDir 支持 pet.json.id ≠ 文件夹名
   protocol.handle('sprite-pet', async (request) => {
     try {
       const url = new URL(request.url)
-      const petId = url.hostname
-      const filePath = decodeURIComponent(url.pathname)
+      // hostname 可能是 URL 编码的中文 id（如 gugugaga小企鹅）
+      const petId = decodeURIComponent(url.hostname)
+      // pathname 形如 /spritesheet.webp，去掉前导 / 再 join，避免 path.join 丢弃 root
+      const rawPath = decodeURIComponent(url.pathname)
+      const relativeFile = rawPath.replace(/^[/\\]+/, '')
 
       if (!petId) {
         return new Response('Pet ID required', { status: 400 })
       }
 
-      const roots = [getPetsDir(), getCodexPetsDir()]
-      let normalizedPath: string | null = null
-
-      for (const root of roots) {
-        const fullPath = path.join(root, petId, filePath)
-        const candidate = path.resolve(fullPath)
-        if (!isPathInside(root, candidate))
-          continue
-        if (await fs.pathExists(candidate)) {
-          normalizedPath = candidate
-          break
-        }
-      }
-
-      if (!normalizedPath) {
+      const petDir = await resolvePetDir(petId)
+      if (!petDir) {
         return new Response('File not found', { status: 404 })
       }
 
-      const pathWithForwardSlashes = normalizedPath.replace(/\\/g, '/')
+      const candidate = path.resolve(path.join(petDir, relativeFile))
+      const localRoot = getPetsDir()
+      const codexRoot = getCodexPetsDir()
+      if (!isPathInside(localRoot, candidate) && !isPathInside(codexRoot, candidate)) {
+        logger.error('精灵宠物路径越界访问被拒绝', { requested: candidate, petId })
+        return new Response('Access denied', { status: 403 })
+      }
+
+      if (!(await fs.pathExists(candidate))) {
+        return new Response('File not found', { status: 404 })
+      }
+
+      const pathWithForwardSlashes = candidate.replace(/\\/g, '/')
       const fileUrl = pathWithForwardSlashes.startsWith('/')
         ? `file://${pathWithForwardSlashes}`
         : `file:///${pathWithForwardSlashes}`

@@ -18,8 +18,13 @@ const FRAME_H = 208
 const CANVAS_DISPLAY_W = 138
 const CANVAS_DISPLAY_H = 145
 
-/** 拖动方向阈值（屏幕/窗口 delta，px） */
+/** 建立拖动方向的阈值（屏幕 delta，px） */
 const DRAG_DIR_THRESHOLD = 4
+/**
+ * 反向翻转阈值：需更强的反向位移才切换 running-left/right，
+ * 避免小抖动在左右跑之间来回切。
+ */
+const DRAG_DIR_FLIP_THRESHOLD = 8
 /** look 死区半径（相对宠物中心，CSS px） */
 const LOOK_DEADZONE_PX = 6
 
@@ -85,9 +90,19 @@ let animationId: number | null = null
 let spritesheet: HTMLImageElement | null = null
 let spriteVersion: PetSpriteVersion = 1
 let isDragging = false
-/** 拖动期间累计/最近水平位移（用于 running-left/right） */
+/** 拖动期间平滑水平位移（用于建立/翻转方向） */
 let dragDeltaX = 0
 let lastDragScreenX = 0
+/**
+ * 拖动粘滞方向：一旦建立，整段拖动保持 running-left/right，
+ * 不会因慢速/停顿回 idle（Codex 拖动期间持续 walk/run）。
+ */
+let lastDragDir: 'left' | 'right' | null = null
+/**
+ * 指针是否在精灵 canvas 上（enter/move 置 true，leave 置 false）
+ * 用于 v1 hover jumping 与 v2 look 入口。
+ */
+let isHovered = false
 /**
  * v2 look：0–15 对应 22.5° 步进（0=UP）；null = 死区/无 look
  */
@@ -118,25 +133,54 @@ function baseStateFromDevice(deviceState: DeviceState): PetAnimationState {
 }
 
 /**
- * 状态优先级：
- * drag (running-left/right) > lookFrame (v2) > task/device base > idle
+ * 状态优先级（Codex 对齐）：
+ * drag sticky running-left/right
+ *   > look (v2，指针在精灵上且非死区)
+ *   > hover jumping（v1 全程 hover；v2 死区/无 look 时）
+ *   > device base (waiting/running/idle)
+ *   > idle
  */
 function resolveEffectivePlayback():
   | { mode: 'anim', state: PetAnimationState }
   | { mode: 'look', index: number } {
   if (isDragging) {
-    if (dragDeltaX >= DRAG_DIR_THRESHOLD)
+    // 粘滞方向：拖动全程保持 run，慢速/停顿不再回 idle
+    if (lastDragDir === 'right')
       return { mode: 'anim', state: 'running-right' }
-    if (dragDeltaX <= -DRAG_DIR_THRESHOLD)
+    if (lastDragDir === 'left')
       return { mode: 'anim', state: 'running-left' }
-    // 拖动但水平位移不足：保持 idle 呼吸，不误触 look
+    // 尚未越过阈值（刚按下几乎无位移）：短暂 idle，不进入 look
     return { mode: 'anim', state: 'idle' }
   }
 
   if (spriteVersion >= 2 && lookFrame !== null)
     return { mode: 'look', index: lookFrame }
 
+  // Hover 反馈：v1 无 look 行；v2 死区内也给 jumping（Codex respondToHover）
+  if (isHovered)
+    return { mode: 'anim', state: 'jumping' }
+
   return { mode: 'anim', state: baseStateFromDevice(appStore.deviceState) }
+}
+
+/**
+ * 根据平滑 delta 更新粘滞拖动方向。
+ * - 尚无方向：|delta| ≥ DRAG_DIR_THRESHOLD 建立
+ * - 已有方向：需反向 |delta| ≥ DRAG_DIR_FLIP_THRESHOLD 才翻转
+ */
+function updateDragDirection(): void {
+  if (lastDragDir === null) {
+    if (dragDeltaX >= DRAG_DIR_THRESHOLD)
+      lastDragDir = 'right'
+    else if (dragDeltaX <= -DRAG_DIR_THRESHOLD)
+      lastDragDir = 'left'
+    return
+  }
+
+  if (lastDragDir === 'right' && dragDeltaX <= -DRAG_DIR_FLIP_THRESHOLD)
+    lastDragDir = 'left'
+  else if (lastDragDir === 'left' && dragDeltaX >= DRAG_DIR_FLIP_THRESHOLD)
+    lastDragDir = 'right'
 }
 
 /**
@@ -237,6 +281,11 @@ async function loadSpritesheet(): Promise<void> {
 
     lookFrame = null
     dragDeltaX = 0
+    lastDragDir = null
+    isHovered = false
+    console.log(
+      `[Pets] spritesheet loaded version=${spriteVersion} natural=${img.naturalWidth}x${img.naturalHeight} payloadVersion=${payload.spriteVersionNumber}`,
+    )
     switchAnimState(baseStateFromDevice(appStore.deviceState))
     startAnimation()
   }
@@ -358,6 +407,9 @@ async function handlePetChange(_petId: string): Promise<void> {
   spritesheet = null
   spriteVersion = 1
   lookFrame = null
+  lastDragDir = null
+  dragDeltaX = 0
+  isHovered = false
   await loadSpritesheet()
 }
 
@@ -394,18 +446,16 @@ function isPointerOnCanvas(e: MouseEvent): boolean {
 }
 
 /**
- * 鼠标移动：内容命中穿透 + v2 look
+ * 根据指针位置刷新 hover / look / click-through
  */
-function handleMouseMove(e: MouseEvent): void {
-  if (isDragging)
-    return
-
+function applyPointerHoverState(e: MouseEvent): void {
   const onCanvas = isPointerOnCanvas(e)
+  isHovered = onCanvas
 
   if (onCanvas && spriteVersion >= 2) {
     lookFrame = computeLookIndex(e.clientX, e.clientY)
   }
-  else if (!onCanvas) {
+  else {
     lookFrame = null
   }
 
@@ -413,15 +463,34 @@ function handleMouseMove(e: MouseEvent): void {
   setPetsClickThrough(!onCanvas)
 }
 
+/**
+ * 鼠标进入：立即进入 hover（jumping / look），不依赖首次 move
+ */
+function handleMouseEnter(e: MouseEvent): void {
+  if (isDragging)
+    return
+  applyPointerHoverState(e)
+}
+
+/**
+ * 鼠标移动：内容命中穿透 + v2 look / v1 hover
+ */
+function handleMouseMove(e: MouseEvent): void {
+  if (isDragging)
+    return
+  applyPointerHoverState(e)
+}
+
 function handleMouseLeave(): void {
   if (isDragging)
     return
+  isHovered = false
   lookFrame = null
   setPetsClickThrough(true)
 }
 
 /**
- * 鼠标按下处理（拖拽 + 方向动画）
+ * 鼠标按下处理（拖拽 + 粘滞方向动画）
  */
 function handleMouseDown(e: MouseEvent): void {
   if (e.button !== 0)
@@ -431,8 +500,10 @@ function handleMouseDown(e: MouseEvent): void {
     return
 
   isDragging = true
+  isHovered = true
   lookFrame = null
   dragDeltaX = 0
+  lastDragDir = null
   lastDragScreenX = e.screenX
   setPetsClickThrough(false)
   window.api.hideHover()
@@ -445,17 +516,22 @@ function handleMouseDown(e: MouseEvent): void {
     lastDragScreenX = ev.screenX
     // 平滑一点：最近位移主导，保留少量惯性
     dragDeltaX = dragDeltaX * 0.35 + dx
+    updateDragDirection()
     window.api.dragMove()
   }
 
-  const handleMouseUpGlobal = (): void => {
+  const handleMouseUpGlobal = (ev: MouseEvent): void => {
     if (!isDragging)
       return
     isDragging = false
     dragDeltaX = 0
+    lastDragDir = null
     window.api.dragEnd()
     window.removeEventListener('mousemove', handleMouseMoveGlobal)
     window.removeEventListener('mouseup', handleMouseUpGlobal)
+
+    // 松手后按当前指针位置恢复 look / hover / 穿透
+    applyPointerHoverState(ev)
   }
 
   window.addEventListener('mousemove', handleMouseMoveGlobal)
@@ -487,6 +563,7 @@ function handleDblClick(e: MouseEvent): void {
 onMounted(() => {
   if (containerRef.value) {
     containerRef.value.addEventListener('mousedown', handleMouseDown)
+    containerRef.value.addEventListener('mouseenter', handleMouseEnter)
     containerRef.value.addEventListener('mousemove', handleMouseMove)
     containerRef.value.addEventListener('mouseleave', handleMouseLeave)
     containerRef.value.addEventListener('dblclick', handleDblClick)
@@ -504,6 +581,7 @@ onUnmounted(() => {
   stopAnimation()
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
+    containerRef.value.removeEventListener('mouseenter', handleMouseEnter)
     containerRef.value.removeEventListener('mousemove', handleMouseMove)
     containerRef.value.removeEventListener('mouseleave', handleMouseLeave)
     containerRef.value.removeEventListener('dblclick', handleDblClick)

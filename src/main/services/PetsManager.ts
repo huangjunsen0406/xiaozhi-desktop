@@ -6,6 +6,7 @@
  * 同 id 时 local 优先
  */
 import type { PetInfo, PetSource, PetSpritesheetPayload, PetSpriteVersion } from '@shared/types'
+import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -14,6 +15,7 @@ import sharp from 'sharp'
 import { getLogger } from '../utils/logger'
 import {
   getPetsConfigFile,
+  isPathInside,
   getPetsDir as resolvePetsDir,
 } from '../utils/paths'
 
@@ -106,22 +108,71 @@ export function getCodexPetsDir(): string {
 }
 
 /**
+ * 在单个 root 下按 petId 查找宠物目录。
+ *
+ * 匹配规则（与 scanPets 一致）：
+ * 1. 快路径：`root/petId/pet.json` 存在（文件夹名 === id）
+ * 2. 扫描子目录：`pet.json.id === petId` 或 `entry.name === petId`
+ *
+ * 用于 id 与文件夹名不一致的情况（如 codex `gugugaga-2` / id `gugugaga小企鹅`）。
+ */
+async function findPetDirInRoot(root: string, petId: string): Promise<string | null> {
+  if (!petId || !(await fs.pathExists(root)))
+    return null
+
+  // 快路径：文件夹名与 id 相同
+  const directDir = path.join(root, petId)
+  if (await fs.pathExists(path.join(directDir, 'pet.json')))
+    return directDir
+
+  // 慢路径：扫描子目录，按 pet.json.id 匹配（文件夹名快路径已处理）
+  let entries: Dirent[]
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true })
+  }
+  catch (error) {
+    logger.warn(`读取宠物目录失败: ${root}`, error)
+    return null
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory())
+      continue
+    // 快路径已覆盖 entry.name === petId 且有 pet.json 的情况
+    if (entry.name === petId)
+      continue
+
+    const petDir = path.join(root, entry.name)
+    const petJsonPath = path.join(petDir, 'pet.json')
+    if (!(await fs.pathExists(petJsonPath)))
+      continue
+
+    try {
+      const petJson = await fs.readJson(petJsonPath) as PetJsonManifest
+      if (petJson.id === petId)
+        return petDir
+    }
+    catch (error) {
+      logger.warn(`读取 pet.json 失败: ${petJsonPath}`, error)
+    }
+  }
+
+  return null
+}
+
+/**
  * 解析宠物目录：local 优先，否则 codex。不复制。
+ * 支持 pet.json.id 与文件夹名不一致。
  */
 export async function resolvePetDir(petId: string): Promise<string | null> {
   if (!petId)
     return null
 
-  const localDir = path.join(getPetsDir(), petId)
-  if (await fs.pathExists(path.join(localDir, 'pet.json')))
+  const localDir = await findPetDirInRoot(getPetsDir(), petId)
+  if (localDir)
     return localDir
 
-  const codexRoot = getCodexPetsDir()
-  const codexDir = path.join(codexRoot, petId)
-  if (await fs.pathExists(path.join(codexDir, 'pet.json')))
-    return codexDir
-
-  return null
+  return findPetDirInRoot(getCodexPetsDir(), petId)
 }
 
 /**
@@ -409,15 +460,26 @@ export async function importPet(sourcePath: string): Promise<{ success: boolean,
 
 /**
  * 删除宠物（仅本地目录）。Codex 来源不可删。
+ * 通过 findPetDirInRoot 解析真实文件夹（支持 id ≠ 目录名）。
  */
 export async function deletePet(petId: string): Promise<{ success: boolean, error?: string }> {
   try {
-    const petsDir = getPetsDir()
-    const petPath = path.join(petsDir, petId)
+    if (!petId)
+      return { success: false, error: '宠物不存在' }
 
-    if (await fs.pathExists(petPath)) {
-      await fs.remove(petPath)
-      logger.info(`已删除宠物: ${petId}`)
+    const petsDir = getPetsDir()
+    const petPath = await findPetDirInRoot(petsDir, petId)
+    const resolvedPetsDir = path.resolve(petsDir)
+    const resolvedPetPath = petPath ? path.resolve(petPath) : null
+
+    // 仅允许删除本地 root 下的真实子目录，禁止误删 root 本身
+    if (
+      resolvedPetPath
+      && resolvedPetPath !== resolvedPetsDir
+      && isPathInside(resolvedPetsDir, resolvedPetPath)
+    ) {
+      await fs.remove(resolvedPetPath)
+      logger.info(`已删除宠物: ${petId} (${resolvedPetPath})`)
 
       // 如果删除的是当前宠物，清空选择
       const config = await getConfig()
@@ -430,8 +492,8 @@ export async function deletePet(petId: string): Promise<{ success: boolean, erro
     }
 
     // 本地没有：若 Codex 有同 id，明确拒绝删除 Codex 文件
-    const codexDir = path.join(getCodexPetsDir(), petId)
-    if (await fs.pathExists(codexDir)) {
+    const codexDir = await findPetDirInRoot(getCodexPetsDir(), petId)
+    if (codexDir) {
       return { success: false, error: CODEX_DELETE_ERROR }
     }
 
