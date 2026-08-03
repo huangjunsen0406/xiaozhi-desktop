@@ -31,10 +31,11 @@ const api = {
   getPlatform: appEnvApi.getPlatform,
   getProcessVersions: appEnvApi.getProcessVersions,
 
-  // 气泡窗
+  // 气泡窗 / 桌宠壳 content bounds
   bubbleShow: bubbleApi.show,
   bubbleHide: bubbleApi.hide,
   bubbleSetAnchorOffset: bubbleApi.setAnchorOffset,
+  bubbleSetContentSize: bubbleApi.setContentSize,
   bubbleOnSetArrowX: bubbleApi.onSetArrowX,
 
   // Hover 控制 API

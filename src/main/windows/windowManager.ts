@@ -1,3 +1,4 @@
+import type { PetSurfaceContentSize, PetSurfaceId } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import process from 'node:process'
@@ -6,7 +7,9 @@ import { hide as hideHover } from '../hover/controller'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { getDisplayModeFile } from '../utils/paths'
+import { isWindowDragging } from './behaviors/DragBehavior'
 import { buildActivationWindow, buildBackgroundAudioWindow, buildBubbleWindow, buildChatWindow, buildLive2dWindow, buildMainWindow, buildMiniWindow, buildPanelWindow, buildPetsWindow, buildSettingsWindow } from './builders'
+import { reassertPetSurfaceTop } from './petSurfaceLayering'
 
 const logger = getLogger('WindowManager')
 
@@ -379,25 +382,152 @@ export const ensureBubbleWindow = createWindowEnsurer(
   buildBubbleWindow,
 )
 
-// Live2D 模型头顶相对于其窗口顶边的偏移（CSS px）。
-// Live2D 窗口尺寸固定，模型底部对齐，矮模型头顶距窗口顶可能很远；
-// 由渲染端 setupModel 通过 IPC bubble:set-anchor-offset 上报。
+// 角色头顶相对于其窗口顶边的偏移（CSS px）。
+// Live2D / Pets 由渲染端 measure 后经 pet-shell / bubble IPC 上报；用于气泡 anchor。
 let live2dAnchorOffsetY = 0
+let petsAnchorOffsetY = 0
+
+// 当前气泡跟随的目标窗口与监听句柄（确保切换时只挂一个 move 监听）
+// 提前声明：setPetSurfaceContentSize 在定义处之前就会引用。
+let currentBubbleTarget: BrowserWindow | null = null
+let currentBubbleMoveHandler: (() => void) | null = null
+let currentBubbleClosedHandler: (() => void) | null = null
 
 // 气泡贴边时与屏幕工作区边缘的留白
 const BUBBLE_EDGE_MARGIN = 5
 // 箭头中心相对气泡左/右边的最小距离（圆角 10 + 箭头底半宽 6）
 const BUBBLE_ARROW_HALF = 16
 
+/** 桌宠壳：内容级 bounds 的安全夹取与内边距（CSS px） */
+const PET_SURFACE_PAD: Record<PetSurfaceId, number> = {
+  pets: 8,
+  // Live2D：小 pad 即可；过大 min/pad 会在矮模型头顶上方留空，气泡脱节
+  live2d: 4,
+  // 气泡：略松于角色窗。中文行盒/亚像素常让 DOM 比 measure 高 1–2px；
+  // pad 过紧时 BrowserWindow 客户区矮于内容 → 文档级竖向滚动条贴在白卡片右侧。
+  bubble: 6,
+}
+const PET_SURFACE_MIN: Record<PetSurfaceId, { width: number, height: number }> = {
+  pets: { width: 96, height: 104 },
+  // 最小高度只保证可点，不强迫矮模型窗变高产生头顶空白
+  live2d: { width: 80, height: 80 },
+  // 短中文状态（「连接中...」）也需横向 pill，勿用过窄 min 把文案挤成竖条
+  bubble: { width: 96, height: 40 },
+}
+const PET_SURFACE_MAX: Record<PetSurfaceId, { width: number, height: number }> = {
+  pets: { width: 400, height: 480 },
+  live2d: { width: 480, height: 720 },
+  // 文案固有宽 cap 320 + pad；与 pets/live2d 窗宽完全解耦
+  bubble: { width: 340, height: 200 },
+}
+
 function getAnchorOffsetForTarget(target: BrowserWindow): number {
   if (target === windowRefs.live2d.current)
     return live2dAnchorOffsetY
+  if (target === windowRefs.pets.current)
+    return petsAnchorOffsetY
   return 0
 }
 
 /**
- * 将气泡窗口定位到目标窗口正上方（按锚点偏移指向模型头顶）
- * 屏幕边缘时 clamp 气泡到工作区内，箭头滑动指向模型中心
+ * 夹取内容尺寸并加上四周 pad。
+ * 返回的是 **客户区** 目标尺寸（与 setContentSize 一致，避免 retina 外框差）。
+ */
+function clampPetSurfaceSize(
+  surface: PetSurfaceId,
+  width: number,
+  height: number,
+): { width: number, height: number } {
+  const pad = PET_SURFACE_PAD[surface] * 2
+  const min = PET_SURFACE_MIN[surface]
+  const max = PET_SURFACE_MAX[surface]
+  const w = Math.round(Math.min(max.width, Math.max(min.width, width + pad)))
+  const h = Math.round(Math.min(max.height, Math.max(min.height, height + pad)))
+  return { width: w, height: h }
+}
+
+function getPetSurfaceWindow(surface: PetSurfaceId): BrowserWindow | null {
+  if (surface === 'pets')
+    return windowRefs.pets.current
+  if (surface === 'live2d')
+    return windowRefs.live2d.current
+  return windowRefs.bubble.current
+}
+
+/**
+ * 按渲染进程测量的可见内容，收缩桌宠 surface 窗口。
+ * pets/live2d 保持视觉中心（pet-shared）；bubble 只改尺寸再由 positionBubbleAbove 贴合。
+ */
+export function setPetSurfaceContentSize(
+  surface: PetSurfaceId,
+  size: PetSurfaceContentSize,
+): void {
+  if (!Number.isFinite(size.width) || !Number.isFinite(size.height))
+    return
+  if (size.width <= 0 || size.height <= 0)
+    return
+
+  if (typeof size.anchorOffsetY === 'number' && Number.isFinite(size.anchorOffsetY)) {
+    // 渲染上报的是「相对客户区顶」的头顶 Y。模型顶对齐后通常≈0；
+    // 主进程 pad 扩在客户区四周，页面内容仍贴 top-left，故不额外加 pad。
+    const offset = Math.max(0, size.anchorOffsetY)
+    if (surface === 'live2d')
+      live2dAnchorOffsetY = offset
+    else if (surface === 'pets')
+      petsAnchorOffsetY = offset
+  }
+
+  const win = getPetSurfaceWindow(surface)
+  if (!win || win.isDestroyed())
+    return
+
+  const next = clampPetSurfaceSize(surface, size.width, size.height)
+
+  // 一律按客户区比较/设置，避免 panel + retina 下 setBounds 外框与内容差导致
+  // 实际显示区仍偏大、anchor 相对错位。
+  const [currentCW, currentCH] = win.getContentSize()
+  const sizeChanged = currentCW !== next.width || currentCH !== next.height
+
+  if (surface === 'bubble') {
+    if (sizeChanged)
+      win.setContentSize(next.width, next.height)
+    if (currentBubbleTarget && !currentBubbleTarget.isDestroyed() && win.isVisible())
+      positionBubbleAbove(currentBubbleTarget)
+    return
+  }
+
+  if (sizeChanged) {
+    // 拖动中禁止改 x/y（会与 drag-move 抢位置造成「回弹」感）；仅改客户区尺寸
+    if (isWindowDragging(win)) {
+      win.setContentSize(next.width, next.height)
+    }
+    else {
+      const [x, y] = win.getPosition()
+      // 用客户区尺寸算视觉中心，与 setContentSize 同一坐标系
+      const cx = x + currentCW / 2
+      const cy = y + currentCH / 2
+      const nextX = Math.round(cx - next.width / 2)
+      const nextY = Math.round(cy - next.height / 2)
+      win.setContentSize(next.width, next.height)
+      win.setPosition(nextX, nextY)
+      // 尺寸变化时同步 pet-shared 中心，避免仅靠 move 防抖导致切换模式跳动
+      try {
+        getDatabase().setWindowPosition('pet-shared', Math.round(cx), Math.round(cy))
+      }
+      catch (error) {
+        logger.warn('保存 pet-shared 中心失败（content resize）', error)
+      }
+    }
+  }
+
+  if (currentBubbleTarget === win && windowRefs.bubble.current?.isVisible())
+    positionBubbleAbove(win)
+}
+
+/**
+ * 将气泡窗口定位到目标窗口正上方（按锚点偏移指向模型头顶）。
+ * 气泡窗尺寸只由文案固有宽高决定，可宽于宠物窗；此处只做位置与箭头，绝不按宠物宽缩气泡。
+ * 屏幕边缘时 clamp 气泡窗到工作区内，箭头在气泡窗内滑动指向模型中心。
  */
 function positionBubbleAbove(targetWindow: BrowserWindow): void {
   const bubble = windowRefs.bubble.current
@@ -411,6 +541,7 @@ function positionBubbleAbove(targetWindow: BrowserWindow): void {
   const [bw, bh] = bubble.getSize()
   const anchorOffset = getAnchorOffsetForTarget(targetWindow)
 
+  // 水平：气泡底边中心对齐宠物/模型内容中心（气泡可更宽）
   const targetCenterX = x + w / 2
   const desiredBubbleX = targetCenterX - bw / 2
 
@@ -420,13 +551,18 @@ function positionBubbleAbove(targetWindow: BrowserWindow): void {
   const workArea = display.workArea
   const minX = workArea.x + BUBBLE_EDGE_MARGIN
   const maxX = workArea.x + workArea.width - bw - BUBBLE_EDGE_MARGIN
-
-  const bubbleX = Math.round(Math.min(Math.max(desiredBubbleX, minX), maxX))
+  // 气泡可比宠物更宽；仅平移窗体贴边，不改 bw。workArea 极窄时 maxX < minX，贴左缘。
+  const bubbleX = Math.round(
+    maxX < minX
+      ? minX
+      : Math.min(Math.max(desiredBubbleX, minX), maxX),
+  )
+  // 竖直：气泡底（箭头尖）贴在角色头顶 anchor 之上，保留小缝
   const bubbleY = Math.round(y + anchorOffset - bh - 4)
 
   bubble.setPosition(bubbleX, bubbleY)
 
-  // 箭头水平位置（相对气泡窗口左上角），在圆角内 clamp
+  // 箭头水平位置（相对气泡窗口客户区），在圆角内 clamp；不移动卡片本身
   const arrowMin = BUBBLE_ARROW_HALF
   const arrowMax = Math.max(arrowMin, bw - BUBBLE_ARROW_HALF)
   const arrowX = Math.round(Math.min(Math.max(targetCenterX - bubbleX, arrowMin), arrowMax))
@@ -435,12 +571,13 @@ function positionBubbleAbove(targetWindow: BrowserWindow): void {
 
 /**
  * 显示气泡窗口（定位在目标窗口上方）
+ * Codex 路径：showInactive + reassert floating 置顶，不抢焦点且不被 IDE 压层
  */
 function showBubbleAbove(targetWindow: BrowserWindow): void {
   const bubble = ensureBubbleWindow()
   positionBubbleAbove(targetWindow)
+  reassertPetSurfaceTop(bubble)
   bubble.showInactive()
-  bubble.moveTop()
 }
 
 /**
@@ -465,11 +602,6 @@ function getCurrentPetWindow(): BrowserWindow | null {
   }
   return null
 }
-
-// 当前气泡跟随的目标窗口与监听句柄（确保切换时只挂一个 move 监听）
-let currentBubbleTarget: BrowserWindow | null = null
-let currentBubbleMoveHandler: (() => void) | null = null
-let currentBubbleClosedHandler: (() => void) | null = null
 
 /**
  * 清除气泡对目标窗口的跟随监听
@@ -537,7 +669,7 @@ ipcMain.on('bubble:hide', () => {
   hideBubbleWindow()
 })
 
-// 渲染端上报模型头顶相对窗口顶边的偏移（仅 Live2D 使用）
+// 渲染端上报模型头顶相对窗口顶边的偏移（兼容旧路径；新路径走 pet-shell:set-content-size）
 ipcMain.on('bubble:set-anchor-offset', (_event, offsetY: number) => {
   if (typeof offsetY !== 'number' || !Number.isFinite(offsetY))
     return
@@ -548,6 +680,28 @@ ipcMain.on('bubble:set-anchor-offset', (_event, offsetY: number) => {
     if (bubble && !bubble.isDestroyed() && bubble.isVisible())
       positionBubbleAbove(currentBubbleTarget)
   }
+})
+
+// 桌宠壳：内容尺寸上报 → 各 surface setBounds（pets | live2d | bubble）
+ipcMain.on('pet-shell:set-content-size', (_event, surfaceUnknown: unknown, sizeUnknown: unknown) => {
+  if (surfaceUnknown !== 'pets' && surfaceUnknown !== 'live2d' && surfaceUnknown !== 'bubble')
+    return
+  if (sizeUnknown == null || typeof sizeUnknown !== 'object')
+    return
+  const raw = sizeUnknown as Record<string, unknown>
+  const width = raw.width
+  const height = raw.height
+  if (typeof width !== 'number' || typeof height !== 'number')
+    return
+  const anchorOffsetY = raw.anchorOffsetY
+  const size: PetSurfaceContentSize = {
+    width,
+    height,
+    ...(typeof anchorOffsetY === 'number' && Number.isFinite(anchorOffsetY)
+      ? { anchorOffsetY }
+      : {}),
+  }
+  setPetSurfaceContentSize(surfaceUnknown, size)
 })
 
 // 窗口切换和控制函数
@@ -658,8 +812,9 @@ export function toggleToLive2d(): void {
   // 每次切到 live2d 都重新从 DB 应用共享位置：
   // 避免“窗口已存在”的路径下错过 pets 拖动后的最新位置
   applySharedCenterPosition(win, 'pet-shared')
-  win.show()
-  win.moveTop()
+  // Codex：showInactive 不抢焦点；reassert floating + moveTop 防止被 IDE 盖住
+  reassertPetSurfaceTop(win)
+  win.showInactive()
   if (windowRefs.main.current)
     windowRefs.main.current.hide()
   if (windowRefs.mini.current)
@@ -688,8 +843,9 @@ export function toggleToPets(): void {
   // 每次切到 pets 都重新从 DB 应用共享位置：
   // 避免“窗口已存在”的路径下错过 live2d 拖动后的最新位置
   applySharedCenterPosition(win, 'pet-shared')
-  win.show()
-  win.moveTop()
+  // Codex：showInactive 不抢焦点；reassert floating + moveTop 防止被 IDE 盖住
+  reassertPetSurfaceTop(win)
+  win.showInactive()
   if (windowRefs.main.current)
     windowRefs.main.current.hide()
   if (windowRefs.mini.current)

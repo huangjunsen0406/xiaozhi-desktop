@@ -29,6 +29,8 @@ import type {
   MusicConfig,
   PcmAudioData,
   PetInfo,
+  PetSurfaceContentSize,
+  PetSurfaceId,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -71,6 +73,8 @@ export type {
   MusicConfig,
   PcmAudioData,
   PetInfo,
+  PetSurfaceContentSize,
+  PetSurfaceId,
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
@@ -107,10 +111,15 @@ export interface RendererApi {
   /** process.platform */
   getPlatform: () => NodeJS.Platform | string
   getProcessVersions: () => Partial<NodeJS.ProcessVersions> & Record<string, string | undefined>
-  // Bubble APIs（独立气泡窗，禁止 renderer 裸打 bubble:*）
+  // Bubble / pet-shell APIs（独立气泡窗与内容级 bounds，禁止 renderer 裸打 channel）
   bubbleShow: () => void
   bubbleHide: () => void
   bubbleSetAnchorOffset: (offsetY: number) => void
+  /**
+   * 上报桌宠 surface 可见内容尺寸（CSS px），主进程 setBounds 紧包内容。
+   * surface: pets | live2d | bubble
+   */
+  bubbleSetContentSize: (surface: PetSurfaceId, size: PetSurfaceContentSize) => void
   bubbleOnSetArrowX: (callback: (x: number) => void) => () => void
   // Activation APIs
   activationInitialize: () => Promise<ActivationInitResult>

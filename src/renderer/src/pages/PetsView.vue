@@ -11,6 +11,9 @@ const COLS = 8 // 列数
 const FRAME_W = 192 // 单帧宽度
 const FRAME_H = 208 // 单帧高度
 const FPS = 2 // 帧率（慢速，悬停时加速）
+/** 画布显示尺寸（CSS px）— 主进程窗 bounds 以此为内容尺寸 */
+const CANVAS_DISPLAY_W = 138
+const CANVAS_DISPLAY_H = 145
 
 // 当前动画状态
 let currentRow = 0 // 动画行（0=idle, 1=walk-right, 2=walk-left, 3=jump, 4=sit）
@@ -20,11 +23,32 @@ let spritesheet: HTMLImageElement | null = null
 let isDragging = false
 let isHovered = false
 let hoverAnimRow = 0 // 悬停时播放的动画行
+/** 最近一次 click-through 状态，避免每帧重复 IPC */
+let lastClickThroughIgnore: boolean | null = null
 
 // 精灵图每行的有效帧数
 const ROW_FRAMES = [6, 8, 8, 4, 5, 8, 6, 6, 6]
 const HOVER_ROWS = [1, 2, 3, 4, 5, 6, 7, 8] // 悬停时可选的动画行
 let removeChangedListener: (() => void) | null = null
+
+/**
+ * 上报内容尺寸，主进程 setBounds 紧包精灵（Codex 式小窗）
+ */
+function reportContentSize(): void {
+  window.api.bubbleSetContentSize('pets', {
+    width: CANVAS_DISPLAY_W,
+    height: CANVAS_DISPLAY_H,
+    // 精灵贴底绘制，头顶约在 canvas 顶
+    anchorOffsetY: 0,
+  })
+}
+
+function setPetsClickThrough(ignore: boolean): void {
+  if (lastClickThroughIgnore === ignore)
+    return
+  lastClickThroughIgnore = ignore
+  window.api.setClickThrough('pets', ignore)
+}
 
 /**
  * 加载精灵图
@@ -167,33 +191,39 @@ async function toggleCall() {
 }
 
 /**
- * 鼠标移动处理（穿透控制 + 悬停动画）
+ * 是否在精灵 canvas 上（内容命中，非整窗）
+ */
+function isPointerOnCanvas(e: MouseEvent): boolean {
+  const canvas = canvasRef.value
+  if (!canvas)
+    return false
+  const rect = canvas.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  return x >= 0 && x <= rect.width && y >= 0 && y <= rect.height
+}
+
+/**
+ * 鼠标移动：仅 canvas 上关穿透 + 悬停动画（Codex 式内容命中）
  */
 function handleMouseMove(e: MouseEvent): void {
   if (isDragging)
     return
 
-  const canvas = canvasRef.value
-  if (canvas) {
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    const onCanvas = x >= 0 && x <= rect.width && y >= 0 && y <= rect.height
-    if (onCanvas && !isHovered) {
-      hoverAnimRow = HOVER_ROWS[Math.floor(Math.random() * HOVER_ROWS.length)]
-      currentRow = hoverAnimRow
-      currentFrame = 0
-    }
-    else if (!onCanvas && isHovered) {
-      currentRow = 0
-      currentFrame = 0
-    }
-    isHovered = onCanvas
+  const onCanvas = isPointerOnCanvas(e)
+  if (onCanvas && !isHovered) {
+    hoverAnimRow = HOVER_ROWS[Math.floor(Math.random() * HOVER_ROWS.length)]
+    currentRow = hoverAnimRow
+    currentFrame = 0
   }
+  else if (!onCanvas && isHovered) {
+    currentRow = 0
+    currentFrame = 0
+  }
+  isHovered = onCanvas
 
-  // 整窗可交互，右键可在客户区唤起独立 Hover 菜单窗
-  window.api.setClickThrough('pets', false)
+  // 只在精灵上吃点击；canvas 外保持穿透
+  setPetsClickThrough(!onCanvas)
 }
 
 function handleMouseLeave(): void {
@@ -202,7 +232,7 @@ function handleMouseLeave(): void {
   isHovered = false
   currentRow = 0
   currentFrame = 0
-  window.api.setClickThrough('pets', true)
+  setPetsClickThrough(true)
 }
 
 /**
@@ -211,8 +241,12 @@ function handleMouseLeave(): void {
 function handleMouseDown(e: MouseEvent): void {
   if (e.button !== 0)
     return
+  // 仅在精灵上开始拖动
+  if (!isPointerOnCanvas(e))
+    return
 
   isDragging = true
+  setPetsClickThrough(false)
   window.api.hideHover()
   window.api.dragStart()
 
@@ -236,7 +270,7 @@ function handleMouseDown(e: MouseEvent): void {
 }
 
 /**
- * 窗口客户区内右键：独立 Hover 菜单窗（与 Mini 同一套，避免父窗裁切）
+ * 精灵上右键：独立 Hover 菜单窗（与 Mini 同一套，避免父窗裁切）
  */
 function handleContextMenu(e: MouseEvent): void {
   e.preventDefault()
@@ -244,9 +278,17 @@ function handleContextMenu(e: MouseEvent): void {
 
   if (isDragging)
     return
+  if (!isPointerOnCanvas(e))
+    return
 
-  window.api.setClickThrough('pets', false)
+  setPetsClickThrough(false)
   window.api.showHoverFor('pets', e.screenX, e.screenY)
+}
+
+function handleDblClick(e: MouseEvent): void {
+  if (!isPointerOnCanvas(e))
+    return
+  void toggleCall()
 }
 
 onMounted(() => {
@@ -254,13 +296,16 @@ onMounted(() => {
     containerRef.value.addEventListener('mousedown', handleMouseDown)
     containerRef.value.addEventListener('mousemove', handleMouseMove)
     containerRef.value.addEventListener('mouseleave', handleMouseLeave)
-    containerRef.value.addEventListener('dblclick', toggleCall)
+    containerRef.value.addEventListener('dblclick', handleDblClick)
     containerRef.value.addEventListener('contextmenu', handleContextMenu)
   }
 
   // 监听宠物切换事件
   removeChangedListener = window.api.petsOnChanged(handlePetChange)
 
+  // 默认穿透；内容命中时再关闭
+  setPetsClickThrough(true)
+  reportContentSize()
   loadSpritesheet()
 })
 
@@ -270,7 +315,7 @@ onUnmounted(() => {
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
     containerRef.value.removeEventListener('mousemove', handleMouseMove)
     containerRef.value.removeEventListener('mouseleave', handleMouseLeave)
-    containerRef.value.removeEventListener('dblclick', toggleCall)
+    containerRef.value.removeEventListener('dblclick', handleDblClick)
     containerRef.value.removeEventListener('contextmenu', handleContextMenu)
   }
   if (removeChangedListener) {
@@ -285,30 +330,29 @@ onUnmounted(() => {
     <!-- 精灵 Canvas -->
     <canvas
       ref="canvasRef"
-      :width="138"
-      :height="145"
+      :width="CANVAS_DISPLAY_W"
+      :height="CANVAS_DISPLAY_H"
     />
   </div>
 </template>
 
 <style scoped>
+/* 容器铺满窗客户区；窗本身由主进程按 canvas 内容缩 bounds */
 .pets-container {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   background: transparent;
   overflow: hidden;
-  padding-bottom: 10px;
 }
 
 canvas {
   image-rendering: pixelated;
   cursor: move;
+  width: 138px;
+  height: 145px;
 }
 </style>

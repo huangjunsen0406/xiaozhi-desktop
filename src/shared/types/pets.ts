@@ -11,3 +11,20 @@ export interface PetInfo {
   /** 预览图（base64，第一帧） */
   previewBase64?: string
 }
+
+/** 桌宠壳 surface（多窗贴内容） */
+export type PetSurfaceId = 'pets' | 'live2d' | 'bubble'
+
+/**
+ * 渲染进程测量的可见内容尺寸（CSS px）。
+ * 主进程据此 setBounds，使窗紧贴内容、空隙可点穿。
+ */
+export interface PetSurfaceContentSize {
+  width: number
+  height: number
+  /**
+   * 角色头顶相对窗口顶边的偏移（CSS px）。
+   * 仅 pets / live2d 有意义；用于气泡 anchor。
+   */
+  anchorOffsetY?: number
+}

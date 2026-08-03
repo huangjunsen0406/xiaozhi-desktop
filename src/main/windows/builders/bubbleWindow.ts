@@ -3,6 +3,7 @@ import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 import { getLogger } from '../../utils/logger'
+import { applyPetSurfaceWorkspaceAndTop } from '../petSurfaceLayering'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('BubbleWindow')
@@ -10,9 +11,11 @@ const logger = getLogger('BubbleWindow')
 /**
  * 构建气泡独立窗口
  * 透明、无边框、置顶、点击穿透，跟随精灵/Live2D 窗口定位
+ * 层级与 pets/live2d 同套 Codex Pet Surface 策略
  */
 export function buildBubbleWindow(): BrowserWindow {
-  const windowSize = { width: 350, height: 120 }
+  // 初始占位仅用于未 measure 前；有文案后按文案固有宽高缩窗（与宠物窗宽无关）
+  const windowSize = { width: 280, height: 72 }
 
   // 获取屏幕信息，默认位置在屏幕右下角上方
   const display = screen.getPrimaryDisplay()
@@ -20,6 +23,8 @@ export function buildBubbleWindow(): BrowserWindow {
 
   const defaultX = screenWidth - windowSize.width - 50
   const defaultY = screenHeight - windowSize.height - 300
+
+  const isDarwin = process.platform === 'darwin'
 
   const win = new BrowserWindow({
     x: defaultX,
@@ -36,8 +41,12 @@ export function buildBubbleWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     fullscreenable: false,
+    acceptFirstMouse: true,
+    // 展示向气泡：不抢焦点
+    focusable: false,
     hiddenInMissionControl: true,
-    type: process.platform === 'darwin' ? 'panel' : undefined,
+    type: isDarwin ? 'panel' : undefined,
+    ...(isDarwin ? { enableLargerThanScreen: true } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -57,11 +66,7 @@ export function buildBubbleWindow(): BrowserWindow {
     handleWindowClose(event, win)
   })
 
-  // 设置窗口在所有工作区可见
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-  // 设置置顶层级
-  win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'floating' : 'normal')
+  applyPetSurfaceWorkspaceAndTop(win, { moveTop: false })
 
   // 始终点击穿透
   win.setIgnoreMouseEvents(true, { forward: false })
