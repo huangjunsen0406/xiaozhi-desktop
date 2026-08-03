@@ -8,7 +8,13 @@ const logger = getLogger('WakeWord')
 
 export interface WakeWordDetectorConfig {
   language: string
+  /** 打包内置模型根目录（含 {lang}/encoder.onnx、tokens.txt 等） */
   modelsBasePath: string
+  /**
+   * keywords.txt 绝对路径（应位于 userData，可写）
+   * 未传时回退到 modelsBasePath/{lang}/keywords.txt（仅兼容旧路径）
+   */
+  keywordsFile?: string
   keyword?: string
   numThreads?: number
   maxActivePaths?: number
@@ -47,12 +53,16 @@ export class WakeWordDetector implements AudioListener {
       const encoderPath = path.join(modelPath, 'encoder.onnx')
       const decoderPath = path.join(modelPath, 'decoder.onnx')
       const joinerPath = path.join(modelPath, 'joiner.onnx')
-      const keywordsPath = path.join(modelPath, 'keywords.txt')
+      // keywords 优先用 userData 路径；未传时回退打包目录（兼容）
+      const keywordsPath = config.keywordsFile
+        || path.join(modelPath, 'keywords.txt')
 
       logger.info('开始初始化 KeywordSpotter')
       logger.info('配置:', {
         language: config.language,
         modelPath,
+        keywordsFile: keywordsPath,
+        modelsBasePath: config.modelsBasePath,
         numThreads: config.numThreads || 4,
         keywordsScore: config.keywordsScore || 1.8,
         keywordsThreshold: config.keywordsThreshold || 0.2,

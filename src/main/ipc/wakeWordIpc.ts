@@ -1,11 +1,10 @@
 import type { IpcContext } from '../types/ipc'
-import { writeFileSync } from 'node:fs'
-import path from 'node:path'
-import process from 'node:process'
 import { getDatabase } from '../services/database'
-import { BpeConverter } from '../utils/BpeConverter'
 import { getLogger } from '../utils/logger'
-import { PinyinConverter } from '../utils/PinyinConverter'
+import {
+  ensureWakeWordKeywordsFile,
+  resolveWakeWordKeyword,
+} from '../wake-word/keywordsFile'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('WakeWordIpc')
@@ -41,6 +40,40 @@ export function registerWakeWordIpc(context: IpcContext): void {
       }
       logger.info('更新唤醒词配置', updates)
 
+      const current = db.getFormattedWakeWordConfig()
+      const raw = db.getOrCreateWakeWordConfig()
+
+      // 1. 合并最终 language + keyword（再落盘 / 写库）
+      const finalLanguage = updates.language ?? current.language ?? 'zh'
+
+      let finalKeywordZh = raw.keyword_zh || ''
+      let finalKeywordEn = raw.keyword_en || ''
+
+      if (updates.keyword !== undefined && updates.keyword.trim() !== '') {
+        const keyword = updates.keyword.trim()
+        if (finalLanguage === 'zh') {
+          finalKeywordZh = keyword
+        }
+        else if (finalLanguage === 'en') {
+          finalKeywordEn = keyword
+        }
+      }
+
+      const keywordForLanguage = finalLanguage === 'en' ? finalKeywordEn : finalKeywordZh
+      const effectiveKeyword = resolveWakeWordKeyword(finalLanguage, keywordForLanguage)
+
+      // 2. 先写 userData keywords.txt（失败则 IPC 失败，避免静默成功）
+      //    语言切换、关键词变更、或仅改阈值时都保持文件与最终 language/keyword 一致
+      try {
+        ensureWakeWordKeywordsFile(finalLanguage, effectiveKeyword)
+      }
+      catch (fileError) {
+        const message = fileError instanceof Error ? fileError.message : String(fileError)
+        logger.error('写入 userData keywords.txt 失败', fileError)
+        return failure(`写入唤醒词文件失败: ${message}`)
+      }
+
+      // 3. 再写 DB
       const dbUpdates: {
         enabled?: boolean
         language?: string
@@ -60,52 +93,23 @@ export function registerWakeWordIpc(context: IpcContext): void {
         dbUpdates.score = updates.score
       if (updates.cooldownMs !== undefined)
         dbUpdates.cooldown_ms = updates.cooldownMs
-
-      const currentLanguage = updates.language || db.getFormattedWakeWordConfig().language
-
       if (updates.keyword !== undefined && updates.keyword.trim() !== '') {
-        const keyword = updates.keyword.trim()
-
-        if (currentLanguage === 'zh') {
-          dbUpdates.keyword_zh = keyword
-        }
-        else if (currentLanguage === 'en') {
-          dbUpdates.keyword_en = keyword
-        }
-
-        try {
-          const isDev = process.env.NODE_ENV === 'development'
-          const modelsPath = isDev
-            ? path.join(__dirname, '../../resources/wake-word-models')
-            : path.join(process.resourcesPath, 'wake-word-models')
-
-          const languageModelPath = path.join(modelsPath, currentLanguage)
-          const keywordsPath = path.join(languageModelPath, 'keywords.txt')
-
-          let keywordLine: string
-          if (currentLanguage === 'zh') {
-            keywordLine = PinyinConverter.toKeywordFormat(keyword)
-          }
-          else if (currentLanguage === 'en') {
-            const tokensPath = path.join(languageModelPath, 'tokens.txt')
-            keywordLine = BpeConverter.toKeywordFormat(keyword, tokensPath)
-          }
-          else {
-            throw new Error(`不支持的语言: ${currentLanguage}`)
-          }
-
-          writeFileSync(keywordsPath, `${keywordLine}\n`, 'utf-8')
-          logger.info(`已生成 keywords.txt: ${keywordsPath}`)
-          logger.info(`唤醒词内容: ${keywordLine}`)
-        }
-        catch (fileError) {
-          logger.error('生成 keywords.txt 失败:', fileError)
-          logger.error('错误堆栈:', (fileError as Error).stack)
-        }
+        if (finalLanguage === 'zh')
+          dbUpdates.keyword_zh = updates.keyword.trim()
+        else if (finalLanguage === 'en')
+          dbUpdates.keyword_en = updates.keyword.trim()
       }
 
-      db.updateWakeWordConfig(dbUpdates)
+      try {
+        db.updateWakeWordConfig(dbUpdates)
+      }
+      catch (dbError) {
+        const message = dbError instanceof Error ? dbError.message : String(dbError)
+        logger.error('更新唤醒词数据库失败', dbError)
+        return failure(`更新唤醒词配置失败: ${message}`)
+      }
 
+      // 4. 文件与 DB 都 OK 后再热重载
       const wakeWordPlugin = context.container?.getWakeWordPlugin()
       if (wakeWordPlugin && typeof wakeWordPlugin.reloadConfig === 'function') {
         await wakeWordPlugin.reloadConfig()

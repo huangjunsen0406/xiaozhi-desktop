@@ -865,12 +865,116 @@ export function getMainWindow(): BrowserWindow | null {
   return windowRefs.main.current
 }
 
+/** 设置窗是否已完成首次主帧加载（hide 复用后仍视为 ready） */
+const settingsReadyWindows = new WeakSet<BrowserWindow>()
+/** 设置窗正在等待 did-finish-load 后展示，避免二次 toggle 误 hide 未显示窗口 */
+let settingsPendingShow = false
+let settingsShowFallbackTimer: NodeJS.Timeout | null = null
+let settingsShowOnReady: (() => void) | null = null
+
+const SETTINGS_SHOW_FALLBACK_MS = 3000
+
+function clearSettingsShowFallback(): void {
+  if (settingsShowFallbackTimer) {
+    clearTimeout(settingsShowFallbackTimer)
+    settingsShowFallbackTimer = null
+  }
+}
+
+function detachSettingsShowOnReady(win: BrowserWindow): void {
+  if (settingsShowOnReady && !win.isDestroyed()) {
+    win.webContents.removeListener('did-finish-load', settingsShowOnReady)
+  }
+  settingsShowOnReady = null
+}
+
+function cancelSettingsPendingShow(win: BrowserWindow): void {
+  settingsPendingShow = false
+  clearSettingsShowFallback()
+  detachSettingsShowOnReady(win)
+  // 仍跟踪首次 load 完成，避免下次再误判为未 ready
+  if (!settingsReadyWindows.has(win) && !win.isDestroyed()) {
+    if (!win.webContents.isLoading()) {
+      settingsReadyWindows.add(win)
+      return
+    }
+    const markReady = (): void => {
+      if (!win.isDestroyed())
+        settingsReadyWindows.add(win)
+    }
+    win.webContents.once('did-finish-load', markReady)
+  }
+}
+
+function showSettingsFocused(win: BrowserWindow): void {
+  if (win.isDestroyed())
+    return
+  settingsPendingShow = false
+  clearSettingsShowFallback()
+  detachSettingsShowOnReady(win)
+  settingsReadyWindows.add(win)
+  if (win.isMinimized())
+    win.restore()
+  win.show()
+  win.focus()
+  win.moveTop()
+}
+
+/**
+ * 打开/关闭设置窗。
+ * - 内容未加载完时不立即 show，等 did-finish-load（带超时兜底）
+ * - show 时 focus + moveTop，避免 skipTaskbar 时落到其它窗后面
+ * - 加载中的二次 toggle 取消待打开，而不是 hide 一个尚未可见的窗口
+ */
 export function toggleSettings(): void {
   const win = ensureSettingsWindow()
-  if (win.isVisible())
+
+  // 已真正可见：关闭
+  if (win.isVisible() && !settingsPendingShow) {
     win.hide()
-  else
-    win.show()
+    return
+  }
+
+  // 正在等待首次展示：再次 toggle 取消打开（不误 hide）
+  if (settingsPendingShow) {
+    cancelSettingsPendingShow(win)
+    return
+  }
+
+  // 仅在「从未 ready 且仍在加载」时等待；load 已结束但未标记 ready（如取消待打开）则立即 show
+  const needsWait = !settingsReadyWindows.has(win) && win.webContents.isLoading()
+
+  if (!needsWait) {
+    showSettingsFocused(win)
+    return
+  }
+
+  settingsPendingShow = true
+
+  const onReady = (): void => {
+    settingsShowOnReady = null
+    clearSettingsShowFallback()
+    if (win.isDestroyed())
+      return
+    settingsReadyWindows.add(win)
+    if (!settingsPendingShow)
+      return
+    showSettingsFocused(win)
+  }
+
+  detachSettingsShowOnReady(win)
+  settingsShowOnReady = onReady
+  win.webContents.once('did-finish-load', onReady)
+
+  // load 已在 isLoading 检查与 once 之间结束时，once 可能永远不触发 → 超时兜底
+  clearSettingsShowFallback()
+  settingsShowFallbackTimer = setTimeout(() => {
+    settingsShowFallbackTimer = null
+    detachSettingsShowOnReady(win)
+    if (!settingsPendingShow || win.isDestroyed())
+      return
+    showSettingsFocused(win)
+  }, SETTINGS_SHOW_FALLBACK_MS)
 }
 
 export function getBackgroundAudioWindow(): BrowserWindow | null {
