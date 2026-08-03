@@ -1,4 +1,4 @@
-import type { FileDialogResult, PetInfo } from '@shared/types'
+import type { FileDialogResult, PetInfo, PetSpritesheetPayload } from '@shared/types'
 /**
  * Pets (精灵宠物管理) API 模块
  */
@@ -6,7 +6,7 @@ import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
 import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
-export type { PetInfo }
+export type { PetInfo, PetSpritesheetPayload }
 
 export const petsApi = {
   // 获取宠物列表
@@ -58,10 +58,10 @@ export const petsApi = {
     return unwrapIpcResult<string>(result, '获取宠物目录路径失败')
   },
 
-  // 获取精灵图 base64 数据
-  getSpritesheet: async (petId: string): Promise<string | null> => {
+  // 获取精灵图 dataUrl + 版本 + 像素尺寸（Codex v1/v2）
+  getSpritesheet: async (petId: string): Promise<PetSpritesheetPayload | null> => {
     const result: unknown = await ipcRenderer.invoke('pets:get-spritesheet', petId)
-    return unwrapIpcResult<string | null>(result, '获取精灵图失败') ?? null
+    return unwrapIpcResult<PetSpritesheetPayload | null>(result, '获取精灵图失败') ?? null
   },
 
   // 监听宠物切换事件

@@ -2,12 +2,13 @@
  * 自定义协议注册
  *
  * live2d-model:// — 访问 userData/models/ 中的 Live2D 模型文件
- * sprite-pet://   — 访问 userData/pets/ 中的精灵宠物文件
+ * sprite-pet://   — 访问 userData/pets/ 或 ~/.codex/pets 中的精灵宠物文件
  */
 import path from 'node:path'
 import { net, protocol } from 'electron'
 import fs from 'fs-extra'
 
+import { getCodexPetsDir } from '../services/PetsManager'
 import { getLogger } from './logger'
 import {
   isPathInside,
@@ -107,7 +108,7 @@ export function registerModelProtocolHandler(): void {
 
   logger.info('live2d-model:// 协议处理器已注册')
 
-  // 注册 sprite-pet:// 协议处理器
+  // 注册 sprite-pet:// 协议处理器（local 优先，其次 codex 只读）
   protocol.handle('sprite-pet', async (request) => {
     try {
       const url = new URL(request.url)
@@ -118,15 +119,21 @@ export function registerModelProtocolHandler(): void {
         return new Response('Pet ID required', { status: 400 })
       }
 
-      const petsDir = getPetsDir()
-      const fullPath = path.join(petsDir, petId, filePath)
-      const normalizedPath = path.resolve(fullPath)
+      const roots = [getPetsDir(), getCodexPetsDir()]
+      let normalizedPath: string | null = null
 
-      if (!isPathInside(petsDir, normalizedPath)) {
-        return new Response('Access denied', { status: 403 })
+      for (const root of roots) {
+        const fullPath = path.join(root, petId, filePath)
+        const candidate = path.resolve(fullPath)
+        if (!isPathInside(root, candidate))
+          continue
+        if (await fs.pathExists(candidate)) {
+          normalizedPath = candidate
+          break
+        }
       }
 
-      if (!(await fs.pathExists(normalizedPath))) {
+      if (!normalizedPath) {
         return new Response('File not found', { status: 404 })
       }
 

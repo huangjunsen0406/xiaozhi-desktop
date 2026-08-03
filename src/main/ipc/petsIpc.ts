@@ -1,10 +1,8 @@
 /**
  * 精灵宠物管理 IPC 处理器（createIpcHandler + IpcResult）
  */
-import path from 'node:path'
 import { BrowserWindow, dialog, shell } from 'electron'
-import fs from 'fs-extra'
-import { deletePet, getCurrentPet, getPetsFolderPath, importPet, scanPets, setCurrentPet } from '../services/PetsManager'
+import { deletePet, getCurrentPet, getPetsFolderPath, getPetSpritesheet, importPet, scanPets, setCurrentPet } from '../services/PetsManager'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
 
@@ -114,22 +112,12 @@ export function registerPetsIpc(): void {
       petId: { type: 'string', required: true, minLength: 1 },
     },
     handler: async (_event, petId: unknown) => {
-      try {
-        const petsDir = getPetsFolderPath()
-        const spritesheetPath = path.join(petsDir, String(petId), 'spritesheet.webp')
-
-        if (!(await fs.pathExists(spritesheetPath))) {
-          logger.error(`精灵图不存在: ${spritesheetPath}`)
-          return success(null)
-        }
-
-        const buffer = await fs.readFile(spritesheetPath)
-        return success(`data:image/webp;base64,${buffer.toString('base64')}`)
+      // 结构化返回 dataUrl + spriteVersionNumber + 像素尺寸（Codex v1/v2）
+      const payload = await getPetSpritesheet(String(petId))
+      if (!payload) {
+        logger.error(`精灵图不存在或读取失败: ${String(petId)}`)
       }
-      catch (error) {
-        logger.error('读取精灵图失败', error)
-        return success(null)
-      }
+      return success(payload)
     },
   })
 

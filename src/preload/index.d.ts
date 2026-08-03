@@ -29,6 +29,7 @@ import type {
   MusicConfig,
   PcmAudioData,
   PetInfo,
+  PetSpritesheetPayload,
   PetSurfaceContentSize,
   PetSurfaceId,
   ServerMessage,
@@ -73,6 +74,7 @@ export type {
   MusicConfig,
   PcmAudioData,
   PetInfo,
+  PetSpritesheetPayload,
   PetSurfaceContentSize,
   PetSurfaceId,
   ServerMessage,
@@ -223,7 +225,7 @@ export interface RendererApi {
   petsImport: (sourcePath: string) => Promise<string | undefined>
   petsDelete: (petId: string) => Promise<void>
   petsGetFolderPath: () => Promise<string>
-  petsGetSpritesheet: (petId: string) => Promise<string | null>
+  petsGetSpritesheet: (petId: string) => Promise<PetSpritesheetPayload | null>
   petsOpenFolder: () => Promise<void>
   petsOnChanged: (callback: (petId: string) => void) => () => void
 
