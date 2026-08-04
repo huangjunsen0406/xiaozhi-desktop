@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
 import { getLogger } from '../../utils/logger'
+import { applyPetSurfaceWorkspaceAndTop } from '../petSurfaceLayering'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('Live2dWindow')
@@ -11,6 +12,7 @@ const logger = getLogger('Live2dWindow')
 
 /**
  * 构建 Live2D 桌面宠物窗口
+ * 层级对齐 Codex Pet Surface：panel + floating + skipTransformProcessType
  */
 export function buildLive2dWindow(): BrowserWindow {
   // 读取窗口位置配置（如果有的话）
@@ -25,6 +27,7 @@ export function buildLive2dWindow(): BrowserWindow {
   const defaultY = screenHeight - windowSize.height - 50
 
   const icon = getAppIcon()
+  const isDarwin = process.platform === 'darwin'
 
   const win = new BrowserWindow({
     x: defaultX,
@@ -39,10 +42,17 @@ export function buildLive2dWindow(): BrowserWindow {
     resizable: false,
     movable: true,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    // Codex pet surface：不进任务栏；主窗/dock 由其它窗口承担
+    skipTaskbar: true,
     fullscreenable: false,
+    // 首击即可交互（macOS 常需先 focus 再 click 的问题）
+    acceptFirstMouse: true,
+    // 与 Codex 一致：surface 不抢焦点；拖动走 IPC，不依赖窗口 focus
+    focusable: false,
     hiddenInMissionControl: false,
-    type: process.platform === 'darwin' ? 'panel' : undefined,
+    type: isDarwin ? 'panel' : undefined,
+    // Codex：允许在全屏应用边缘外布局时略超出屏
+    ...(isDarwin ? { enableLargerThanScreen: true } : {}),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -64,12 +74,7 @@ export function buildLive2dWindow(): BrowserWindow {
     handleWindowClose(event, win)
   })
 
-  // 设置窗口在所有工作区可见
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-  // 设置置顶层级
-  win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'floating' : 'normal')
-  win.moveTop()
+  applyPetSurfaceWorkspaceAndTop(win)
 
   // 默认忽略鼠标事件（穿透）
   win.setIgnoreMouseEvents(true, { forward: true })

@@ -1,5 +1,5 @@
 import type {
-  AudioConfig,
+  AudioSettings,
   CameraConfig,
   IpcResult,
   MqttInfo,
@@ -51,7 +51,7 @@ export interface DbNetworkConfig {
 /**
  * 音频配置表类型
  */
-export interface DbAudioConfig {
+export interface DbAudioSettings {
   id: number
   input_device_name: string | null
   output_device_name: string | null
@@ -188,23 +188,4 @@ export type WakeWordConfigUpdate = Partial<WakeWordConfig>
 /**
  * 音频配置更新类型
  */
-export type AudioConfigUpdate = Partial<AudioConfig>
-
-/**
- * sherpa-onnx KeywordSpotter 类型
- */
-export interface KeywordSpotter {
-  createStream: () => KeywordSpotterStream
-  isReady: (stream: KeywordSpotterStream) => boolean
-  decode: (stream: KeywordSpotterStream) => void
-  getResult: (stream: KeywordSpotterStream) => KeywordSpotterResult
-  reset: (stream: KeywordSpotterStream) => void
-}
-
-export interface KeywordSpotterStream {
-  acceptWaveform: (config: { sampleRate: number, samples: Float32Array }) => void
-}
-
-export interface KeywordSpotterResult {
-  keyword: string
-}
+export type AudioSettingsUpdate = Partial<AudioSettings>

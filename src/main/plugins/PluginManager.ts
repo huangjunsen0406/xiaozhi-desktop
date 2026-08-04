@@ -15,6 +15,10 @@ interface PluginExecutionResult {
   duration: number
 }
 
+interface PluginConstructor {
+  readonly dependencies?: string[]
+}
+
 /**
  * 插件管理器
  * 负责插件的注册、拓扑排序、生命周期管理和事件广播
@@ -140,7 +144,7 @@ export class PluginManager {
 
     // 构建图：依赖 -> 被依赖者（依赖方有入边）
     for (const plugin of this.plugins) {
-      const PluginClass = plugin.constructor as typeof import('./Plugin').Plugin
+      const PluginClass = plugin.constructor as PluginConstructor
       const deps = PluginClass.dependencies || []
 
       for (const depName of deps) {
@@ -225,7 +229,7 @@ export class PluginManager {
       const startTime = Date.now()
       try {
         // 注入依赖
-        const PluginClass = plugin.constructor as typeof import('./Plugin').Plugin
+        const PluginClass = plugin.constructor as PluginConstructor
         const deps = PluginClass.dependencies || []
         for (const depName of deps) {
           const dep = this.pluginsByName.get(depName)

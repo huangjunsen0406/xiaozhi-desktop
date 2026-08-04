@@ -318,7 +318,7 @@ export const useAppStore = defineStore('app', () => {
    * 处理服务器消息（所有窗口统一调用）
    */
   async function handleServerMessage(message: ServerMessage) {
-    console.log('处理服务器消息:', message.type, message.text || '')
+    console.log('处理服务器消息:', message.type)
 
     if (!currentSessionId.value) {
       currentSessionId.value = await getTodaySession()

@@ -1,3 +1,4 @@
+import type { ImageSourceType } from '@shared/types'
 import type { McpHostGetKey, McpToolCatalogItem } from './plugins/types'
 import type { MusicPlayer } from './tools/music/MusicPlayer'
 import type {
@@ -43,7 +44,7 @@ export class McpServer {
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
   private visionConfig: { url?: string, token?: string } = {} // 存储 vision 配置供截图工具使用
-  private imageBroadcastCallback: ((imageBase64: string, sourceType: 'screenshot' | 'camera') => void) | null = null
+  private imageBroadcastCallback: ((imageBase64: string, sourceType: ImageSourceType) => void) | null = null
   private themeBroadcastCallback: ((theme: 'light' | 'dark' | 'auto') => void) | null = null
   /** 容器注入的 MusicPlayer（addCommonTools 时使用） */
   private musicPlayer: MusicPlayer | null = null
@@ -744,7 +745,7 @@ export class McpServer {
    * 设置图片广播回调
    * 由 McpPlugin 在 setup 时注入，用于将图片数据发送到 UIPlugin
    */
-  setImageBroadcastCallback(callback: (imageBase64: string, sourceType: 'screenshot' | 'camera') => void): void {
+  setImageBroadcastCallback(callback: (imageBase64: string, sourceType: ImageSourceType) => void): void {
     this.imageBroadcastCallback = callback
     logger.info('图片广播回调已设置')
   }
@@ -753,7 +754,7 @@ export class McpServer {
    * 广播图片到 UI
    * 供 SystemToolsManager 等工具调用
    */
-  broadcastImage(imageBase64: string, sourceType: 'screenshot' | 'camera'): void {
+  broadcastImage(imageBase64: string, sourceType: ImageSourceType): void {
     if (this.imageBroadcastCallback) {
       this.imageBroadcastCallback(imageBase64, sourceType)
     }

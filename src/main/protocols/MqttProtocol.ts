@@ -1,4 +1,3 @@
-import type { JsonMessage } from '../types/protocol'
 /**
  * MQTT Protocol Implementation
  * 基于 Python 和 C++ 版本实现
@@ -14,6 +13,7 @@ import { getConfigManager } from '../services/configManagerDB'
 import {
   isGoodbyeMessage,
   parseMqttServerHello,
+  parseServerMessage,
 } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
@@ -314,12 +314,11 @@ export class MqttProtocol extends Protocol {
   private handleMqttMessage(payload: string): void {
     try {
       const parsed: unknown = JSON.parse(payload)
-      if (typeof parsed !== 'object' || parsed === null) {
-        logger.error('MQTT 消息不是对象', payload)
+      const data = parseServerMessage(parsed)
+      if (!data) {
+        logger.error('MQTT 消息形态无效', parsed)
         return
       }
-
-      const data = parsed as JsonMessage
       const msgType = data.type
 
       if (msgType === 'goodbye') {

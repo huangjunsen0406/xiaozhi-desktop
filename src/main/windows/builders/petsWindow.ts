@@ -4,12 +4,14 @@ import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
 import { getLogger } from '../../utils/logger'
+import { applyPetSurfaceWorkspaceAndTop } from '../petSurfaceLayering'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('PetsWindow')
 
 /**
  * 构建精灵宠物桌面窗口
+ * 层级对齐 Codex Pet Surface：panel + floating + skipTransformProcessType
  */
 export function buildPetsWindow(): BrowserWindow {
   const windowSize = { width: 150, height: 180 }
@@ -23,6 +25,7 @@ export function buildPetsWindow(): BrowserWindow {
   const defaultY = screenHeight - windowSize.height - 50
 
   const icon = getAppIcon()
+  const isDarwin = process.platform === 'darwin'
 
   const win = new BrowserWindow({
     x: defaultX,
@@ -37,10 +40,15 @@ export function buildPetsWindow(): BrowserWindow {
     resizable: false,
     movable: true,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    // Codex pet surface：不进任务栏
+    skipTaskbar: true,
     fullscreenable: false,
+    acceptFirstMouse: true,
+    // 与 Codex 一致：surface 不抢焦点；拖动走 IPC
+    focusable: false,
     hiddenInMissionControl: false,
-    type: process.platform === 'darwin' ? 'panel' : undefined,
+    type: isDarwin ? 'panel' : undefined,
+    ...(isDarwin ? { enableLargerThanScreen: true } : {}),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -61,17 +69,10 @@ export function buildPetsWindow(): BrowserWindow {
     handleWindowClose(event, win)
   })
 
-  // 设置窗口在所有工作区可见
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  applyPetSurfaceWorkspaceAndTop(win)
 
-  // 设置置顶层级
-  win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'floating' : 'normal')
-  win.moveTop()
-
-  // 开发模式不穿透（方便调试），生产模式穿透
-  if (!is.dev) {
-    win.setIgnoreMouseEvents(true, { forward: true })
-  }
+  // 默认穿透；渲染进程在精灵内容上再关闭（与 live2d / Codex 一致）
+  win.setIgnoreMouseEvents(true, { forward: true })
 
   // 开发模式下支持快捷键打开 DevTools
   if (is.dev) {

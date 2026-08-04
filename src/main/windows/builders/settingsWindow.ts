@@ -3,6 +3,7 @@ import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { app, BrowserWindow, shell } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
+import { getIsQuitting } from '../windowManager'
 
 export function buildSettingsWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
@@ -30,8 +31,17 @@ export function buildSettingsWindow(): BrowserWindow {
     },
   })
 
-  win.hide()
-  win.excludedFromShownWindowsMenu = true // 外部链接统一走系统默认浏览器
+  // 显示由 toggleSettings 控制，避免 load 未完成时提前 show 导致空白/失焦。
+  // 全平台关闭改为 hide 复用，避免 Win/Linux 销毁后下次冷启动再次竞态。
+  win.on('close', (event) => {
+    if (!getIsQuitting()) {
+      event.preventDefault()
+      win.hide()
+    }
+  })
+
+  win.excludedFromShownWindowsMenu = true
+  // 外部链接统一走系统默认浏览器
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }

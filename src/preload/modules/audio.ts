@@ -1,54 +1,37 @@
-import type { AecStatus, AudioConfig } from '@shared/types'
+import type {
+  AecCaptureReport,
+  AecStatus,
+  AudioSettings,
+  AudioUpdateSettingsResult,
+  PcmAudioData,
+} from '@shared/types'
 /**
  * 音频 API 模块
  */
-import type { Buffer } from 'node:buffer'
 import { ipcRenderer } from 'electron'
 import { unwrapIpcResult } from '../utils/ipc'
-
-export type { AudioConfig }
-
-export interface AudioUpdateConfigResult {
-  requiresRelaunch?: boolean
-  aecMode?: AudioConfig['aecMode']
-  aecStatus?: AecStatus
-  /** 仅设备变更时通知了 switchDevices */
-  deviceSwitched?: boolean
-  /** AEC/NS 或编解码参数触发了采集/上下文重建 */
-  captureReinitialized?: boolean
-  codecRebuilt?: boolean
-  /** 已连接且执行了协议 idle 重连 */
-  protocolReconnected?: boolean
-  applied?: {
-    devicesChanged?: boolean
-    codecParamsChanged?: boolean
-    processingChanged?: boolean
-    conversationModeChanged?: boolean
-    audioWindowAction?: 'none' | 'switchDevices' | 'reinitialize'
-  }
-}
 
 export const audioApi = {
   // PCM 数据发送
   sendPCM: (pcm: Int16Array): void => ipcRenderer.send('audio:pcm', pcm),
 
   // Opus 解码回调
-  onOpusDecoded: (callback: (pcm: Buffer) => void): () => void => {
-    const handler = (_: Electron.IpcRendererEvent, pcm: Buffer) => callback(pcm)
+  onOpusDecoded: (callback: (pcm: PcmAudioData) => void): () => void => {
+    const handler = (_: Electron.IpcRendererEvent, pcm: PcmAudioData) => callback(pcm)
     ipcRenderer.on('audio:opus-decoded', handler)
     return () => ipcRenderer.off('audio:opus-decoded', handler)
   },
 
-  // 获取音频配置
-  getConfig: async (): Promise<AudioConfig> => {
+  // 获取音频设置
+  getConfig: async (): Promise<AudioSettings> => {
     const result: unknown = await ipcRenderer.invoke('audio:get-config')
-    return unwrapIpcResult<AudioConfig>(result, '获取音频配置失败')
+    return unwrapIpcResult<AudioSettings>(result, '获取音频设置失败')
   },
 
-  // 更新音频配置（可能返回 requiresRelaunch）
-  updateConfig: async (config: Partial<AudioConfig>): Promise<AudioUpdateConfigResult | void> => {
+  // 更新音频设置（可能返回 requiresRelaunch）
+  updateConfig: async (config: Partial<AudioSettings>): Promise<AudioUpdateSettingsResult | void> => {
     const result: unknown = await ipcRenderer.invoke('audio:update-config', config)
-    return unwrapIpcResult(result, '更新音频配置失败')
+    return unwrapIpcResult(result, '更新音频设置失败')
   },
 
   getAecStatus: async (): Promise<AecStatus> => {
@@ -56,7 +39,7 @@ export const audioApi = {
     return unwrapIpcResult<AecStatus>(result, '获取 AEC 状态失败')
   },
 
-  reportAecCapture: async (payload: { echoCancellationApplied?: boolean }): Promise<AecStatus> => {
+  reportAecCapture: async (payload: AecCaptureReport): Promise<AecStatus> => {
     const result: unknown = await ipcRenderer.invoke('audio:report-aec-capture', payload)
     return unwrapIpcResult<AecStatus>(result, '上报 AEC 采集状态失败')
   },

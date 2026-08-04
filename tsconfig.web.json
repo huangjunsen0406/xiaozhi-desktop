@@ -10,7 +10,8 @@
       "@shared/*": [
         "src/shared/*"
       ]
-    }
+    },
+    "noImplicitAny": true
   },
   "include": [
     "src/renderer/src/env.d.ts",

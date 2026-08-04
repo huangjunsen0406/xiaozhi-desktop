@@ -25,6 +25,10 @@ extraResources:
   - from: out/renderer/Resources
     to: live2d-models
 
+  # 内置精灵宠物（月薪喵/usagi/sensen，首次启动时复制到 userData/pets）
+  - from: resources/pets
+    to: pets
+
 asarUnpack:
   # ASAR 解包: 原生 .node 模块需要在文件系统中直接访问
   # 注意: resources/ 不需要 unpack，唤醒词模型已通过 extraResources 处理，图标可在 asar 内正常访问

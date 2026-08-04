@@ -1,19 +1,49 @@
 /**
  * 精灵宠物管理 IPC 处理器（createIpcHandler + IpcResult）
  */
-import path from 'node:path'
+import {
+  PET_DISPLAY_WIDTH_MAX,
+  PET_DISPLAY_WIDTH_MIN,
+} from '@shared/types'
 import { BrowserWindow, dialog, shell } from 'electron'
-import fs from 'fs-extra'
-import { deletePet, getCurrentPet, getPetsFolderPath, importPet, scanPets, setCurrentPet } from '../services/PetsManager'
+import {
+  deletePet,
+  ensureBuiltinPetsCopied,
+  getCurrentPet,
+  getDisplayWidth,
+  getPetsFolderPath,
+  getPetSpritesheet,
+  importPet,
+  scanPets,
+  setCurrentPet,
+  setDisplayWidth,
+} from '../services/PetsManager'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('PetsIpc')
 
 /**
+ * 向所有窗口广播事件（宠物切换 / 显示尺寸）
+ */
+function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
+  const windows = BrowserWindow.getAllWindows()
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, ...args)
+    }
+  }
+}
+
+/**
  * 注册精灵宠物管理 IPC 处理器
  */
 export function registerPetsIpc(): void {
+  // 启动时种子内置宠物（幂等；scanPets 内兜底再执行一次）
+  ensureBuiltinPetsCopied().catch((error) => {
+    logger.error('种子内置宠物失败', error)
+  })
+
   createIpcHandler({
     channel: 'pets:get-list',
     handler: async () => {
@@ -42,14 +72,38 @@ export function registerPetsIpc(): void {
       }
 
       // 广播宠物切换事件给所有窗口
-      const windows = BrowserWindow.getAllWindows()
-      for (const win of windows) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('pets:changed', petId)
-        }
-      }
+      broadcastToAllWindows('pets:changed', petId)
 
       return success()
+    },
+  })
+
+  createIpcHandler({
+    channel: 'pets:get-display-size',
+    handler: async () => {
+      return success(await getDisplayWidth())
+    },
+  })
+
+  createIpcHandler({
+    channel: 'pets:set-display-size',
+    schema: {
+      width: {
+        type: 'number',
+        required: true,
+        min: PET_DISPLAY_WIDTH_MIN,
+        max: PET_DISPLAY_WIDTH_MAX,
+      },
+    },
+    handler: async (_event, widthUnknown: unknown) => {
+      const result = await setDisplayWidth(Number(widthUnknown))
+      if (!result.success) {
+        return failure(result.error || '设置宠物大小失败')
+      }
+
+      // 实时通知 pets / live2d / 设置页
+      broadcastToAllWindows('pets:display-size-changed', result.width)
+      return success(result.width)
     },
   })
 
@@ -114,22 +168,12 @@ export function registerPetsIpc(): void {
       petId: { type: 'string', required: true, minLength: 1 },
     },
     handler: async (_event, petId: unknown) => {
-      try {
-        const petsDir = getPetsFolderPath()
-        const spritesheetPath = path.join(petsDir, String(petId), 'spritesheet.webp')
-
-        if (!(await fs.pathExists(spritesheetPath))) {
-          logger.error(`精灵图不存在: ${spritesheetPath}`)
-          return success(null)
-        }
-
-        const buffer = await fs.readFile(spritesheetPath)
-        return success(`data:image/webp;base64,${buffer.toString('base64')}`)
+      // 结构化返回 dataUrl + spriteVersionNumber + 像素尺寸（Codex v1/v2）
+      const payload = await getPetSpritesheet(String(petId))
+      if (!payload) {
+        logger.error(`精灵图不存在或读取失败: ${String(petId)}`)
       }
-      catch (error) {
-        logger.error('读取精灵图失败', error)
-        return success(null)
-      }
+      return success(payload)
     },
   })
 

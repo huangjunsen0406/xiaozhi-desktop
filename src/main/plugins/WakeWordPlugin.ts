@@ -1,11 +1,11 @@
 import type { PluginCommands, PluginContext } from '../core'
 import type { AudioPlugin } from './AudioPlugin'
-import path from 'node:path'
-import process from 'node:process'
 import { Events } from '../core'
 import { AbortReason } from '../protocols/Protocol'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
+import { getWakeWordKeywordsPath, getWakeWordModelsBundledDir } from '../utils/paths'
+import { ensureWakeWordKeywordsFile } from '../wake-word/keywordsFile'
 import { WakeWordDetector } from '../wake-word/WakeWordDetector'
 
 import { Plugin } from './Plugin'
@@ -33,13 +33,52 @@ export class WakeWordPlugin extends Plugin {
   private pendingTimer: NodeJS.Timeout | null = null
 
   /**
-   * 获取模型基础路径
+   * 打包内置模型根目录（onnx / tokens，只读）
    */
   private getModelsBasePath(): string {
-    const isDev = process.env.NODE_ENV === 'development'
-    return isDev
-      ? path.join(__dirname, '../../resources/wake-word-models')
-      : path.join(process.resourcesPath, 'wake-word-models')
+    return getWakeWordModelsBundledDir()
+  }
+
+  /**
+   * 从 DB 配置构建 detector 配置，并确保 userData keywords.txt 已生成
+   */
+  private buildDetectorConfig(config: {
+    language: string
+    keyword: string
+    score: number
+    threshold: number
+  }): {
+    language: string
+    modelsBasePath: string
+    keywordsFile: string
+    keyword: string
+    numThreads: number
+    maxActivePaths: number
+    keywordsScore: number
+    keywordsThreshold: number
+    numTrailingBlanks: number
+  } {
+    const modelsPath = this.getModelsBasePath()
+    // 初始化 / reload 前把 DB 关键词落到 userData，避免仍读打包默认词
+    const keywordsFile = ensureWakeWordKeywordsFile(config.language, config.keyword)
+
+    logger.info('唤醒词路径', {
+      modelsBasePath: modelsPath,
+      keywordsFile,
+      expectedUserPath: getWakeWordKeywordsPath(config.language),
+    })
+
+    return {
+      language: config.language,
+      modelsBasePath: modelsPath,
+      keywordsFile,
+      keyword: config.keyword,
+      numThreads: 4,
+      maxActivePaths: 2,
+      keywordsScore: config.score,
+      keywordsThreshold: config.threshold,
+      numTrailingBlanks: 1,
+    }
   }
 
   /**
@@ -51,26 +90,14 @@ export class WakeWordPlugin extends Plugin {
     logger.info('开始设置...')
 
     try {
-      const modelsPath = this.getModelsBasePath()
-      logger.info('模型路径:', modelsPath)
-
       // 从数据库读取配置
       const db = getDatabase()
       const config = db.getFormattedWakeWordConfig()
 
       logger.info('唤醒词配置:', config)
 
-      // 创建检测器
-      this.detector = new WakeWordDetector({
-        language: config.language,
-        modelsBasePath: modelsPath,
-        keyword: config.keyword,
-        numThreads: 4,
-        maxActivePaths: 2,
-        keywordsScore: config.score,
-        keywordsThreshold: config.threshold,
-        numTrailingBlanks: 1,
-      })
+      // 创建检测器（keywords 来自 userData）
+      this.detector = new WakeWordDetector(this.buildDetectorConfig(config))
 
       // 设置冷却时间
       if (this.detector.isEnabled()) {
@@ -117,17 +144,8 @@ export class WakeWordPlugin extends Plugin {
 
       logger.info('新配置:', config)
 
-      // 重新加载模型
-      this.detector.reload({
-        language: config.language,
-        modelsBasePath: this.getModelsBasePath(),
-        keyword: config.keyword,
-        numThreads: 4,
-        maxActivePaths: 2,
-        keywordsScore: config.score,
-        keywordsThreshold: config.threshold,
-        numTrailingBlanks: 1,
-      })
+      // 重新加载模型（会再次 ensure userData keywords）
+      this.detector.reload(this.buildDetectorConfig(config))
 
       // 更新冷却时间
       if (this.detector.isEnabled()) {

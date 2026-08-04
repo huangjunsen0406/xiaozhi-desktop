@@ -1,3 +1,4 @@
+import type { HoverAnchor } from '@shared/types'
 import type { BrowserWindow, Rectangle } from 'electron'
 import type { HoverMode } from './position'
 import { screen } from 'electron'
@@ -5,9 +6,6 @@ import { ensureMiniWindow, getLive2dWindow, getPetsWindow } from '../windows/win
 import { buildHoverWindow } from './HoverWindow'
 import { computeHoverPosition } from './position'
 import { HoverRelay } from './relay'
-
-/** 悬浮菜单锚点：mini 悬停 / live2d·pets 右键 */
-export type HoverAnchor = 'mini' | 'live2d' | 'pets'
 
 /** 悬浮窗实例 */
 let hoverWin: BrowserWindow | null = null

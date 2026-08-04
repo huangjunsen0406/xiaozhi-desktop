@@ -1,9 +1,16 @@
+import type {
+  ChatMessageAddedEvent,
+  ChatMessagesBatchAddedEvent,
+  ChatSessionCreatedEvent,
+  ImageCapturedEvent,
+  ImageSourceType,
+} from '@shared/types'
 import type { PluginCommands, PluginContext, StateChangeData } from '../core'
 import type { AudioPlugin } from './AudioPlugin'
 import { ListeningModeValue } from '@shared/types'
 import { webContents } from 'electron'
 import { Events } from '../core'
-import { parseServerMessage } from '../types/protocol'
+import { isServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
 
@@ -38,12 +45,11 @@ export class UIPlugin extends Plugin {
   async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
     await super.setup(ctx, cmd)
 
-    // 订阅 JSON 消息事件（收窄为 ServerMessage 再广播）
+    // 协议层已 parse 一次；直接广播已归一化的 ServerMessage
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      const message = parseServerMessage(data)
-      if (!message)
+      if (!isServerMessage(data))
         return
-      this.broadcastToRenderer('server:message', message)
+      this.broadcastToRenderer('server:message', data)
     })
 
     // 订阅设备状态变化事件
@@ -82,8 +88,8 @@ export class UIPlugin extends Plugin {
    * @param imageBase64 - base64 编码的图片数据
    * @param sourceType - 图片来源类型：screenshot 或 camera
    */
-  broadcastImage(imageBase64: string, sourceType: 'screenshot' | 'camera'): void {
-    const payload = {
+  broadcastImage(imageBase64: string, sourceType: ImageSourceType): void {
+    const payload: ImageCapturedEvent = {
       type: sourceType,
       imageBase64,
       timestamp: Date.now(),
@@ -118,7 +124,7 @@ export class UIPlugin extends Plugin {
    * @param role - 消息角色
    */
   broadcastMessageAdded(messageId: number, sessionId: string, role: 'user' | 'assistant'): void {
-    const payload = {
+    const payload: ChatMessageAddedEvent = {
       messageId,
       sessionId,
       role,
@@ -133,7 +139,7 @@ export class UIPlugin extends Plugin {
    * @param sessionId - 会话 ID
    */
   broadcastMessagesBatchAdded(messageIds: number[], sessionId: string): void {
-    const payload = {
+    const payload: ChatMessagesBatchAddedEvent = {
       messageIds,
       sessionId,
       timestamp: Date.now(),
@@ -146,7 +152,7 @@ export class UIPlugin extends Plugin {
    * @param sessionId - 会话 ID
    */
   broadcastSessionCreated(sessionId: string): void {
-    const payload = {
+    const payload: ChatSessionCreatedEvent = {
       sessionId,
       timestamp: Date.now(),
     }

@@ -15,6 +15,7 @@ import { computed, h, ref } from 'vue'
 import IconCarbonPet from '~icons/carbon/bot'
 import IconCarbonCamera from '~icons/carbon/camera'
 import IconCarbonFaceActivated from '~icons/carbon/face-activated'
+import IconCarbonFavorite from '~icons/carbon/favorite'
 import IconCarbonHeadphones from '~icons/carbon/headphones'
 import IconCarbonKeyboard from '~icons/carbon/keyboard'
 import IconCarbonMicrophone from '~icons/carbon/microphone'
@@ -28,6 +29,7 @@ import IconCarbonView from '~icons/carbon/view'
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue'
 import AudioSettings from '../components/settings/AudioSettings.vue'
 import CameraSettings from '../components/settings/CameraSettings.vue'
+import CareReminderSettings from '../components/settings/CareReminderSettings.vue'
 import EmotionSettings from '../components/settings/EmotionSettings.vue'
 import HotkeySettings from '../components/settings/HotkeySettings.vue'
 import McpToolsSettings from '../components/settings/McpToolsSettings.vue'
@@ -38,7 +40,7 @@ import SystemSettings from '../components/settings/SystemSettings.vue'
 import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
 import TitleBar from '../components/TitleBar.vue'
 
-type Key = 'system' | 'appearance' | 'model' | 'pets' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey' | 'mcp'
+type Key = 'system' | 'appearance' | 'model' | 'pets' | 'care' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey' | 'mcp'
 const selected = ref<Key>('system')
 const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
 const showTitleBar = window.api.getPlatform() !== 'darwin'
@@ -48,6 +50,7 @@ const menuOptions = [
   { label: '外观', key: 'appearance', icon: withIcon(IconCarbonView) },
   { label: '模型', key: 'model', icon: withIcon(IconCarbonUser) },
   { label: '精灵宠物', key: 'pets', icon: withIcon(IconCarbonPet) },
+  { label: '关怀', key: 'care', icon: withIcon(IconCarbonFavorite) },
   { label: '表情', key: 'emotion', icon: withIcon(IconCarbonFaceActivated) },
   { label: '唤醒词', key: 'wake', icon: withIcon(IconCarbonMicrophone) },
   { label: '摄像头', key: 'camera', icon: withIcon(IconCarbonCamera) },
@@ -69,6 +72,7 @@ const panelRefs = ref<Record<Key, PanelExposed | null>>({
   appearance: null,
   model: null,
   pets: null,
+  care: null,
   emotion: null,
   wake: null,
   camera: null,
@@ -95,6 +99,7 @@ const customButtonTextByKey: Record<Key, string | undefined> = {
   appearance: undefined,
   model: '刷新列表',
   pets: '刷新列表',
+  care: undefined,
   emotion: undefined, // 表情设置没有自定义按钮
   wake: '测试',
   camera: undefined, // 摄像头改为内嵌预览，不需要自定义按钮
@@ -179,6 +184,7 @@ async function onCustomClick() {
                 <AppearanceSettings v-show="selected === 'appearance'" :ref="setPanelRef('appearance')" />
                 <ModelSettings v-show="selected === 'model'" :ref="setPanelRef('model')" />
                 <PetsSettings v-show="selected === 'pets'" :ref="setPanelRef('pets')" />
+                <CareReminderSettings v-show="selected === 'care'" :ref="setPanelRef('care')" />
                 <EmotionSettings v-show="selected === 'emotion'" :ref="setPanelRef('emotion')" />
                 <WakeWordSettings v-show="selected === 'wake'" :ref="setPanelRef('wake')" />
                 <CameraSettings v-show="selected === 'camera'" :ref="setPanelRef('camera')" />

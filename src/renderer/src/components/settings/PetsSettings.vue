@@ -196,8 +196,9 @@ defineExpose({
               <IconCarbonCheckmark class="w-3 h-3" />
             </div>
 
-            <!-- 删除按钮（hover 时显示） -->
+            <!-- 删除按钮（仅本地；Codex 只读来源不可删） -->
             <NPopconfirm
+              v-if="pet.source !== 'codex'"
               placement="top"
               positive-text="确定"
               negative-text="取消"
@@ -221,9 +222,18 @@ defineExpose({
             </NPopconfirm>
           </div>
 
-          <!-- 宠物名称 -->
-          <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate w-full text-center">
-            {{ pet.displayName }}
+          <!-- 宠物名称 + 来源标记 -->
+          <div class="flex items-center justify-center gap-1 w-full min-w-0">
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate text-center">
+              {{ pet.displayName }}
+            </div>
+            <span
+              v-if="pet.source === 'codex'"
+              class="shrink-0 text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+              title="来自 ~/.codex/pets（只读）"
+            >
+              Codex
+            </span>
           </div>
 
           <!-- 宠物描述（单行截断） -->
@@ -245,12 +255,13 @@ defineExpose({
         <template #extra>
           <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
             <p>请将宠物文件夹（包含 pet.json 和 spritesheet.webp）导入</p>
-            <p class="mt-1">或点击上方"导入宠物"按钮</p>
+            <p class="mt-1">
+              或点击上方"导入宠物"按钮
+            </p>
           </div>
         </template>
       </NEmpty>
     </NSpin>
-
   </div>
 </template>
 

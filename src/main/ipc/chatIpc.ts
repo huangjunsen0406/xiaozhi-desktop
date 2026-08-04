@@ -2,6 +2,7 @@
  * 聊天 IPC 通道
  * 提供聊天会话和消息的数据库操作接口（createIpcHandler + IpcResult）
  */
+import type { AddMessageParams, CreateSessionParams } from '@shared/types'
 import type { DbChatMessage } from '../types/database'
 import { Buffer } from 'node:buffer'
 import { getDatabase } from '../services/database'
@@ -40,11 +41,7 @@ export function registerChatIpc(): void {
       data: { type: 'object', required: true },
     },
     handler: async (_event, dataUnknown: unknown) => {
-      const data = dataUnknown as {
-        session_id: string
-        title?: string
-        started_at?: number
-      }
+      const data = dataUnknown as CreateSessionParams
       const session = db.createChatSession(data)
       return success(session)
     },
@@ -82,22 +79,12 @@ export function registerChatIpc(): void {
       data: { type: 'object', required: true },
     },
     handler: async (_event, dataUnknown: unknown) => {
-      const data = dataUnknown as {
-        session_id: string
-        role: 'user' | 'assistant'
-        content: string
-        emotion?: string
-        sourceType: string
-        image_data?: Buffer | Uint8Array
-        timestamp?: number
-      }
+      const data = dataUnknown as AddMessageParams
 
       // 如果是 Uint8Array，转换为 Buffer
       let imageData: Buffer | undefined
       if (data.image_data) {
-        imageData = Buffer.isBuffer(data.image_data)
-          ? data.image_data
-          : Buffer.from(data.image_data)
+        imageData = Buffer.from(data.image_data)
       }
 
       // Translate sourceType -> source_type for DB layer

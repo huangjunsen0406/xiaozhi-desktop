@@ -7,7 +7,8 @@
     "paths": {
       "@shared/*": ["src/shared/*"]
     },
-    "types": ["electron-vite/node"]
+    "types": ["electron-vite/node"],
+    "noImplicitAny": true
   },
   "include": ["electron.vite.config.*", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"]
 }

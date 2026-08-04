@@ -1,8 +1,13 @@
 /**
  * 窗口拖动行为模块
- * 提供窗口拖动和边缘吸附功能
+ * - 全窗口：IPC 拖动（drag-start / drag-move / drag-end）
+ * - mini：拖动中 lerp 磁吸 + drag-end 硬吸附（threshold 100）
+ * - pets / live2d：拖动中自由放置，仅 drag-end 硬吸附（threshold 64）
+ *   避免靠近 Stage Manager / IDE 侧栏时被连续磁吸「拽走」的回弹感
+ * - pets / live2d 拖动开始时 reassert alwaysOnTop，避免被 IDE 压层
  */
 import { BrowserWindow, ipcMain, screen } from 'electron'
+import { reassertPetSurfaceTop } from '../petSurfaceLayering'
 
 /**
  * 拖动状态
@@ -20,64 +25,40 @@ interface SnapConfig {
   threshold: number
   /** 是否启用吸附 */
   enabled: boolean
-  /** 吸附动画时长 (ms) */
-  animationDuration: number
 }
 
 // 拖动状态映射
 const dragState = new WeakMap<BrowserWindow, DragState>()
-// 吸附定时器映射
-const snapTimer = new WeakMap<BrowserWindow, NodeJS.Timeout>()
 // 吸附配置映射
 const snapConfig = new WeakMap<BrowserWindow, SnapConfig>()
 
-// 默认吸附配置
+/**
+ * 当前是否正在拖动该窗口（content-size setBounds 应跳过改 x/y）
+ */
+export function isWindowDragging(win: BrowserWindow): boolean {
+  return dragState.has(win)
+}
+
+function isPetSurfaceUrl(url: string): boolean {
+  return url.includes('#/pets') || url.includes('#/live2d')
+}
+
+function isMiniUrl(url: string): boolean {
+  return url.includes('#/mini')
+}
+
+function isSnapEligibleUrl(url: string): boolean {
+  return isMiniUrl(url) || isPetSurfaceUrl(url)
+}
+
+// 默认吸附配置（mini 拖动中 + 结束）
 const DEFAULT_SNAP_CONFIG: SnapConfig = {
   threshold: 100,
   enabled: true,
-  animationDuration: 240,
 }
 
-/**
- * 停止吸附动画
- */
-function stopSnap(win: BrowserWindow): void {
-  const timer = snapTimer.get(win)
-  if (timer) {
-    clearInterval(timer)
-    snapTimer.delete(win)
-  }
-}
-
-/**
- * 执行吸附动画
- */
-function animateSnapTo(win: BrowserWindow, targetX?: number, targetY?: number): void {
-  stopSnap(win)
-
-  const config = snapConfig.get(win) || DEFAULT_SNAP_CONFIG
-  const interval = 16
-  const maxSteps = Math.ceil(config.animationDuration / interval)
-  let steps = 0
-
-  const timer = setInterval(() => {
-    steps += 1
-    const [cx, cy] = win.getPosition()
-    const nextX = targetX == null ? cx : Math.round(cx + (targetX - cx) * 0.35)
-    const nextY = targetY == null ? cy : Math.round(cy + (targetY - cy) * 0.35)
-    win.setPosition(nextX, nextY)
-
-    const doneX = targetX == null || Math.abs(nextX - targetX) <= 1
-    const doneY = targetY == null || Math.abs(nextY - targetY) <= 1
-
-    if ((doneX && doneY) || steps >= maxSteps) {
-      win.setPosition(targetX ?? nextX, targetY ?? nextY)
-      stopSnap(win)
-    }
-  }, interval)
-
-  snapTimer.set(win, timer)
-}
+// pets / live2d 仅 drag-end 吸附，阈值略小，贴边更克制
+const PET_SNAP_END_THRESHOLD = 64
 
 /**
  * 计算吸附插值比例
@@ -87,7 +68,7 @@ function lerpBy(distance: number, threshold: number): number {
 }
 
 /**
- * 计算吸附后的位置
+ * 计算吸附后的位置（拖动中 lerp 辅助）
  */
 function calculateSnappedPosition(
   x: number,
@@ -126,7 +107,7 @@ function calculateSnappedPosition(
 }
 
 /**
- * 计算最终吸附目标位置
+ * 计算最终吸附目标位置（drag-end 硬吸附）
  */
 function calculateSnapTarget(
   x: number,
@@ -165,17 +146,59 @@ function calculateSnapTarget(
 }
 
 /**
- * 检查窗口是否应该启用吸附
+ * 读取 URL 安全封装（webContents 未就绪时返回空串）
  */
-function shouldEnableSnap(win: BrowserWindow): boolean {
+function getWindowUrl(win: BrowserWindow): string {
+  try {
+    return win.webContents.getURL()
+  }
+  catch {
+    return ''
+  }
+}
+
+/**
+ * 是否允许边缘吸附（受 configureWindowSnap.enabled 覆盖）。
+ *
+ * Hybrid 策略：
+ * - mini：拖动中 lerp + drag-end 硬吸附
+ * - pets / live2d：仅 drag-end 硬吸附（见 shouldEnableMoveSnap / shouldEnableEndSnap）
+ */
+function isSnapEnabled(win: BrowserWindow): boolean {
   const config = snapConfig.get(win)
   if (config && !config.enabled) {
     return false
   }
+  return isSnapEligibleUrl(getWindowUrl(win))
+}
 
-  // 默认只对 mini 窗口启用吸附
-  const url = win.webContents.getURL()
-  return url.includes('#/mini')
+/**
+ * 拖动中是否做 lerp 磁吸。仅 mini，避免 pets/live2d 被侧栏边缘连续拽走。
+ */
+function shouldEnableMoveSnap(win: BrowserWindow): boolean {
+  if (!isSnapEnabled(win))
+    return false
+  return isMiniUrl(getWindowUrl(win))
+}
+
+/**
+ * 松手时是否硬吸附到 workArea 边缘。
+ * mini / pets / live2d 均启用。
+ */
+function shouldEnableEndSnap(win: BrowserWindow): boolean {
+  return isSnapEnabled(win)
+}
+
+function resolveSnapThreshold(win: BrowserWindow): number {
+  const config = snapConfig.get(win)
+  if (config?.threshold != null)
+    return config.threshold
+
+  const url = getWindowUrl(win)
+  if (isPetSurfaceUrl(url))
+    return PET_SNAP_END_THRESHOLD
+
+  return DEFAULT_SNAP_CONFIG.threshold
 }
 
 /**
@@ -188,10 +211,13 @@ export function registerDragBehavior(): void {
     if (!win)
       return
 
-    stopSnap(win)
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
     dragState.set(win, { offsetX: cursor.x - wx, offsetY: cursor.y - wy })
+
+    // 桌宠 surface：拖动开始时重新声明 floating 置顶，避免拖过 IDE 时被侧栏盖住
+    if (isPetSurfaceUrl(getWindowUrl(win)))
+      reassertPetSurfaceTop(win)
   })
 
   // 拖动移动
@@ -208,14 +234,13 @@ export function registerDragBehavior(): void {
     let nextX = Math.round(cursor.x - state.offsetX)
     let nextY = Math.round(cursor.y - state.offsetY)
 
-    // 检查是否启用吸附
-    if (shouldEnableSnap(win)) {
+    // mini：拖动中 lerp 磁吸；pets/live2d：自由跟手，不做连续吸附
+    if (shouldEnableMoveSnap(win)) {
       const [w, h] = win.getSize()
-      const nextRect = { x: nextX, y: nextY, width: w, height: h }
-      const workArea = screen.getDisplayMatching(nextRect).workArea
-      const config = snapConfig.get(win) || DEFAULT_SNAP_CONFIG
+      const workArea = screen.getDisplayNearestPoint(cursor).workArea
+      const threshold = resolveSnapThreshold(win)
 
-      const snapped = calculateSnappedPosition(nextX, nextY, w, h, workArea, config.threshold)
+      const snapped = calculateSnappedPosition(nextX, nextY, w, h, workArea, threshold)
       nextX = snapped.x
       nextY = snapped.y
     }
@@ -231,18 +256,19 @@ export function registerDragBehavior(): void {
 
     dragState.delete(win)
 
-    // 结束时若在吸附范围内，补一个短动画缓到边缘
-    if (shouldEnableSnap(win)) {
+    // 结束时直接落到目标边缘，确保下一次拖动不会被残留动画打断。
+    // pets/live2d 仅在此阶段吸附，贴近边缘才 settle，中间区域保持落点。
+    if (shouldEnableEndSnap(win)) {
       const [w, h] = win.getSize()
       const [cx, cy] = win.getPosition()
-      const currentRect = { x: cx, y: cy, width: w, height: h }
-      const workArea = screen.getDisplayMatching(currentRect).workArea
-      const config = snapConfig.get(win) || DEFAULT_SNAP_CONFIG
+      const cursor = screen.getCursorScreenPoint()
+      const workArea = screen.getDisplayNearestPoint(cursor).workArea
+      const threshold = resolveSnapThreshold(win)
 
-      const { targetX, targetY } = calculateSnapTarget(cx, cy, w, h, workArea, config.threshold)
+      const { targetX, targetY } = calculateSnapTarget(cx, cy, w, h, workArea, threshold)
 
       if (targetX != null || targetY != null) {
-        animateSnapTo(win, targetX, targetY)
+        win.setPosition(targetX ?? cx, targetY ?? cy)
       }
     }
   })
@@ -274,7 +300,6 @@ export function disableWindowSnap(win: BrowserWindow): void {
  * 清理窗口拖动状态
  */
 export function cleanupDragState(win: BrowserWindow): void {
-  stopSnap(win)
   dragState.delete(win)
   snapConfig.delete(win)
 }

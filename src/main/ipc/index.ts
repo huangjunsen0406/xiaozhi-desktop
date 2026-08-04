@@ -3,13 +3,14 @@ import { BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
-import { getLive2dWindow, getPetsWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
+import { getCurrentDisplayMode, getLive2dWindow, getPetsWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
 
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
 import { registerBackgroundAudioIpc } from './backgroundAudioIpc'
 import { registerCameraConfigIpc } from './cameraConfigIpc'
+import { registerCareReminderIpc } from './careReminderIpc'
 import { registerChatIpc } from './chatIpc'
 import { registerClipboardIpcChannels } from './clipboardIpc'
 import { registerConfigIpc } from './configIpc'
@@ -45,6 +46,7 @@ export function registerBasicIpcChannels(): void {
 
   registerModelIpc()
   registerPetsIpc()
+  registerCareReminderIpc()
   registerMcpToolsIpc()
   registerClipboardIpcChannels()
 
@@ -113,7 +115,7 @@ export function registerBasicIpcChannels(): void {
     toggleToLive2d()
   })
 
-  // 统一 click-through（live2d / pets）；保留旧 channel 作别名
+  // 统一 click-through（live2d / pets）。
   const setPetClickThrough = (target: 'live2d' | 'pets', ignore: boolean): void => {
     const win = target === 'live2d' ? getLive2dWindow() : getPetsWindow()
     if (win)
@@ -126,19 +128,17 @@ export function registerBasicIpcChannels(): void {
     setPetClickThrough(target, ignore)
   })
 
-  ipcMain.on('live2d:set-ignore-mouse', (_, ignore: boolean) => {
-    if (typeof ignore === 'boolean')
-      setPetClickThrough('live2d', ignore)
-  })
-
   // 精灵宠物窗口
   ipcMain.on('window:toggle-pets', () => {
     toggleToPets()
   })
 
-  ipcMain.on('pets:set-ignore-mouse', (_, ignore: boolean) => {
-    if (typeof ignore === 'boolean')
-      setPetClickThrough('pets', ignore)
+  // 读取当前显示模式
+  createIpcHandler({
+    channel: 'window:get-display-mode',
+    handler: async () => {
+      return success(getCurrentDisplayMode())
+    },
   })
 
   // 显示模式切换

@@ -4,6 +4,7 @@ import type { ModelInfo } from '@shared/types'
  *
  * 模型统一存储在 userData/models/ 目录
  * 首次启动时会从内置资源目录复制默认模型
+ * 导入时通过 normalizeLive2dImport 发现嵌套模型根并规范化为 stableId 目录
  */
 import path from 'node:path'
 import process from 'node:process'
@@ -11,6 +12,12 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import fs from 'fs-extra'
 
 import { getLogger } from '../utils/logger'
+import {
+  ensureModelJson,
+  ensureWritableTree,
+  importNormalizedLive2dModel,
+  readModelMeta,
+} from '../utils/normalizeLive2dImport'
 import {
   getUserDataDir,
   getModelsDir as resolveModelsDir,
@@ -134,6 +141,10 @@ async function copyBuiltinModels(): Promise<number> {
       // 复制模型
       logger.info(`复制内置模型: ${modelName}`)
       await fs.copy(sourcePath, targetPath)
+      // 源目录可能是 555；copy 保留 mode 后需可写，否则 ensureModelJson 会 EACCES
+      await ensureWritableTree(targetPath)
+      // 内置模型已是扁平结构；缺 model.json 时补一份
+      await ensureModelJson(targetPath)
       copiedCount++
     }
 
@@ -243,15 +254,22 @@ async function findPreviewImage(modelPath: string): Promise<string | null> {
 
 /**
  * 解析模型信息
+ * id = 文件夹名（导入后的 stableId）；name 优先 model.meta.json.displayName
+ *
+ * 半导入/只读目录（EACCES）时 ensureModelJson 会尝试 chmod 后重试；
+ * 仍失败则 warn 跳过，避免列表扫描被单目录打爆。
  */
 async function parseModelInfo(modelPath: string, modelId: string): Promise<ModelInfo | null> {
   try {
     const modelJsonPath = path.join(modelPath, 'model.json')
 
-    // 检查 model.json 是否存在
+    // 规范化列表要求 model.json；兼容旧目录尝试从 *.model3.json 补齐
     if (!(await fs.pathExists(modelJsonPath))) {
-      logger.warn(`模型缺少 model.json: ${modelPath}`)
-      return null
+      const ensured = await ensureModelJson(modelPath)
+      if (!ensured && !(await fs.pathExists(modelJsonPath))) {
+        logger.warn(`模型缺少 model.json（跳过）: ${modelPath}`)
+        return null
+      }
     }
 
     const modelJson = await fs.readJson(modelJsonPath)
@@ -270,9 +288,12 @@ async function parseModelInfo(modelPath: string, modelId: string): Promise<Model
     // 获取预览图
     const preview = await findPreviewImage(modelPath)
 
+    const meta = await readModelMeta(modelPath)
+    const displayName = meta?.displayName?.trim() || modelId
+
     return {
       id: modelId,
-      name: modelId,
+      name: displayName,
       path: modelPath,
       preview: preview || undefined,
       hasExpressions: expressions.length > 0,
@@ -282,6 +303,13 @@ async function parseModelInfo(modelPath: string, modelId: string): Promise<Model
     }
   }
   catch (error) {
+    const code = error && typeof error === 'object'
+      ? (error as NodeJS.ErrnoException).code
+      : undefined
+    if (code === 'EACCES' || code === 'EPERM') {
+      logger.warn(`解析模型权限不足，跳过: ${modelPath}`, error)
+      return null
+    }
     logger.error(`解析模型信息失败: ${modelPath}`, error)
     return null
   }
@@ -316,50 +344,6 @@ async function getModelList(): Promise<ModelInfo[]> {
   }
 
   return models
-}
-
-/**
- * 验证模型文件夹
- */
-async function validateModelFolder(folderPath: string): Promise<{ valid: boolean, error?: string }> {
-  try {
-    // 检查文件夹是否存在
-    if (!(await fs.pathExists(folderPath))) {
-      return { valid: false, error: '文件夹不存在' }
-    }
-
-    // 检查是否是目录
-    const stat = await fs.stat(folderPath)
-    if (!stat.isDirectory()) {
-      return { valid: false, error: '选择的不是文件夹' }
-    }
-
-    // 检查必要文件
-    const files = await fs.readdir(folderPath)
-
-    // 必须有 .moc3 文件
-    const hasMoc3 = files.some(f => f.endsWith('.moc3'))
-    if (!hasMoc3) {
-      return { valid: false, error: '缺少 .moc3 模型文件' }
-    }
-
-    // 必须有 model.json 或 .model3.json 文件
-    const hasModelJson = files.some(f => f === 'model.json' || f.endsWith('.model3.json'))
-    if (!hasModelJson) {
-      return { valid: false, error: '缺少 model.json 配置文件' }
-    }
-
-    // 检查贴图文件夹
-    const hasTextures = files.some(f => f.includes('.2048') || f.includes('.4096') || f.includes('.8192'))
-    if (!hasTextures) {
-      return { valid: false, error: '缺少贴图文件夹 (如 xxx.2048)' }
-    }
-
-    return { valid: true }
-  }
-  catch (error) {
-    return { valid: false, error: `验证失败: ${String(error)}` }
-  }
 }
 
 /**
@@ -429,40 +413,19 @@ export function registerModelIpc(): void {
       const modelsDir = getModelsDir()
       logger.info(`导入模型: ${sourcePath}`)
 
-      // 验证文件夹
-      const validation = await validateModelFolder(sourcePath)
-      if (!validation.valid) {
-        return failure(validation.error || '模型验证失败')
+      const result = await importNormalizedLive2dModel({ sourcePath, modelsDir })
+      if (!result.success) {
+        return failure(result.error)
       }
 
-      // 获取文件夹名作为模型 ID
-      const modelId = path.basename(sourcePath)
-      const targetPath = path.join(modelsDir, modelId)
+      const { stableId, displayName, targetPath, modelRoot } = result.data
+      logger.info(
+        `模型已规范化导入: stableId=${stableId}, displayName=${displayName}, `
+        + `from=${modelRoot}, to=${targetPath}`,
+      )
 
-      // 检查是否已存在
-      if (await fs.pathExists(targetPath)) {
-        return failure(`模型 "${modelId}" 已存在`)
-      }
-
-      // 复制文件夹
-      await fs.copy(sourcePath, targetPath)
-      logger.info(`模型已复制到: ${targetPath}`)
-
-      // 如果没有 model.json，尝试创建
-      const modelJsonPath = path.join(targetPath, 'model.json')
-      if (!(await fs.pathExists(modelJsonPath))) {
-        // 查找 .model3.json 文件
-        const files = await fs.readdir(targetPath)
-        const model3Json = files.find(f => f.endsWith('.model3.json'))
-        if (model3Json) {
-          // 复制为 model.json
-          await fs.copy(path.join(targetPath, model3Json), modelJsonPath)
-          logger.info(`已创建 model.json`)
-        }
-      }
-
-      // modelId 放在 data 内，preload 用 unwrapIpcResult 取 data
-      return success({ modelId })
+      // modelId 放在 data 内，preload 用 unwrapIpcResult 取 data（兼容现有 UI）
+      return success({ modelId: stableId, displayName })
     },
   })
 

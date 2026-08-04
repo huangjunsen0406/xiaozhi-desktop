@@ -1,4 +1,13 @@
-import type { ChatMessage, ChatSession } from '@shared/types'
+import type {
+  AddMessageParams,
+  ChatMessage,
+  ChatMessageAddedEvent,
+  ChatMessagesBatchAddedEvent,
+  ChatSession,
+  ChatSessionCreatedEvent,
+  CreateSessionParams,
+  ImageCapturedEvent,
+} from '@shared/types'
 /**
  * 聊天 API 模块
  */
@@ -27,7 +36,7 @@ export const chatApi = {
   /**
    * 创建会话
    */
-  createSession: async (data: { session_id: string, title?: string, started_at?: number }): Promise<ChatSession> => {
+  createSession: async (data: CreateSessionParams): Promise<ChatSession> => {
     const result: unknown = await ipcRenderer.invoke('chat:create-session', data)
     return unwrapIpcResult(result, '创建会话失败')
   },
@@ -67,15 +76,7 @@ export const chatApi = {
   /**
    * 添加消息
    */
-  addMessage: async (data: {
-    session_id: string
-    role: 'user' | 'assistant'
-    content: string
-    emotion?: string
-    sourceType: string
-    image_data?: Uint8Array
-    timestamp?: number
-  }): Promise<ChatMessage> => {
+  addMessage: async (data: AddMessageParams): Promise<ChatMessage> => {
     const result: unknown = await ipcRenderer.invoke('chat:add-message', data)
     return unwrapIpcResult(result, '添加消息失败')
   },
@@ -107,8 +108,8 @@ export const chatApi = {
   /**
    * 监听图片捕获事件（截图/拍照）
    */
-  onImageCaptured: (callback: (data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: { type: 'screenshot' | 'camera', imageBase64: string, timestamp: number }) => callback(data)
+  onImageCaptured: (callback: (data: ImageCapturedEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: ImageCapturedEvent) => callback(data)
     ipcRenderer.on('chat:image-captured', handler)
     return () => ipcRenderer.off('chat:image-captured', handler)
   },
@@ -116,8 +117,8 @@ export const chatApi = {
   /**
    * 监听单条消息添加事件
    */
-  onMessageAdded: (callback: (data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: { messageId: number, sessionId: string, role: 'user' | 'assistant', timestamp: number }) => callback(data)
+  onMessageAdded: (callback: (data: ChatMessageAddedEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: ChatMessageAddedEvent) => callback(data)
     ipcRenderer.on('chat:message-added', handler)
     return () => ipcRenderer.off('chat:message-added', handler)
   },
@@ -125,8 +126,8 @@ export const chatApi = {
   /**
    * 监听批量消息添加事件
    */
-  onMessagesBatchAdded: (callback: (data: { messageIds: number[], sessionId: string, timestamp: number }) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: { messageIds: number[], sessionId: string, timestamp: number }) => callback(data)
+  onMessagesBatchAdded: (callback: (data: ChatMessagesBatchAddedEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: ChatMessagesBatchAddedEvent) => callback(data)
     ipcRenderer.on('chat:messages-batch-added', handler)
     return () => ipcRenderer.off('chat:messages-batch-added', handler)
   },
@@ -134,8 +135,8 @@ export const chatApi = {
   /**
    * 监听会话创建事件（跨天自动创建新会话）
    */
-  onSessionCreated: (callback: (data: { sessionId: string, timestamp: number }) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string, timestamp: number }) => callback(data)
+  onSessionCreated: (callback: (data: ChatSessionCreatedEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: ChatSessionCreatedEvent) => callback(data)
     ipcRenderer.on('chat:session-created', handler)
     return () => ipcRenderer.off('chat:session-created', handler)
   },

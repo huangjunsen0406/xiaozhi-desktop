@@ -1,9 +1,12 @@
+import type { ImageSourceType } from '@shared/types'
 import type { PluginCommands, PluginContext } from '../core'
-import type { JsonMessage } from '../types/protocol'
+import type { JsonMessage, TtsJsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Buffer } from 'node:buffer'
+import { isImageSourceType } from '@shared/types'
 import { Events } from '../core'
 import { getDatabase } from '../services/database'
+import { isImageMessage, isServerMessage, isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -39,7 +42,7 @@ export class ChatPlugin extends Plugin {
   // 消息累积器（用于情绪和图片）
   private messageAccumulator = {
     currentEmotion: '',
-    pendingImageData: null as { type: string, data: string } | null,
+    pendingImageData: null as { type: ImageSourceType, data: string } | null,
   }
 
   /**
@@ -51,8 +54,9 @@ export class ChatPlugin extends Plugin {
 
     // 订阅 JSON 消息事件
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      const message = data as JsonMessage
-      this.onIncomingJson(message).catch((error) => {
+      if (!isServerMessage(data))
+        return
+      this.onIncomingJson(data).catch((error) => {
         logger.error('处理 JSON 消息失败', error)
       })
     })
@@ -177,22 +181,22 @@ export class ChatPlugin extends Plugin {
     }
 
     // 处理 TTS 消息
-    if (msgType === 'tts') {
+    if (isTtsMessage(message)) {
       await this.handleTtsMessage(message)
     }
 
     // 缓存图片数据
-    if (msgType === 'image' && (message as { image_data?: string }).image_data) {
+    if (isImageMessage(message)) {
       this.messageAccumulator.pendingImageData = {
-        type: (message as { image_type?: string }).image_type || 'screenshot',
-        data: (message as { image_data?: string }).image_data!,
+        type: isImageSourceType(message.image_type) ? message.image_type : 'screenshot',
+        data: message.image_data,
       }
       logger.info('已缓存图片数据')
     }
 
     // 跟踪情感
-    if ((message as { emotion?: string }).emotion) {
-      this.messageAccumulator.currentEmotion = (message as { emotion?: string }).emotion!
+    if (message.type === 'llm' && message.emotion) {
+      this.messageAccumulator.currentEmotion = message.emotion
     }
   }
 
@@ -233,9 +237,8 @@ export class ChatPlugin extends Plugin {
   /**
    * 处理 TTS 消息（逐句保存）
    */
-  private async handleTtsMessage(message: JsonMessage): Promise<void> {
-    const state = (message as { state?: string }).state
-    const text = (message as { text?: string }).text
+  private async handleTtsMessage(message: TtsJsonMessage): Promise<void> {
+    const { state, text } = message
 
     if (state === 'start') {
       // TTS 开始，确保使用今天的会话
@@ -313,7 +316,7 @@ export class ChatPlugin extends Plugin {
    * @param imageBase64 - base64 编码的图片数据
    * @param sourceType - 图片来源类型
    */
-  async saveImage(imageBase64: string, sourceType: 'screenshot' | 'camera'): Promise<void> {
+  async saveImage(imageBase64: string, sourceType: ImageSourceType): Promise<void> {
     try {
       logger.info(`保存 ${sourceType} 图片到数据库`)
 

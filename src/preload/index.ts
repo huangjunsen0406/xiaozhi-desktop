@@ -2,9 +2,8 @@
  * Preload 脚本入口
  * 使用模块化 API 结构
  */
-import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge } from 'electron'
-import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -14,11 +13,11 @@ const api = {
   togglePanel: windowApi.togglePanel,
   toggleToMini: windowApi.toggleToMini,
   toggleToMain: windowApi.toggleToMain,
+  getDisplayMode: windowApi.getDisplayMode,
   switchDisplayMode: windowApi.switchDisplayMode,
+  onDisplayModeChanged: windowApi.onDisplayModeChanged,
   showActivation: windowApi.showActivation,
   toggleSettings: windowApi.toggleSettings,
-  setIgnoreMouseEvents: windowApi.setIgnoreMouseEvents,
-  setPetsIgnoreMouseEvents: windowApi.setPetsIgnoreMouseEvents,
   setClickThrough: windowApi.setClickThrough,
   dragStart: windowApi.dragStart,
   dragMove: windowApi.dragMove,
@@ -30,15 +29,23 @@ const api = {
   close: windowApi.close,
   openExternal: windowApi.openExternal,
 
-  // 环境信息（替代 window.electron.process）
+  // 环境信息
   getPlatform: appEnvApi.getPlatform,
   getProcessVersions: appEnvApi.getProcessVersions,
 
-  // 气泡窗
+  // 气泡窗 / 桌宠壳 content bounds
   bubbleShow: bubbleApi.show,
   bubbleHide: bubbleApi.hide,
   bubbleSetAnchorOffset: bubbleApi.setAnchorOffset,
+  bubbleSetContentSize: bubbleApi.setContentSize,
   bubbleOnSetArrowX: bubbleApi.onSetArrowX,
+  bubbleOnShowLocal: bubbleApi.onShowLocal,
+  bubbleOnHideLocal: bubbleApi.onHideLocal,
+
+  // 关怀提醒配置
+  careReminderGetConfig: careReminderApi.getConfig,
+  careReminderUpdateConfig: careReminderApi.updateConfig,
+  careReminderDemo: careReminderApi.demo,
 
   // Hover 控制 API
   showHover: hoverApi.showHover,
@@ -164,7 +171,10 @@ const api = {
   petsOpenFolder: petsApi.openFolder,
   petsGetFolderPath: petsApi.getFolderPath,
   petsGetSpritesheet: petsApi.getSpritesheet,
+  petsGetDisplayWidth: petsApi.getDisplayWidth,
+  petsSetDisplayWidth: petsApi.setDisplayWidth,
   petsOnChanged: petsApi.onChanged,
+  petsOnDisplayWidthChanged: petsApi.onDisplayWidthChanged,
 
   // MCP 工具 API
   mcpToolsGetCatalog: mcpToolsApi.getCatalog,
@@ -186,7 +196,6 @@ const api = {
 // eslint-disable-next-line node/prefer-global/process
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   }
   catch (error) {
@@ -194,8 +203,6 @@ if (process.contextIsolated) {
   }
 }
 else {
-  // @ts-expect-error (type mismatch in activation/app modules)
-  window.electron = electronAPI
   // @ts-expect-error (type mismatch in activation/app modules)
   window.api = api
 }

@@ -198,6 +198,47 @@ export function getMcpPluginsDir(): string {
 }
 
 /**
+ * 打包内置的唤醒词模型根目录（onnx / tokens 等只读资源）
+ *
+ * - 生产：{process.resourcesPath}/wake-word-models（extraResources）
+ * - 开发：优先 {appPath}/resources/…，再回退 cwd
+ *
+ * 注意：生产环境该目录通常只读，禁止写入 keywords.txt。
+ */
+export function getWakeWordModelsBundledDir(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'wake-word-models')
+  }
+
+  const fromAppPath = path.join(app.getAppPath(), 'resources', 'wake-word-models')
+  if (existsSync(fromAppPath))
+    return fromAppPath
+
+  return path.join(process.cwd(), 'resources', 'wake-word-models')
+}
+
+/**
+ * 用户可写的唤醒词模型目录
+ *
+ * 布局：{userData}/wake-word-models[/{lang}]
+ * 仅用于 keywords.txt 等运行时生成文件。
+ */
+export function getWakeWordModelsUserDir(lang?: string): string {
+  const base = path.join(getUserDataDir(), 'wake-word-models')
+  if (lang) {
+    return ensureDir(path.join(base, lang))
+  }
+  return ensureDir(base)
+}
+
+/**
+ * 用户可写的 keywords.txt 路径：{userData}/wake-word-models/{lang}/keywords.txt
+ */
+export function getWakeWordKeywordsPath(lang: string): string {
+  return path.join(getWakeWordModelsUserDir(lang), 'keywords.txt')
+}
+
+/**
  * 显示模式配置文件（仍在 userData 根，与现网一致）
  */
 export function getDisplayModeFile(): string {
@@ -209,6 +250,13 @@ export function getDisplayModeFile(): string {
  */
 export function getPetsConfigFile(): string {
   return path.join(getUserDataDir(), 'pets-config.json')
+}
+
+/**
+ * 桌宠关怀提醒配置（本地 JSON，不进对话库）
+ */
+export function getCareRemindersConfigFile(): string {
+  return path.join(getUserDataDir(), 'care-reminders.json')
 }
 
 /**
@@ -299,6 +347,8 @@ export function resolveAllPaths(): Record<string, string> {
     pets: getPetsDir(),
     emotions: getEmotionsDir(),
     mcpPlugins: getMcpPluginsDir(),
+    wakeWordModelsBundled: getWakeWordModelsBundledDir(),
+    wakeWordModelsUser: getWakeWordModelsUserDir(),
   }
 }
 

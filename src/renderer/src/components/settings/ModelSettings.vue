@@ -72,9 +72,9 @@ async function handleImport() {
     const sourcePath = result.filePaths[0]
     importing.value = true
 
-    // 导入模型
+    // 导入模型（返回 stableId；列表 name 来自 meta.displayName）
     const modelId = await window.api.modelImport(sourcePath)
-    message.success(modelId ? `模型 "${modelId}" 导入成功` : '模型导入成功')
+    message.success(modelId ? `模型导入成功（${modelId}）` : '模型导入成功')
 
     // 刷新列表
     await loadModels()
@@ -260,11 +260,12 @@ defineExpose({
         <template #extra>
           <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
             <p>请将 Live2D 模型文件夹复制到模型目录</p>
-            <p class="mt-1">或点击上方"导入模型"按钮</p>
+            <p class="mt-1">
+              或点击上方"导入模型"按钮
+            </p>
           </div>
         </template>
       </NEmpty>
     </NSpin>
-
   </div>
 </template>

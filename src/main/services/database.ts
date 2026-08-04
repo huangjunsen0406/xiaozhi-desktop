@@ -1,8 +1,8 @@
-import type { ValidSampleRate } from '@shared/types'
+import type { AudioSettings, ValidSampleRate } from '@shared/types'
 import type { Buffer } from 'node:buffer'
 import type {
-  AudioConfigUpdate,
-  DbAudioConfig,
+  AudioSettingsUpdate,
+  DbAudioSettings,
   DbCameraConfig,
   DbChatMessage,
   DbChatSession,
@@ -807,11 +807,11 @@ export class DatabaseManager {
     }
   }
 
-  getOrCreateAudioConfig(): DbAudioConfig {
+  getOrCreateAudioSettings(): DbAudioSettings {
     const existing = this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get()
 
     if (existing) {
-      return existing as DbAudioConfig
+      return existing as DbAudioSettings
     }
 
     const result = this.db.prepare(`
@@ -822,17 +822,17 @@ export class DatabaseManager {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(1, 1, 'app', 'auto', 16000, 24000, 1, 20)
 
-    return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioConfig
+    return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioSettings
   }
 
-  getAudioConfig(): DbAudioConfig | undefined {
-    return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get() as DbAudioConfig | undefined
+  getAudioSettings(): DbAudioSettings | undefined {
+    return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get() as DbAudioSettings | undefined
   }
 
-  updateAudioConfig(updates: AudioConfigUpdate | Record<string, unknown>): void {
-    let config = this.getAudioConfig()
+  updateAudioSettings(updates: AudioSettingsUpdate | Record<string, unknown>): void {
+    let config = this.getAudioSettings()
     if (!config) {
-      config = this.getOrCreateAudioConfig()
+      config = this.getOrCreateAudioSettings()
     }
 
     const dbUpdates: Record<string, string | number | null> = {}
@@ -860,23 +860,12 @@ export class DatabaseManager {
     `).run(...values, config.id)
   }
 
-  getFormattedAudioConfig(): {
-    inputDeviceName?: string
-    outputDeviceName?: string
-    enableNoiseReduction: boolean
-    enableEchoCancellation: boolean
-    aecMode: 'off' | 'app' | 'system'
-    conversationMode: 'realtime' | 'auto'
-    inputSampleRate: ValidSampleRate
-    outputSampleRate: ValidSampleRate
-    channels: number
-    frameDuration: number
-  } {
+  getFormattedAudioSettings(): AudioSettings {
     const VALID_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000]
     const isValidRate = (rate: number): rate is ValidSampleRate => VALID_RATES.includes(rate)
     const VALID_AEC = new Set(['off', 'app', 'system'])
 
-    const config = this.getOrCreateAudioConfig()
+    const config = this.getOrCreateAudioSettings()
     const inputRate = config.input_sample_rate
     const outputRate = config.output_sample_rate
 
