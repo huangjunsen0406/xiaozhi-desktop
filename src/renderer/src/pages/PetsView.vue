@@ -11,7 +11,7 @@ import {
   PET_SPRITE_FRAME_W,
   petDisplayHeightFromWidth,
 } from '@shared/types'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -33,8 +33,43 @@ const DRAG_DIR_THRESHOLD = 4
  * 避免小抖动在左右跑之间来回切。
  */
 const DRAG_DIR_FLIP_THRESHOLD = 8
-/** look 死区半径（相对宠物中心，CSS px） */
-const LOOK_DEADZONE_PX = 6
+/**
+ * look 死区滞回（相对宠物中心，CSS px；Schmitt trigger）：
+ * - 进入死区（停止 look → idle）：dist < ENTER（小）
+ * - 离开死区（开始 look）：dist > EXIT（大，EXIT > ENTER）
+ * 中间带保持上一状态，避免中心边界每帧翻转。
+ */
+const LOOK_DEADZONE_ENTER_PX = 6
+const LOOK_DEADZONE_EXIT_PX = 14
+/** look 扇区角度（16 向 = 360/16） */
+const LOOK_SECTOR_DEG = 22.5
+/**
+ * 扇区粘滞：相对当前扇区中心的角距超过 sector*0.65（≈14.6°）才允许切向邻居，
+ * 避免 mousemove 噪声在扇区边界每帧翻格。
+ */
+const LOOK_SECTOR_STICK_RATIO = 0.65
+/** review one-shot 冷却（回复结束后） */
+const REVIEW_COOLDOWN_MS = 3000
+/** failed one-shot 冷却（负面 emotion） */
+const FAILED_COOLDOWN_MS = 5000
+/** 无 hover 多久后再 hover 可触发 waving（nice-to-have） */
+const WAVE_ON_REHOVER_IDLE_MS = 30_000
+/** 触发 failed 的 LLM emotion */
+const FAILED_EMOTIONS = new Set([
+  'sad',
+  'angry',
+  'crying',
+  'embarrassed',
+  'confused',
+  'error',
+])
+/** 允许作为 one-shot transient 的 clip */
+const TRANSIENT_CLIPS = new Set<PetAnimationState>([
+  'waving',
+  'failed',
+  'review',
+  'jumping',
+])
 
 interface AnimClip {
   row: number
@@ -115,6 +150,17 @@ let isHovered = false
  * v2 look：0–15 对应 22.5° 步进（0=UP）；null = 死区/无 look
  */
 let lookFrame: number | null = null
+/**
+ * 一次性 transient 动画（waving / failed / review / optional jump）。
+ * 播完所有帧后清空，不循环。
+ */
+let transientAnim: PetAnimationState | null = null
+/** 上一次 deviceState（用于 speaking→listening/idle 触发 review） */
+let prevDeviceState: DeviceState = appStore.deviceState
+let lastReviewAt = 0
+let lastFailedAt = 0
+/** 最近一次离开 hover 的时间（用于久别 re-hover 招手） */
+let lastHoverLeftAt = 0
 /** 当前播放 clip 与帧 */
 let activeState: PetAnimationState = 'idle'
 let currentFrame = 0
@@ -124,9 +170,11 @@ let lastTimestamp = 0
 let lastClickThroughIgnore: boolean | null = null
 let removeChangedListener: (() => void) | null = null
 let removeDisplayWidthListener: (() => void) | null = null
+let stopDeviceStateWatch: (() => void) | null = null
+let stopEmotionWatch: (() => void) | null = null
 
 /**
- * deviceState → 基础动画（无 drag / look 时）
+ * deviceState → 基础动画（无 drag / look / transient 时）
  */
 function baseStateFromDevice(deviceState: DeviceState): PetAnimationState {
   switch (deviceState) {
@@ -142,10 +190,37 @@ function baseStateFromDevice(deviceState: DeviceState): PetAnimationState {
 }
 
 /**
- * 状态优先级（Codex 对齐）：
+ * 请求 one-shot transient；已有更高/同级 transient 时不打断（可强制）。
+ */
+function requestTransient(
+  state: PetAnimationState,
+  opts?: { force?: boolean },
+): boolean {
+  if (!TRANSIENT_CLIPS.has(state))
+    return false
+  if (transientAnim && !opts?.force)
+    return false
+
+  transientAnim = state
+  // 强制从头播 one-shot（即便与当前 activeState 同名）
+  activeState = state
+  currentFrame = 0
+  frameElapsedMs = 0
+  console.log(`[Pets] transient ${state}`)
+  return true
+}
+
+function clearTransient(): void {
+  if (transientAnim)
+    transientAnim = null
+}
+
+/**
+ * 状态优先级（Codex 对齐 + one-shot 层）：
  * drag sticky running-left/right
- *   > look (v2，指针在精灵上且非死区)
- *   > hover jumping（v1 全程 hover；v2 死区/无 look 时）
+ *   > look (v2 sticky，含死区滞回内持有上一格)
+ *   > transient one-shot (waving | failed | review | jump)
+ *   > hover jumping（仅 v1；v2 用 look / idle，避免死区边缘 look↔jump 抽搐）
  *   > device base (waiting/running/idle)
  *   > idle
  */
@@ -165,8 +240,11 @@ function resolveEffectivePlayback():
   if (spriteVersion >= 2 && lookFrame !== null)
     return { mode: 'look', index: lookFrame }
 
-  // Hover 反馈：v1 无 look 行；v2 死区内也给 jumping（Codex respondToHover）
-  if (isHovered)
+  if (transientAnim)
+    return { mode: 'anim', state: transientAnim }
+
+  // Hover 反馈：仅 v1 无 look 行时用 jumping；v2 死区/无 look → device/idle
+  if (isHovered && spriteVersion < 2)
     return { mode: 'anim', state: 'jumping' }
 
   return { mode: 'anim', state: baseStateFromDevice(appStore.deviceState) }
@@ -204,7 +282,27 @@ function lookCell(index: number): { row: number, col: number } {
 }
 
 /**
- * 指针相对 canvas 中心 → look 索引；死区内返回 null
+ * 两角（度）最短角距，结果 ∈ [0, 180]
+ */
+function angularDistanceDeg(a: number, b: number): number {
+  let diff = Math.abs(a - b) % 360
+  if (diff > 180)
+    diff = 360 - diff
+  return diff
+}
+
+/**
+ * 原始角度 → 最近 16 向 look 索引（0=UP）
+ */
+function rawLookIndexFromAngle(angleDeg: number): number {
+  return Math.round(angleDeg / LOOK_SECTOR_DEG) % 16
+}
+
+/**
+ * 指针相对 canvas 中心 → look 索引（带死区滞回 + 扇区粘滞）。
+ * - 未在 look：仅当 dist > EXIT 才进入
+ * - 已在 look：dist < ENTER → null（idle）；ENTER≤dist≤EXIT → 持有上一格
+ * - 扇区：角距当前中心 > sector*0.65 且更靠近 raw 中心才切向邻居
  */
 function computeLookIndex(clientX: number, clientY: number): number | null {
   const canvas = canvasRef.value
@@ -218,11 +316,38 @@ function computeLookIndex(clientX: number, clientY: number): number | null {
   // 屏幕 y 向下为正；Codex：0° = UP，使用 atan2(dx, -dy)
   const dy = clientY - cy
   const dist = Math.hypot(dx, dy)
-  if (dist <= LOOK_DEADZONE_PX)
+
+  // 死区 Schmitt：小半径进死区、大半径出死区，中间带保持
+  if (lookFrame === null) {
+    // 尚未 look：必须明显离开死区才开始
+    if (dist <= LOOK_DEADZONE_EXIT_PX)
+      return null
+  }
+  else if (dist < LOOK_DEADZONE_ENTER_PX) {
+    // 深入中心：结束 look → idle（v2 不走 jumping）
     return null
+  }
+  else if (dist <= LOOK_DEADZONE_EXIT_PX) {
+    // 滞回带：持有上一 look，避免角度在近中心噪声翻格
+    return lookFrame
+  }
 
   const angle = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360
-  return Math.round(angle / 22.5) % 16
+  const raw = rawLookIndexFromAngle(angle)
+
+  if (lookFrame === null)
+    return raw
+
+  // 扇区粘滞：相对当前扇区中心角距够大，且 raw 更近，才切换
+  const currentCenter = lookFrame * LOOK_SECTOR_DEG
+  const distToCurrent = angularDistanceDeg(angle, currentCenter)
+  if (distToCurrent > LOOK_SECTOR_DEG * LOOK_SECTOR_STICK_RATIO) {
+    const rawCenter = raw * LOOK_SECTOR_DEG
+    if (angularDistanceDeg(angle, rawCenter) < distToCurrent)
+      return raw
+  }
+
+  return lookFrame
 }
 
 /**
@@ -300,10 +425,12 @@ async function loadSpritesheet(): Promise<void> {
     dragDeltaX = 0
     lastDragDir = null
     isHovered = false
+    clearTransient()
     console.log(
       `[Pets] spritesheet loaded version=${spriteVersion} natural=${img.naturalWidth}x${img.naturalHeight} payloadVersion=${payload.spriteVersionNumber}`,
     )
-    switchAnimState(baseStateFromDevice(appStore.deviceState))
+    // 加载成功 / 切换宠物：招手一次
+    requestTransient('waving', { force: true })
     startAnimation()
   }
   catch {
@@ -380,22 +507,40 @@ function startAnimation(): void {
       // look 为静态格，不推进动画时间线
     }
     else {
+      const isTransient = transientAnim !== null && playback.state === transientAnim
       switchAnimState(playback.state)
       const clip = ANIM_CLIPS[activeState]
       frameElapsedMs += dt
 
       // 卡顿时最多追赶若干帧，避免一次跳完整圈
       let guard = 0
+      let transientDone = false
       while (guard < 8) {
         const frameDuration = clip.durations[currentFrame] ?? 150
         if (frameElapsedMs < frameDuration)
           break
         frameElapsedMs -= frameDuration
-        currentFrame = (currentFrame + 1) % clip.frames
+
+        if (isTransient) {
+          // one-shot：播到最后一帧结束后清空，不循环
+          if (currentFrame >= clip.frames - 1) {
+            transientDone = true
+            break
+          }
+          currentFrame += 1
+        }
+        else {
+          currentFrame = (currentFrame + 1) % clip.frames
+        }
         guard += 1
       }
 
-      drawCell(clip.row, currentFrame)
+      drawCell(clip.row, Math.min(currentFrame, clip.frames - 1))
+
+      if (transientDone) {
+        clearTransient()
+        // 下一拍回到 look / device / idle；本帧已画出末帧
+      }
     }
 
     animationId = requestAnimationFrame(animate)
@@ -427,7 +572,64 @@ async function handlePetChange(_petId: string): Promise<void> {
   lastDragDir = null
   dragDeltaX = 0
   isHovered = false
+  clearTransient()
   await loadSpritesheet()
+}
+
+/**
+ * speaking 结束 → review one-shot（冷却防刷）
+ */
+function maybeTriggerReview(from: DeviceState, to: DeviceState): void {
+  const finishedSpeaking
+    = from === 'speaking' && (to === 'listening' || to === 'idle')
+  if (!finishedSpeaking)
+    return
+
+  const now = Date.now()
+  if (now - lastReviewAt < REVIEW_COOLDOWN_MS)
+    return
+  if (isDragging)
+    return
+
+  if (requestTransient('review'))
+    lastReviewAt = now
+}
+
+/**
+ * 负面 emotion → failed one-shot
+ */
+function maybeTriggerFailed(emotion: string): void {
+  const key = emotion.trim().toLowerCase()
+  if (!FAILED_EMOTIONS.has(key))
+    return
+
+  const now = Date.now()
+  if (now - lastFailedAt < FAILED_COOLDOWN_MS)
+    return
+  if (isDragging)
+    return
+
+  if (requestTransient('failed'))
+    lastFailedAt = now
+}
+
+/**
+ * 久别 re-hover：≥30s 无 hover 后再次进入 canvas → waving
+ */
+function maybeWaveOnRehover(wasHovered: boolean, nowHovered: boolean): void {
+  if (wasHovered || !nowHovered)
+    return
+  if (!lastHoverLeftAt)
+    return
+  if (Date.now() - lastHoverLeftAt < WAVE_ON_REHOVER_IDLE_MS)
+    return
+  if (isDragging)
+    return
+  // look 优先；v2 有 look 时不抢招手
+  if (spriteVersion >= 2 && lookFrame !== null)
+    return
+
+  requestTransient('waving')
 }
 
 /**
@@ -467,6 +669,7 @@ function isPointerOnCanvas(e: MouseEvent): boolean {
  */
 function applyPointerHoverState(e: MouseEvent): void {
   const onCanvas = isPointerOnCanvas(e)
+  const wasHovered = isHovered
   isHovered = onCanvas
 
   if (onCanvas && spriteVersion >= 2) {
@@ -475,6 +678,8 @@ function applyPointerHoverState(e: MouseEvent): void {
   else {
     lookFrame = null
   }
+
+  maybeWaveOnRehover(wasHovered, onCanvas)
 
   // 只在精灵上吃点击；canvas 外保持穿透
   setPetsClickThrough(!onCanvas)
@@ -501,6 +706,8 @@ function handleMouseMove(e: MouseEvent): void {
 function handleMouseLeave(): void {
   if (isDragging)
     return
+  if (isHovered)
+    lastHoverLeftAt = Date.now()
   isHovered = false
   lookFrame = null
   setPetsClickThrough(true)
@@ -519,6 +726,8 @@ function handleMouseDown(e: MouseEvent): void {
   isDragging = true
   isHovered = true
   lookFrame = null
+  // 拖动优先：取消未完成的 one-shot，避免松手后半截 transient
+  clearTransient()
   dragDeltaX = 0
   lastDragDir = null
   lastDragScreenX = e.screenX
@@ -592,6 +801,24 @@ onMounted(async () => {
     applyDisplayWidth(width)
   })
 
+  prevDeviceState = appStore.deviceState
+  stopDeviceStateWatch = watch(
+    () => appStore.deviceState,
+    (next, prev) => {
+      const from = prev ?? prevDeviceState
+      prevDeviceState = next
+      maybeTriggerReview(from, next)
+    },
+  )
+
+  stopEmotionWatch = watch(
+    () => appStore.emotion,
+    (emotion) => {
+      if (emotion)
+        maybeTriggerFailed(emotion)
+    },
+  )
+
   setPetsClickThrough(true)
 
   try {
@@ -607,6 +834,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopAnimation()
+  clearTransient()
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousedown', handleMouseDown)
     containerRef.value.removeEventListener('mouseenter', handleMouseEnter)
@@ -622,6 +850,14 @@ onUnmounted(() => {
   if (removeDisplayWidthListener) {
     removeDisplayWidthListener()
     removeDisplayWidthListener = null
+  }
+  if (stopDeviceStateWatch) {
+    stopDeviceStateWatch()
+    stopDeviceStateWatch = null
+  }
+  if (stopEmotionWatch) {
+    stopEmotionWatch()
+    stopEmotionWatch = null
   }
 })
 </script>

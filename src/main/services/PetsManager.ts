@@ -22,6 +22,7 @@ import {
   PET_SPRITE_FRAME_H,
   PET_SPRITE_FRAME_W,
 } from '@shared/types'
+import { app } from 'electron'
 import fs from 'fs-extra'
 import sharp from 'sharp'
 import { getLogger } from '../utils/logger'
@@ -45,6 +46,22 @@ const PREVIEW_WIDTH = 96
 const PREVIEW_HEIGHT = 104
 
 const CODEX_DELETE_ERROR = 'Codex 来源宠物不可删除，请在本地导入副本或到 ~/.codex/pets 管理'
+
+/**
+ * 内置宠物种子完成标记（隐藏文件，位于 userData/pets/ 根下）。
+ *
+ * 为什么选标记文件而非 pets-config.json 字段：
+ * - pets-config.json 是 shared DTO，加字段要同步 shared 类型与读写，侵入面大；
+ * - 标记与 pets 目录本身绑定：用户切换 XIAOZHI_PETS_DIR / PATHS.petsDir 时新目录
+ *   自然无标记、重新种子，语义一致；
+ * - 安全：scanPetsFromDir 只读目录项（文件天然跳过）；deletePet 只删真实宠物子目录，
+ *   不会触碰该文件。
+ */
+const BUILTIN_SEEDED_MARKER = '.builtin-seeded'
+
+function getBuiltinSeededMarkerPath(): string {
+  return path.join(getPetsDir(), BUILTIN_SEEDED_MARKER)
+}
 
 type PetsConfig = PetsConfigFile
 
@@ -115,6 +132,101 @@ export function getCodexPetsDir(): string {
     ? codexHome
     : path.join(os.homedir(), '.codex')
   return path.join(root, 'pets')
+}
+
+/**
+ * 内置宠物源目录（只读，随应用分发）
+ * - 生产：{process.resourcesPath}/pets（extraResources，app.asar 外部）
+ * - 开发：out/main → 项目根 resources/pets
+ *
+ * 仅用于首次启动种子复制，不写入。
+ */
+export function getBundledPetsDir(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'pets')
+  }
+  return path.join(__dirname, '../../resources/pets')
+}
+
+/**
+ * 确保内置宠物（月薪喵/usagi/sensen）已种子到本地可写目录。
+ *
+ * 策略：
+ * 1. 只种子一次：首次完整成功后写标记文件 `userData/pets/.builtin-seeded`，
+ *    之后直接 no-op（用户删除的内置宠物保持删除，不复活）。
+ * 2. Codex 已有同 id 宠物（含 pet.json）则跳过，用户 Codex 版本优先。
+ * 3. 幂等：仅复制缺失目录（或缺失 pet.json 的残缺目录），
+ *    不覆盖已存在 pet.json 的用户版本（可导入/可删除的普通本地宠物）。
+ *
+ * 标记只在整轮成功（或全部跳过）后写入；中途异常不写，下次启动重试。
+ * @returns 本次复制的宠物数量
+ */
+export async function ensureBuiltinPetsCopied(): Promise<number> {
+  const petsDir = getPetsDir()
+  const markerPath = getBuiltinSeededMarkerPath()
+
+  // 已完成首次种子：直接跳过（含用户删除内置宠物后的场景）
+  if (await fs.pathExists(markerPath)) {
+    return 0
+  }
+
+  const bundledDir = getBundledPetsDir()
+  if (!(await fs.pathExists(bundledDir))) {
+    logger.warn(`内置宠物目录不存在: ${bundledDir}`)
+    return 0
+  }
+
+  const codexDir = getCodexPetsDir()
+  let copiedCount = 0
+  try {
+    const entries = await fs.readdir(bundledDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory())
+        continue
+
+      const petId = entry.name
+      const sourcePath = path.join(bundledDir, petId)
+      const targetPath = path.join(petsDir, petId)
+
+      // Codex 已有同 id 宠物（文件夹名或 pet.json.id 命中）：不复制，Codex 版本优先
+      if (await findPetDirInRoot(codexDir, petId)) {
+        logger.info(`Codex 已有同 id 宠物，跳过种子: ${petId}`)
+        continue
+      }
+
+      // 已有有效本地版本（含 pet.json）视为用户版本，不覆盖
+      if (await fs.pathExists(path.join(targetPath, 'pet.json'))) {
+        logger.info(`内置宠物已存在，跳过: ${petId}`)
+        continue
+      }
+
+      // 残缺目标目录（无 pet.json，非有效宠物）：清除后整体复制，避免残留
+      if (await fs.pathExists(targetPath)) {
+        logger.warn(`内置宠物目标目录不完整（缺 pet.json），重新复制: ${targetPath}`)
+        await fs.remove(targetPath)
+      }
+
+      await fs.copy(sourcePath, targetPath)
+      logger.info(`复制内置宠物: ${petId} → ${targetPath}`)
+      copiedCount++
+    }
+  }
+  catch (error) {
+    // 部分失败：不写标记，下次启动重试（幂等，已复制的不重复）
+    logger.error('复制内置宠物失败', error)
+    return copiedCount
+  }
+
+  // 整轮成功（含全部跳过）：写一次性标记；失败则下次启动重试（无害，幂等）
+  try {
+    await fs.writeFile(markerPath, new Date().toISOString())
+  }
+  catch (error) {
+    logger.error('写入内置宠物种子标记失败，下次启动将重试', error)
+  }
+
+  logger.info(`内置宠物种子完成，共复制 ${copiedCount} 个`)
+  return copiedCount
 }
 
 /**
@@ -398,6 +510,10 @@ export async function scanPets(): Promise<PetInfo[]> {
 
   try {
     await ensurePetsDir()
+
+    // 0) 内置宠物种子：有标记文件时为一次 pathExists 的廉价 no-op，
+    //    保证全新安装的 UI 首次列出前宠物已就位
+    await ensureBuiltinPetsCopied()
 
     // 1) 本地可写目录（优先）
     const localPets = await scanPetsFromDir(getPetsDir(), 'local')

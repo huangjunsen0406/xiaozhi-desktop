@@ -8,6 +8,7 @@ import {
 import { BrowserWindow, dialog, shell } from 'electron'
 import {
   deletePet,
+  ensureBuiltinPetsCopied,
   getCurrentPet,
   getDisplayWidth,
   getPetsFolderPath,
@@ -38,6 +39,11 @@ function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
  * 注册精灵宠物管理 IPC 处理器
  */
 export function registerPetsIpc(): void {
+  // 启动时种子内置宠物（幂等；scanPets 内兜底再执行一次）
+  ensureBuiltinPetsCopied().catch((error) => {
+    logger.error('种子内置宠物失败', error)
+  })
+
   createIpcHandler({
     channel: 'pets:get-list',
     handler: async () => {
