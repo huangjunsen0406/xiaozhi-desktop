@@ -72,9 +72,9 @@ async function handleImport() {
     const sourcePath = result.filePaths[0]
     importing.value = true
 
-    // 导入模型
+    // 导入模型（返回 stableId；列表 name 来自 meta.displayName）
     const modelId = await window.api.modelImport(sourcePath)
-    message.success(modelId ? `模型 "${modelId}" 导入成功` : '模型导入成功')
+    message.success(modelId ? `模型导入成功（${modelId}）` : '模型导入成功')
 
     // 刷新列表
     await loadModels()
