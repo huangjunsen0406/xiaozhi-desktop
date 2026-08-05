@@ -2,10 +2,10 @@
  * Chromium AEC 策略（应用内 / 系统级 / 关闭）
  *
  * - 应用内 app：ChromeWideEchoCancellation + gUM echoCancellation
- * - 系统级 system：另加 SystemLoopbackAsAecReference:forced_on
+ * - 系统级 system：另加 SystemLoopbackAsAecReference（旧参数，非 forced_on）
  * - 关闭 off：gUM 不请求 EC（feature 仍可带 ChromeWide 以减少重启）
  *
- * Feature flag 须在 app.ready 前 appendSwitch；mode 影响 forced_on 时需重启。
+ * Feature flag 须在 app.ready 前 appendSwitch；跨 system 依赖启动 flag，需重启。
  */
 
 import type { AecMode } from '@shared/types'
@@ -48,14 +48,15 @@ export function legacyEchoFlagFromAecMode(mode: AecMode): boolean {
  */
 export function featuresForAecMode(mode: AecMode): string {
   if (mode === 'system') {
-    return 'ChromeWideEchoCancellation,SystemLoopbackAsAecReference:forced_on/true'
+    // 与历史启动参数一致：仅 enable feature，不带 :forced_on/true
+    return 'ChromeWideEchoCancellation,SystemLoopbackAsAecReference'
   }
-  // off / app：带 ChromeWide，便于 off→app 热切 gUM；不 forced 系统参考
+  // off / app：带 ChromeWide，便于 off→app 热切 gUM；不启用系统 loopback 参考
   return 'ChromeWideEchoCancellation'
 }
 
 /**
- * 切换 mode 是否需要重启才能完整生效（system 的 forced_on 依赖启动 flag）
+ * 切换 mode 是否需要重启才能完整生效（system 的启动 feature 依赖 appendSwitch）
  */
 export function requiresRelaunchForAecMode(prev: AecMode, next: AecMode): boolean {
   const prevSystem = prev === 'system'

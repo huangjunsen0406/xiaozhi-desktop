@@ -5,7 +5,7 @@
  * L1 本地媒体：设备切换 / 采集重建（gUM 约束）
  * L2 AudioRuntime + OpusCodec.rebuild + 音频窗 reinitialize
  * L3 协议重连（hello audio_params / MCP 工具集）
- * L4 进程重启（AEC system forced_on 交叉）
+ * L4 进程重启（AEC system 启动 feature 交叉）
  *
  * 关键规则：
  * - 仅设备变更：L1 switchDevices，禁止协议重连
@@ -50,7 +50,7 @@ export interface AudioSettingsApplyPlan {
   needsCodecRebuild: boolean
   /** L3：协议重连（仅 codec 参数；MCP 另路径） */
   needsProtocolReconnect: boolean
-  /** L4：AEC system forced_on 交叉 */
+  /** L4：AEC system 启动 feature 交叉 */
   requiresRelaunch: boolean
 
   /** 后台音频窗应执行的命令（互斥，取最强） */

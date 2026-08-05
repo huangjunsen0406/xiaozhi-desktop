@@ -17,7 +17,7 @@ export type ValidSampleRate = 8000 | 12000 | 16000 | 24000 | 48000
  *
  * - off：不请求 gUM echoCancellation
  * - app：Chrome-wide 应用内参考（默认）
- * - system：尝试系统 loopback 参考（forced_on，可能需重启 + 系统音频权限）
+ * - system：尝试系统 loopback 参考（SystemLoopbackAsAecReference，可能需重启 + 系统音频权限）
  */
 export type AecMode = 'off' | 'app' | 'system'
 
