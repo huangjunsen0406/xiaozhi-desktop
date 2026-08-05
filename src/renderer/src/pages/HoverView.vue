@@ -23,7 +23,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="w-[260px] h-[150px] p-0 m-0 select-none hover-root" @mouseenter="handleEnter" @mouseleave="handleLeave">
+  <div class="w-[260px] h-[288px] p-0 m-0 select-none hover-root" @mouseenter="handleEnter" @mouseleave="handleLeave">
     <div
       class="h-full rounded-2xl bg-neutral-100/95 dark:bg-neutral-800/90 shadow-xl overflow-hidden transition-all duration-200 ease-out origin-left"
       :class="open ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-90'"

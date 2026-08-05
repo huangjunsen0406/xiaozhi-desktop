@@ -9,6 +9,7 @@ import './app/tools'
 import './camera/tools'
 import './screenshot/tools'
 import './theme/tools'
+import './displayMode/tools'
 import './system/tools'
 import './timer/tools'
 // 音乐工具通过 MusicToolsManager 单独注册，不走 defineTool

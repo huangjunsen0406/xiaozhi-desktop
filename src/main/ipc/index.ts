@@ -1,5 +1,5 @@
 import type { IpcContext } from '../types/ipc'
-import { BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
@@ -108,6 +108,11 @@ export function registerBasicIpcChannels(): void {
   // 设置窗口
   ipcMain.on('window:toggle-settings', () => {
     toggleSettings()
+  })
+
+  // 退出应用（Hover / 快捷菜单）
+  ipcMain.on('app:quit', () => {
+    app.quit()
   })
 
   // Live2D 窗口

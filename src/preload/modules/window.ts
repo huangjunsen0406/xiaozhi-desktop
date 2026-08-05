@@ -34,6 +34,9 @@ export const windowApi = {
   // 设置窗口
   toggleSettings: (): void => ipcRenderer.send('window:toggle-settings'),
 
+  // 退出应用
+  quitApp: (): void => ipcRenderer.send('app:quit'),
+
   /** 统一 click-through：target 为桌宠窗口类型 */
   setClickThrough: (target: 'live2d' | 'pets', ignore: boolean): void =>
     ipcRenderer.send('window:set-click-through', target, ignore),

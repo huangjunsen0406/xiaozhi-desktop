@@ -7,7 +7,7 @@ import { BrowserWindow } from 'electron'
  * 创建悬浮窗实例
  *
  * 配置说明：
- * - 尺寸：260x150 像素，固定大小不可调整
+ * - 尺寸：260x288 像素，固定大小不可调整（4 项 × h-18）
  * - 外观：无边框、透明背景、带阴影
  * - 行为：始终置顶、所有工作区可见、不出现在任务栏和调度中心
  * - 平台：macOS 使用 panel 类型，其他平台使用默认类型
@@ -18,7 +18,7 @@ import { BrowserWindow } from 'electron'
 export function buildHoverWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 260,
-    height: 150,
+    height: 288,
     show: false, // 初始隐藏
     frame: false, // 无边框
     transparent: true, // 透明窗口
