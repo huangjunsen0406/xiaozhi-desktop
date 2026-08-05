@@ -98,6 +98,8 @@ export interface RendererApi {
   onDisplayModeChanged: (callback: (mode: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') => void) => () => void
   showActivation: () => void
   toggleSettings: () => void
+  /** 退出应用 */
+  quitApp: () => void
   /** 桌宠窗点击穿透（live2d | pets） */
   setClickThrough: (target: 'live2d' | 'pets', ignore: boolean) => void
   dragStart: () => void

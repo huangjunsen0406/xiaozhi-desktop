@@ -14,6 +14,8 @@ export const BUILTIN_TOOL_LABELS: Record<string, string> = {
   'self.screenshot.take': '截图',
   'self.ui.set_theme': '设置主题',
   'self.ui.get_theme': '获取主题',
+  'self.ui.set_display_mode': '设置显示模式',
+  'self.ui.get_display_mode': '获取显示模式',
   'self.system.get_info': '系统信息',
   'self.timer.start_countdown': '开始倒计时',
   'self.timer.cancel_countdown': '取消倒计时',

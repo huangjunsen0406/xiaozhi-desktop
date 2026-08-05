@@ -18,6 +18,7 @@ const api = {
   onDisplayModeChanged: windowApi.onDisplayModeChanged,
   showActivation: windowApi.showActivation,
   toggleSettings: windowApi.toggleSettings,
+  quitApp: windowApi.quitApp,
   setClickThrough: windowApi.setClickThrough,
   dragStart: windowApi.dragStart,
   dragMove: windowApi.dragMove,

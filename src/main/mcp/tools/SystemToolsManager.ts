@@ -104,6 +104,8 @@ export class SystemToolsManager {
       'self.screenshot.take',
       'self.ui.set_theme',
       'self.ui.get_theme',
+      'self.ui.set_display_mode',
+      'self.ui.get_display_mode',
       'self.system.get_info',
       'self.timer.start_countdown',
       'self.timer.cancel_countdown',
