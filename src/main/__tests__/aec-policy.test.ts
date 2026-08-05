@@ -19,7 +19,7 @@ describe('AecPolicy', () => {
     )
     assert.equal(
       featuresForAecMode('system'),
-      'ChromeWideEchoCancellation,SystemLoopbackAsAecReference:forced_on/true',
+      'ChromeWideEchoCancellation,SystemLoopbackAsAecReference',
     )
   })
 

@@ -273,7 +273,7 @@ export function registerAudioIpc(): void {
       }
 
       if (plan.requiresRelaunch) {
-        logger.info('AEC system forced_on 交叉，需重启应用完整生效')
+        logger.info('AEC system 启动 feature 交叉，需重启应用完整生效')
       }
 
       const result: AudioUpdateSettingsResult = {
