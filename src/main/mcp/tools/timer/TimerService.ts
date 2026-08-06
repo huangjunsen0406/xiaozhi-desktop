@@ -3,6 +3,7 @@
  * 管理倒计时任务的创建、执行、取消和状态查询
  */
 
+import type { McpTool } from '../../types'
 import type {
   CancelCountdownResult,
   GetActiveTimersResult,
@@ -161,8 +162,9 @@ export class TimerService {
     }
 
     // 验证命令格式
+    let parsed: MCPCommand
     try {
-      const parsed = JSON.parse(command) as MCPCommand
+      parsed = JSON.parse(command) as MCPCommand
       if (!parsed.name || !parsed.arguments) {
         throw new Error('Command must have "name" and "arguments" fields')
       }
@@ -170,6 +172,13 @@ export class TimerService {
     catch (error) {
       const message = `Invalid command format: ${error instanceof Error ? error.message : 'Unknown error'}`
       logger.error(`${message}`)
+      return { success: false, message }
+    }
+
+    // 验证目标工具存在（兼容服务端 __ / . 两种命名写法），尽早失败以便 LLM 立即重试
+    if (!this.findTool(parsed.name)) {
+      const message = `MCP tool not found: ${parsed.name}`
+      logger.error(message)
       return { success: false, message }
     }
 
@@ -252,6 +261,32 @@ export class TimerService {
   }
 
   /**
+   * 按名称查找 MCP 工具
+   *
+   * 小智服务端生成嵌套工具名时会把点号改写为双下划线（self.music.play →
+   * self__music__play），这里按原名查找失败后依次尝试归一化写法，避免
+   * 倒计时执行时因命名差异而找不到工具。
+   */
+  private findTool(name: string): McpTool | undefined {
+    const mcpContext = getMcpContext()
+
+    const candidates = [name]
+    if (name.includes('__')) {
+      candidates.push(name.replaceAll('__', '.'))
+    }
+    if (name.includes('.')) {
+      candidates.push(name.replaceAll('.', '__'))
+    }
+
+    for (const candidate of new Set(candidates)) {
+      const tool = mcpContext.findTool(candidate)
+      if (tool)
+        return tool
+    }
+    return undefined
+  }
+
+  /**
    * 执行倒计时结束后的命令
    */
   private async executeCommand(task: TimerTask): Promise<void> {
@@ -261,11 +296,8 @@ export class TimerService {
       // 解析 MCP 工具调用命令
       const commandObj = JSON.parse(task.command) as MCPCommand
 
-      // 获取 McpContext 并执行工具
-      const mcpContext = getMcpContext()
-
-      // 查找工具
-      const tool = mcpContext.findTool(commandObj.name)
+      // 查找工具（兼容 __ / . 命名写法）
+      const tool = this.findTool(commandObj.name)
 
       if (!tool) {
         throw new Error(`MCP tool not found: ${commandObj.name}`)
