@@ -306,9 +306,9 @@ defineExpose({
 </script>
 
 <template>
-  <div>
-    <!-- 顶栏：导入 / 打开目录 / 刷新 -->
-    <div class="flex items-center gap-2 mb-4 flex-wrap">
+  <div class="mcp-tools-settings min-h-0">
+    <!-- 顶栏：导入 / 打开目录 / 刷新（改回修改前布局） -->
+    <div class="toolbar mb-4">
       <NButton type="primary" size="small" :loading="importing" @click="handleImport">
         <template #icon>
           <IconCarbonAdd class="w-4 h-4" />
@@ -329,15 +329,13 @@ defineExpose({
       </NButton>
     </div>
 
-    <!-- 外挂 Host：应用内媒体播放 SDK -->
-    <div
-      class="mb-4 flex items-start justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2.5"
-    >
-      <div class="min-w-0 flex-1">
-        <div class="text-sm font-medium text-gray-800 dark:text-gray-100">
+    <!-- 外挂 Host：应用内媒体播放（改回卡片样式） -->
+    <div class="media-card mb-4">
+      <div class="media-card-text min-w-0 flex-1">
+        <div class="media-card-title">
           允许外挂使用应用内播放
         </div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+        <div class="media-card-desc">
           开启后，可信 in-process 插件可通过 host.get('media_player') 播放 URL（与内置音乐同一通路）。仅安装可信插件。
         </div>
       </div>
@@ -345,31 +343,30 @@ defineExpose({
         :value="mediaPlayerAllowed"
         :loading="mediaPlayerSaving"
         size="small"
-        class="shrink-0 mt-0.5"
+        class="shrink-0"
         @update:value="handleMediaPlayerAllow"
       />
     </div>
 
+    <div class="section-title subsection">
+      工具列表
+    </div>
+
     <NSpin :show="loading">
-      <div v-if="groups.length > 0" class="flex flex-col gap-4">
+      <div v-if="groups.length > 0" class="group-list">
         <div
           v-for="group in groups"
           :key="group.key"
-          class="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+          class="tool-group"
         >
-          <!-- 分组头：名称 + 计数；右侧 Switch 总闸 + 外挂删除 -->
-          <div
-            class="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700"
-          >
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
-                {{ group.name }}
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+          <div class="group-header">
+            <div class="group-title min-w-0">
+              <span class="group-name truncate">{{ group.name }}</span>
+              <span class="group-count">
                 {{ groupStats(group).on }}/{{ groupStats(group).total }}
               </span>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
+            <div class="group-actions shrink-0">
               <NSwitch
                 :value="isGroupAllEnabled(group)"
                 size="small"
@@ -383,9 +380,9 @@ defineExpose({
               >
                 <template #trigger>
                   <NButton
-                    quaternary
-                    size="tiny"
+                    text
                     type="error"
+                    size="tiny"
                     :loading="deletingPluginId === groupPluginId(group)"
                   >
                     <template #icon>
@@ -399,27 +396,21 @@ defineExpose({
             </div>
           </div>
 
-          <!-- 工具行：文案在左，勾选在右（与组头 Switch 同侧对齐） -->
-          <div class="divide-y divide-gray-100 dark:divide-gray-800">
+          <div class="tool-rows">
             <div
               v-for="tool in group.tools"
               :key="tool.name"
-              class="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-gray-50/80 dark:hover:bg-gray-800/40 cursor-pointer"
+              class="tool-row"
               @click="setToolEnabled(tool.name, !isEnabled(tool.name))"
             >
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm text-gray-900 dark:text-gray-100 truncate">
-                    {{ tool.label }}
-                  </span>
-                  <span
-                    v-if="tool.source === 'plugin'"
-                    class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300 shrink-0"
-                  >
+              <div class="tool-meta min-w-0 flex-1">
+                <div class="tool-label-line">
+                  <span class="tool-label truncate">{{ tool.label }}</span>
+                  <span v-if="tool.source === 'plugin'" class="tag-plugin">
                     外挂
                   </span>
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate mt-0.5">
+                <div class="tool-id truncate">
                   {{ tool.name }}
                 </div>
               </div>
@@ -437,17 +428,193 @@ defineExpose({
       <NEmpty
         v-else-if="!loading"
         description="暂无 MCP 工具"
-        class="mt-8"
+        class="mt-6"
       >
         <template #extra>
-          <div class="text-sm text-gray-500 dark:text-gray-400 text-center max-w-sm mx-auto">
+          <div class="empty-hint">
             <p>内置工具将在应用启动后出现在此列表。</p>
-            <p class="mt-1">
-              也可通过「导入插件」加载外挂（需含 manifest.json）。
-            </p>
+            <p>也可通过「导入插件」加载外挂（需含 manifest.json）。</p>
           </div>
         </template>
       </NEmpty>
     </NSpin>
   </div>
 </template>
+
+<style scoped>
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.media-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+}
+
+:global(.dark) .media-card {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.media-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: inherit;
+  line-height: 1.4;
+}
+
+.media-card-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #999;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.section-title.subsection {
+  margin-top: 4px;
+  margin-bottom: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+:global(.dark) .section-title {
+  color: #aaa;
+}
+
+:global(.dark) .section-title.subsection {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tool-group {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 4px;
+}
+
+.tool-group:last-child {
+  border-bottom: none;
+}
+
+:global(.dark) .tool-group {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.group-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: inherit;
+}
+
+.group-count {
+  font-size: 12px;
+  color: #999;
+}
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+}
+
+:global(.dark) .tool-row {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.tool-row:hover {
+  /* 轻微 hover，与表单页一致 */
+  opacity: 0.92;
+}
+
+.tool-label-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-label {
+  font-size: 14px;
+  color: inherit;
+}
+
+.tool-id {
+  margin-top: 2px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #999;
+}
+
+.tag-plugin {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: #2080f0;
+  background: rgba(32, 128, 240, 0.08);
+}
+
+:global(.dark) .tag-plugin {
+  background: rgba(32, 128, 240, 0.18);
+}
+
+.empty-hint {
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #999;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.empty-hint p {
+  margin: 0 0 4px;
+}
+</style>
