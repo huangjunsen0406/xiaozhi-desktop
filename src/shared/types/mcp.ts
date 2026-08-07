@@ -33,3 +33,13 @@ export interface McpPluginImportResult {
   pluginId: string
   name: string
 }
+
+/** 外挂插件加载配置（设置页 / Host 白名单） */
+export interface McpPluginsHostConfig {
+  enabled: boolean
+  disabledIds: string[]
+  enabledIds: string[]
+  /** host.get 白名单：logger / config_readonly / media_player / music_player */
+  allowHostGet: string[]
+  enforcePrefix: boolean
+}

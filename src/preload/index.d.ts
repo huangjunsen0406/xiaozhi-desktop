@@ -26,6 +26,7 @@ import type {
   HoverAnchor,
   ImageCapturedEvent,
   McpPluginImportResult,
+  McpPluginsHostConfig,
   McpToolCatalogItem,
   McpToolsSaveResult,
   ModelInfo,
@@ -74,6 +75,7 @@ export type {
   HoverAnchor,
   ImageCapturedEvent,
   McpPluginImportResult,
+  McpPluginsHostConfig,
   McpToolCatalogItem,
   McpToolsSaveResult,
   ModelInfo,
@@ -268,6 +270,10 @@ export interface RendererApi {
   mcpToolsRefresh: () => Promise<McpToolCatalogItem[]>
   /** 删除已导入外挂，返回最新 catalog */
   mcpToolsDeletePlugin: (pluginId: string) => Promise<McpToolCatalogItem[]>
+  mcpToolsGetPluginsConfig: () => Promise<McpPluginsHostConfig>
+  mcpToolsSetPluginsConfig: (
+    partial: Partial<McpPluginsHostConfig>,
+  ) => Promise<McpPluginsHostConfig>
 
   // 剪贴板 API
   clipboardWriteText: (text: string) => Promise<void>

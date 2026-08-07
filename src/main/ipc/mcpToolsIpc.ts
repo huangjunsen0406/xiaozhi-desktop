@@ -7,7 +7,12 @@
  * - 保存 DISABLED + reconnectKeepingIdle
  */
 
-import type { McpPluginImportResult, McpToolCatalogItem, McpToolsSaveResult } from '@shared/types'
+import type {
+  McpPluginImportResult,
+  McpPluginsHostConfig,
+  McpToolCatalogItem,
+  McpToolsSaveResult,
+} from '@shared/types'
 import path from 'node:path'
 import { dialog, shell } from 'electron'
 import fs from 'fs-extra'
@@ -217,6 +222,85 @@ export function registerMcpToolsIpc(): void {
     channel: 'mcp-tools:get-folder-path',
     handler: async () => {
       return success(getMcpPluginsDir())
+    },
+  })
+
+  /**
+   * 读取外挂 Host 配置（含 allowHostGet）
+   */
+  createIpcHandler({
+    channel: 'mcp-tools:get-plugins-config',
+    handler: async () => {
+      const cfg = getDatabase().getMcpPluginsConfig()
+      const data: McpPluginsHostConfig = {
+        enabled: cfg.enabled,
+        disabledIds: cfg.disabledIds,
+        enabledIds: cfg.enabledIds,
+        allowHostGet: cfg.allowHostGet,
+        enforcePrefix: cfg.enforcePrefix,
+      }
+      return success(data)
+    },
+  })
+
+  /**
+   * 更新外挂 Host 配置；可选重载外挂使 media_player 等立即生效
+   */
+  createIpcHandler({
+    channel: 'mcp-tools:set-plugins-config',
+    schema: {
+      partial: { type: 'object', required: true },
+    },
+    handler: async (_event, partialUnknown: unknown) => {
+      const partial = partialUnknown as Partial<McpPluginsHostConfig>
+      if (!partial || typeof partial !== 'object') {
+        return failure('无效的配置')
+      }
+
+      const ALLOWED_HOST_GET = new Set([
+        'logger',
+        'config_readonly',
+        'media_player',
+        'music_player',
+      ])
+
+      const toSave: Parameters<ReturnType<typeof getDatabase>['setMcpPluginsConfig']>[0] = {}
+      if (typeof partial.enabled === 'boolean')
+        toSave.enabled = partial.enabled
+      if (Array.isArray(partial.disabledIds))
+        toSave.disabledIds = partial.disabledIds.filter(x => typeof x === 'string')
+      if (Array.isArray(partial.enabledIds))
+        toSave.enabledIds = partial.enabledIds.filter(x => typeof x === 'string')
+      if (typeof partial.enforcePrefix === 'boolean')
+        toSave.enforcePrefix = partial.enforcePrefix
+      if (Array.isArray(partial.allowHostGet)) {
+        const filtered = partial.allowHostGet.filter(
+          (x): x is string => typeof x === 'string' && ALLOWED_HOST_GET.has(x),
+        )
+        // 始终保留基础能力
+        const set = new Set(filtered)
+        set.add('logger')
+        set.add('config_readonly')
+        toSave.allowHostGet = Array.from(set)
+      }
+
+      getDatabase().setMcpPluginsConfig(toSave)
+
+      // 重载外挂使 allowHostGet / capabilities 立即生效
+      const server = getMcpServerOrThrow()
+      await server.reloadExternalPlugins()
+      const cfg = getDatabase().getMcpPluginsConfig()
+      const data: McpPluginsHostConfig = {
+        enabled: cfg.enabled,
+        disabledIds: cfg.disabledIds,
+        enabledIds: cfg.enabledIds,
+        allowHostGet: cfg.allowHostGet,
+        enforcePrefix: cfg.enforcePrefix,
+      }
+      logger.info('MCP 外挂 Host 配置已更新并重载', {
+        allowHostGet: data.allowHostGet,
+      })
+      return success(data)
     },
   })
 

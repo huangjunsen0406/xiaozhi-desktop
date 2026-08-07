@@ -4,6 +4,7 @@
 import type {
   FileDialogResult,
   McpPluginImportResult,
+  McpPluginsHostConfig,
   McpToolCatalogItem,
   McpToolsSaveResult,
 } from '@shared/types'
@@ -64,5 +65,22 @@ export const mcpToolsApi = {
     const result: unknown = await ipcRenderer.invoke('mcp-tools:delete-plugin', pluginId)
     const data = unwrapIpcResult<{ catalog: McpToolCatalogItem[] }>(result, '删除 MCP 插件失败')
     return data.catalog
+  },
+
+  /** 读取外挂 Host 配置（allowHostGet 等） */
+  getPluginsConfig: async (): Promise<McpPluginsHostConfig> => {
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:get-plugins-config')
+    return unwrapIpcResult<McpPluginsHostConfig>(result, '获取外挂配置失败')
+  },
+
+  /**
+   * 更新外挂 Host 配置并重载外挂。
+   * 例如开放应用内播放：allowHostGet 含 media_player。
+   */
+  setPluginsConfig: async (
+    partial: Partial<McpPluginsHostConfig>,
+  ): Promise<McpPluginsHostConfig> => {
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:set-plugins-config', partial)
+    return unwrapIpcResult<McpPluginsHostConfig>(result, '保存外挂配置失败')
   },
 }

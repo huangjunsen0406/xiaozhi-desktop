@@ -41,8 +41,49 @@ export interface LoadedMcpPlugin {
   toolNamePrefix?: string
 }
 
-/** host.get 白名单键 */
-export type McpHostGetKey = 'logger' | 'config_readonly'
+/**
+ * host.get 白名单键
+ * - logger / config_readonly：默认开放
+ * - media_player：应用内媒体播放 SDK（需配置显式加入；与 py 的 music_player 角色对齐）
+ * - music_player：media_player 别名（跨端插件兼容）
+ */
+export type McpHostGetKey = 'logger' | 'config_readonly' | 'media_player' | 'music_player'
+
+/** 媒体播放 SDK 操作结果 */
+export interface MediaPlayerResult {
+  success: boolean
+  message?: string
+}
+
+/** 媒体播放 SDK 状态（瘦视图，不含搜歌等） */
+export interface MediaPlayerStatus {
+  state: 'idle' | 'loading' | 'playing' | 'paused' | 'stopped' | 'error'
+  url?: string | null
+  title?: string | null
+  currentTime?: number
+  duration?: number
+  volume?: number
+  error?: string
+}
+
+export interface MediaPlayerPlayOptions {
+  title?: string
+  /** 起始位置（秒） */
+  startPosition?: number
+}
+
+/**
+ * 外挂可用的应用内媒体播放 SDK（Host capability）
+ * 实现复用主进程 MusicPlayer → 后台窗 HTMLAudio，不暴露搜歌/内部 IPC。
+ */
+export interface MediaPlayerFacade {
+  playUrl: (url: string, opts?: MediaPlayerPlayOptions) => Promise<MediaPlayerResult>
+  pause: () => Promise<MediaPlayerResult>
+  resume: () => Promise<MediaPlayerResult>
+  stop: () => Promise<MediaPlayerResult>
+  seek: (positionSec: number) => Promise<MediaPlayerResult>
+  getStatus: () => Promise<MediaPlayerStatus>
+}
 
 /** 插件侧可传入的简化属性定义 */
 export interface PropDef {

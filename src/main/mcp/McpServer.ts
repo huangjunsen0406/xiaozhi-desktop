@@ -17,6 +17,7 @@ import { getLogger } from '../utils/logger'
 import { getMcpPluginsDir, isPathInside } from '../utils/paths'
 import { resetMcpContext, setMcpContext, setMcpToolRuntime } from './McpContext'
 import {
+  createMediaPlayerFacade,
   deriveCatalogGroupKey,
   getGroupLabel,
   getToolLabel,
@@ -364,6 +365,12 @@ export class McpServer {
    */
   async loadExternalPlugins(): Promise<void> {
     try {
+      const VALID_HOST_GET = new Set<McpHostGetKey>([
+        'logger',
+        'config_readonly',
+        'media_player',
+        'music_player',
+      ])
       let pluginsConfig = {
         enabled: true,
         disabledIds: [] as string[],
@@ -378,7 +385,7 @@ export class McpServer {
           disabledIds: dbCfg.disabledIds,
           enabledIds: dbCfg.enabledIds,
           allowHostGet: dbCfg.allowHostGet.filter(
-            (k): k is McpHostGetKey => k === 'logger' || k === 'config_readonly',
+            (k): k is McpHostGetKey => VALID_HOST_GET.has(k as McpHostGetKey),
           ),
           enforcePrefix: dbCfg.enforcePrefix,
         }
@@ -387,11 +394,24 @@ export class McpServer {
         logger.warn('读取外挂插件配置失败，使用默认', error)
       }
 
+      // 应用内媒体 SDK：有 MusicPlayer 时注入；是否对插件可见仍看 allowHostGet
+      const capabilities: Record<string, unknown> = {}
+      if (this.musicPlayer) {
+        const facade = createMediaPlayerFacade(this.musicPlayer)
+        capabilities.media_player = facade
+        // 与 py-xiaozhi 的 music_player 键对齐，便于跨端插件
+        capabilities.music_player = facade
+      }
+      else {
+        logger.debug('MusicPlayer 未注入，外挂 media_player 能力不可用')
+      }
+
       const result = await loadMcpPluginsFromConfig({
         registry: this.pluginRegistry,
         addTool: tool => this.addTool(tool),
         removeToolsByNames: names => this.removeToolsByNames(names),
         config: pluginsConfig,
+        capabilities,
       })
 
       if (result.errors.length > 0) {

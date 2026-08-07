@@ -19,6 +19,9 @@ const savedDisabled = ref<Set<string>>(new Set())
 const loading = ref(false)
 const importing = ref(false)
 const refreshing = ref(false)
+/** 外挂是否可使用应用内媒体播放 SDK */
+const mediaPlayerAllowed = ref(false)
+const mediaPlayerSaving = ref(false)
 
 interface ToolGroup {
   /** 稳定 key（pluginId 或 builtin domain） */
@@ -96,12 +99,66 @@ async function loadCatalog() {
       items = await window.api.mcpToolsGetCatalog()
     }
     applyCatalog(items)
+
+    try {
+      const cfg = await window.api.mcpToolsGetPluginsConfig()
+      mediaPlayerAllowed.value = cfg.allowHostGet.includes('media_player')
+        || cfg.allowHostGet.includes('music_player')
+    }
+    catch (cfgErr) {
+      console.warn('读取外挂 Host 配置失败', cfgErr)
+    }
   }
   catch (error) {
     message.error(error instanceof Error ? error.message : '加载 MCP 工具失败')
   }
   finally {
     loading.value = false
+  }
+}
+
+/**
+ * 开关：允许外挂使用应用内媒体播放（host.get('media_player')）
+ */
+async function handleMediaPlayerAllow(enabled: boolean) {
+  mediaPlayerSaving.value = true
+  try {
+    const cfg = await window.api.mcpToolsGetPluginsConfig()
+    const set = new Set(cfg.allowHostGet.filter(k => k !== 'media_player' && k !== 'music_player'))
+    set.add('logger')
+    set.add('config_readonly')
+    if (enabled) {
+      set.add('media_player')
+      set.add('music_player')
+    }
+    const next = await window.api.mcpToolsSetPluginsConfig({
+      allowHostGet: Array.from(set),
+    })
+    mediaPlayerAllowed.value = next.allowHostGet.includes('media_player')
+      || next.allowHostGet.includes('music_player')
+    // 重载后刷新 catalog（新工具可能出现）
+    const items = await window.api.mcpToolsGetCatalog()
+    const prev = { ...localEnabled.value }
+    applyCatalog(items)
+    const merged = { ...localEnabled.value }
+    for (const [k, v] of Object.entries(prev)) {
+      if (k in merged)
+        merged[k] = v
+    }
+    localEnabled.value = merged
+    message.success(
+      enabled
+        ? '已允许外挂使用应用内播放（media_player）'
+        : '已关闭外挂应用内播放权限',
+    )
+  }
+  catch (error) {
+    message.error(error instanceof Error ? error.message : '保存失败')
+    // 回滚 UI
+    mediaPlayerAllowed.value = !enabled
+  }
+  finally {
+    mediaPlayerSaving.value = false
   }
 }
 
@@ -270,6 +327,27 @@ defineExpose({
         </template>
         刷新
       </NButton>
+    </div>
+
+    <!-- 外挂 Host：应用内媒体播放 SDK -->
+    <div
+      class="mb-4 flex items-start justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2.5"
+    >
+      <div class="min-w-0 flex-1">
+        <div class="text-sm font-medium text-gray-800 dark:text-gray-100">
+          允许外挂使用应用内播放
+        </div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+          开启后，可信 in-process 插件可通过 host.get('media_player') 播放 URL（与内置音乐同一通路）。仅安装可信插件。
+        </div>
+      </div>
+      <NSwitch
+        :value="mediaPlayerAllowed"
+        :loading="mediaPlayerSaving"
+        size="small"
+        class="shrink-0 mt-0.5"
+        @update:value="handleMediaPlayerAllow"
+      />
     </div>
 
     <NSpin :show="loading">
