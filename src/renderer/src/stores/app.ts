@@ -329,11 +329,15 @@ export const useAppStore = defineStore('app', () => {
     if (message.type === 'llm' && message.emotion) {
       emotion.value = message.emotion
     }
-    if (message.type === 'tts' && message.state === 'stop') {
+    if (message.type === 'stt' && message.text) {
+      // STT 消息显示用户说的话
+      currentText.value = message.text
+    }
+    else if (message.type === 'tts' && message.state === 'stop') {
       currentText.value = ''
     }
     else if (message.type === 'tts' && message.text) {
-      // TTS 消息显示用户说的话
+      // TTS 消息显示助手回复
       currentText.value = message.text
     }
   }
