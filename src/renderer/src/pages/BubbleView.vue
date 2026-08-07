@@ -257,7 +257,11 @@ function handleStateChanged(state: AppStateSnapshot): void {
  * 处理服务器消息（获取 AI 回复文字）
  */
 function handleServerMessage(message: ServerMessage): void {
-  if (message.type === 'tts' && message.state === 'sentence_start' && message.text) {
+  if (message.type === 'stt' && message.text) {
+    // 用户语音识别结果也展示在气泡里
+    showBubble(message.text, 5000, 'session')
+  }
+  else if (message.type === 'tts' && message.state === 'sentence_start' && message.text) {
     showBubble(message.text, 5000, 'session')
   }
   else if (message.type === 'llm' && message.text) {
