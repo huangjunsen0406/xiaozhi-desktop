@@ -128,5 +128,9 @@ jobs:
           files: |
             release/*.exe
             release/*.dmg
+            release/*.zip
             release/*.AppImage
             release/*.deb
+            release/*.yml
+            release/*.blockmap
+            release/*.pacman

@@ -113,10 +113,13 @@ deb:
   artifactName: ${name}-${version}-${arch}.${ext}
 # 使用预编译的平台特定包（sherpa-onnx-darwin-*, sherpa-onnx-win-*），无需重新编译
 npmRebuild: false
-# 自动更新配置（如果需要）
-# publish:
-#   provider: generic
-#   url: https://your-update-server.com/releases
+# 应用内更新：产物与 latest*.yml 发到公仓 Release（与 .github/workflows/release.yml 一致）
+# 本地 build:* 仍用 --publish=never，只生成 yml 不上传
+publish:
+  provider: github
+  owner: huangjunsen0406
+  repo: xiaozhi-desktop-release
+  releaseType: release
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 # 压缩选项（可选，减小包体积）

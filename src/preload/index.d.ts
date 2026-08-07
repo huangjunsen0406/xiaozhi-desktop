@@ -39,6 +39,10 @@ import type {
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
+  UpdateCheckResult,
+  UpdateDownloadProgress,
+  UpdatePrefs,
+  UpdateStatusSnapshot,
   WakeWordConfig,
 } from '@shared/types'
 
@@ -88,6 +92,10 @@ export type {
   ServerMessage,
   ShortcutConfig,
   SystemConfig,
+  UpdateCheckResult,
+  UpdateDownloadProgress,
+  UpdatePrefs,
+  UpdateStatusSnapshot,
   WakeWordConfig,
 }
 
@@ -274,6 +282,23 @@ export interface RendererApi {
   mcpToolsSetPluginsConfig: (
     partial: Partial<McpPluginsHostConfig>,
   ) => Promise<McpPluginsHostConfig>
+
+  // 应用内更新
+  updateGetStatus: () => Promise<UpdateStatusSnapshot>
+  updateGetPrefs: () => Promise<UpdatePrefs>
+  updateSetAutoCheck: (enabled: boolean) => Promise<UpdatePrefs>
+  updateCheck: () => Promise<UpdateCheckResult>
+  updateDownload: () => Promise<void>
+  updateQuitAndInstall: () => Promise<void>
+  updateCheckDownloadInstall: () => Promise<void>
+  updateSkipVersion: (version: string) => Promise<UpdatePrefs>
+  updateOpenReleases: () => Promise<void>
+  updateOpenRepo: () => Promise<void>
+  updateOnAvailable: (cb: (info: UpdateCheckResult) => void) => () => void
+  updateOnNotAvailable: (cb: (info: UpdateCheckResult) => void) => () => void
+  updateOnDownloadProgress: (cb: (p: UpdateDownloadProgress) => void) => () => void
+  updateOnDownloaded: (cb: (info: { version: string, currentVersion: string }) => void) => () => void
+  updateOnError: (cb: (payload: { message: string }) => void) => () => void
 
   // 剪贴板 API
   clipboardWriteText: (text: string) => Promise<void>

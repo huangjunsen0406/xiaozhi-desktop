@@ -156,6 +156,11 @@ onMounted(async () => {
       }
     })
 
+    // 应用内更新：主进程静默检查发现新版本时打日志（完整操作在 系统选项）
+    const removeUpdateAvailable = window.api.updateOnAvailable?.((info) => {
+      console.log('[update] 发现新版本', info.version)
+    })
+
     // 保存清理函数
     onUnmounted(() => {
       removeStateListener()
@@ -165,6 +170,7 @@ onMounted(async () => {
       removeMessageAddedListener()
       removeMessagesBatchAddedListener()
       removeSessionCreatedListener()
+      removeUpdateAvailable?.()
     })
   }
   catch (error) {
