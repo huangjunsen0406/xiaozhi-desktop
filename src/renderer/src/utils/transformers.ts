@@ -5,22 +5,24 @@
 
 import type { ChatMessage as IpcChatMessage, ChatSession as IpcChatSession } from '@shared/types'
 import type { ChatMessage as ChatMessageType, ChatSession } from '../types/chat'
+import { formatSessionListTitle } from './dateUtils'
 
 /**
  * 将 IPC ChatSession 转换为前端 ChatSession
- * @param session IPC 会话数据
- * @param isActive 是否为当前活动会话
- * @returns 前端会话对象
+ * 列表优先展示首条消息摘要（preview），标题回退 formatSessionListTitle
  */
 export function mapIpcSessionToChatSession(
   session: IpcChatSession,
   isActive: boolean,
 ): ChatSession {
+  const preview = session.preview?.replace(/\s+/g, ' ').trim() || null
+  const title = formatSessionListTitle(session.title, session.started_at, session.session_id)
   return {
     id: session.id,
     sessionId: session.session_id,
-    title: session.title || '新对话',
-    preview: session.preview ?? null,
+    // 侧栏：有首条消息摘要用 preview；否则 title（新会话为「新对话」）
+    title,
+    preview: preview || title,
     active: isActive,
     messageCount: session.message_count,
     lastMessageAt: session.last_message_at ?? session.started_at,
@@ -29,8 +31,6 @@ export function mapIpcSessionToChatSession(
 
 /**
  * 将 IPC ChatMessage 转换为前端 ChatMessage
- * @param msg IPC 消息数据
- * @returns 前端消息对象
  */
 export function mapIpcMessageToChatMessage(msg: IpcChatMessage): ChatMessageType {
   return {

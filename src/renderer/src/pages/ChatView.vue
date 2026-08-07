@@ -30,7 +30,8 @@ const messageKeys = computed(() =>
 const sessionsWithDeleteStatus = computed(() =>
   appStore.sessions.map(item => ({
     ...item,
-    canDelete: !(appStore.isCurrentSessionToday && item.sessionId === appStore.currentSessionId),
+    // 按 session 管理后均可删除（含当前）
+    canDelete: true,
   })),
 )
 
@@ -71,19 +72,15 @@ onMounted(async () => {
   // 确保有当前会话
   if (!appStore.currentSessionId) {
     if (appStore.sessions.length > 0) {
-      // 如果没有当前会话但有会话列表，切换到第一个
       console.log('切换到第一个会话:', appStore.sessions[0].sessionId)
       await switchSession(appStore.sessions[0].sessionId)
     }
     else {
-      // 如果没有任何会话，创建今天的会话
-      const sessionId = await appStore.getTodaySession()
-      console.log('创建今天的会话:', sessionId)
-      appStore.currentSessionId = sessionId
+      // 无历史：不预创建日会话，等服务端 session / 首条消息
+      console.log('暂无会话，等待服务端 session_id')
     }
   }
   else {
-    // 如果已经有当前会话，直接使用全局共享的 messages，不重新加载
     console.log('使用当前会话:', appStore.currentSessionId, '消息数:', appStore.messages.length)
   }
 
@@ -122,10 +119,9 @@ async function sendMessage() {
       await appStore.stopListeningManual()
     }
 
-    // 确保有当前会话
+    // 确保有当前会话（无则等主进程按服务端 session 创建）
     if (!appStore.currentSessionId) {
-      const sessionId = await appStore.getTodaySession()
-      await appStore.switchSession(sessionId)
+      await appStore.ensureActiveSession()
     }
 
     // 清空输入框
@@ -347,10 +343,9 @@ function handleKeydown(event: KeyboardEvent) {
           />
         </div>
 
-        <!-- Input Area -->
+        <!-- Input Area：按 session 管理后始终可输入 -->
         <div class="px-20 pb-8 pt-2">
-          <!-- 活跃对话时显示输入框 -->
-          <div v-if="appStore.isCurrentSessionToday || appStore.messages.length === 0" class="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-3xl shadow-sm hover:shadow-md transition-shadow duration-200">
+          <div class="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-3xl shadow-sm hover:shadow-md transition-shadow duration-200">
             <textarea
               v-model="inputValue"
               placeholder="发消息或输入"
@@ -396,11 +391,6 @@ function handleKeydown(event: KeyboardEvent) {
                 <icon-carbon-arrow-up class="w-4 h-4" />
               </NButton>
             </div>
-          </div>
-
-          <!-- 查看历史记录时显示提示 -->
-          <div v-else class="text-center py-4 text-gray-400">
-            这是历史记录，无法继续对话
           </div>
         </div>
       </div>

@@ -7,7 +7,6 @@ import type { ChatMessage as ChatMessageType, ChatSession, ServerMessage } from 
  */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { generateSessionTitle, getTodaySessionId, isTodaySession } from '../utils/dateUtils'
 import { mapIpcMessageToChatMessage, mapIpcSessionToChatSession } from '../utils/transformers'
 
 export const useAppStore = defineStore('app', () => {
@@ -53,10 +52,14 @@ export const useAppStore = defineStore('app', () => {
   /** 是否正在说话 */
   const isSpeaking = computed(() => deviceState.value === 'speaking')
 
-  /** 当前会话是否是今天的 */
-  const isCurrentSessionToday = computed(() => {
-    return currentSessionId.value ? isTodaySession(currentSessionId.value) : false
-  })
+  /**
+   * 当前会话是否可继续对话（按服务端 session，不再按自然日）
+   * 有 currentSessionId 即可输入；历史会话切换后仍可查看，是否可发消息由业务决定
+   */
+  const isCurrentSessionActive = computed(() => !!currentSessionId.value)
+
+  /** @deprecated 使用 isCurrentSessionActive；保留别名避免旧模板瞬时报错 */
+  const isCurrentSessionToday = isCurrentSessionActive
 
   /** 是否有活跃会话 */
   const hasActiveSession = computed(() => !!currentSessionId.value)
@@ -221,34 +224,34 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
-   * 获取或创建今天的会话
+   * 确保有可展示的会话：优先已有列表最新一条；没有则等主进程按服务端 session 创建
+   * （不再按自然日预创建 chat_YYYYMMDD）
    */
-  async function getTodaySession(): Promise<string> {
+  async function ensureActiveSession(): Promise<string> {
     try {
-      const sessionId = getTodaySessionId()
-      const data = await window.api.chatGetSessions()
-      const todaySession = data.find((s: IpcChatSession) => s.session_id === sessionId)
+      if (currentSessionId.value)
+        return currentSessionId.value
 
-      if (!todaySession) {
-        const title = generateSessionTitle(sessionId)
-
-        await window.api.chatCreateSession({
-          session_id: sessionId,
-          title,
-          started_at: Math.floor(Date.now() / 1000),
-        })
-
-        console.log('创建今天的会话:', sessionId)
-        return sessionId
+      await loadSessions()
+      if (sessions.value.length > 0) {
+        const id = sessions.value[0].sessionId
+        await switchSession(id)
+        return id
       }
 
-      console.log('使用今天已有的会话:', todaySession.session_id)
-      return todaySession.session_id
+      // 无历史：不本地伪造日会话；返回空，等 STT/连接后由 ChatPlugin 广播
+      console.log('暂无会话，等待服务端 session_id')
+      return ''
     }
     catch (error) {
-      console.error('获取今天会话失败', error)
-      return `chat_temp_${Date.now()}`
+      console.error('确保会话失败', error)
+      return ''
     }
+  }
+
+  /** @deprecated 使用 ensureActiveSession */
+  async function getTodaySession(): Promise<string> {
+    return ensureActiveSession()
   }
 
   /**
@@ -278,21 +281,14 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /**
-   * 删除会话
+   * 删除会话（任意会话均可删，含当前）
    */
   async function deleteSession(sessionId: string) {
     try {
       console.log('删除会话:', sessionId)
 
-      // 当天会话禁止删除，避免后续消息写入历史会话
-      if (isTodaySession(sessionId)) {
-        console.warn('当天会话禁止删除，已忽略操作')
-        return
-      }
-
       await window.api.chatDeleteSession(sessionId)
 
-      // 如果删除的是当前会话
       if (currentSessionId.value === sessionId) {
         await loadSessions()
 
@@ -320,9 +316,15 @@ export const useAppStore = defineStore('app', () => {
   async function handleServerMessage(message: ServerMessage) {
     console.log('处理服务器消息:', message.type)
 
-    if (!currentSessionId.value) {
-      currentSessionId.value = await getTodaySession()
-      console.log('自动创建会话:', currentSessionId.value)
+    // 服务端 session_id 到达时对齐前端当前会话（列表由 session-created / message-added 刷新）
+    const sid = typeof message.session_id === 'string' ? message.session_id.trim() : ''
+    if (sid && sid !== currentSessionId.value) {
+      currentSessionId.value = sid
+      console.log('对齐服务端会话:', sid)
+      await loadSessions()
+      sessions.value.forEach((s) => {
+        s.active = s.sessionId === sid
+      })
     }
 
     // 更新表情
@@ -330,14 +332,12 @@ export const useAppStore = defineStore('app', () => {
       emotion.value = message.emotion
     }
     if (message.type === 'stt' && message.text) {
-      // STT 消息显示用户说的话
       currentText.value = message.text
     }
     else if (message.type === 'tts' && message.state === 'stop') {
       currentText.value = ''
     }
     else if (message.type === 'tts' && message.text) {
-      // TTS 消息显示助手回复
       currentText.value = message.text
     }
   }
@@ -370,6 +370,7 @@ export const useAppStore = defineStore('app', () => {
     isListening,
     isSpeaking,
     isCurrentSessionToday,
+    isCurrentSessionActive,
     hasActiveSession,
     isAutoMode,
     isManualMode,
@@ -388,6 +389,7 @@ export const useAppStore = defineStore('app', () => {
     // 会话管理
     loadSessions,
     loadMessages,
+    ensureActiveSession,
     getTodaySession,
     switchSession,
     deleteSession,
