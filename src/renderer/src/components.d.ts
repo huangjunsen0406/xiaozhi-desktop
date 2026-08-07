@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AboutSettings: typeof import('./components/settings/AboutSettings.vue')['default']
     AppearanceSettings: typeof import('./components/settings/AppearanceSettings.vue')['default']
     AudioSettings: typeof import('./components/settings/AudioSettings.vue')['default']
     AudioWave: typeof import('./components/AudioWave.vue')['default']

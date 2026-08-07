@@ -17,6 +17,7 @@ import IconCarbonCamera from '~icons/carbon/camera'
 import IconCarbonFaceActivated from '~icons/carbon/face-activated'
 import IconCarbonFavorite from '~icons/carbon/favorite'
 import IconCarbonHeadphones from '~icons/carbon/headphones'
+import IconCarbonInformation from '~icons/carbon/information'
 import IconCarbonKeyboard from '~icons/carbon/keyboard'
 import IconCarbonMicrophone from '~icons/carbon/microphone'
 import IconCarbonMusic from '~icons/carbon/music'
@@ -26,6 +27,7 @@ import IconCarbonUser from '~icons/carbon/user'
 import IconCarbonView from '~icons/carbon/view'
 
 // 子面板
+import AboutSettings from '../components/settings/AboutSettings.vue'
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue'
 import AudioSettings from '../components/settings/AudioSettings.vue'
 import CameraSettings from '../components/settings/CameraSettings.vue'
@@ -40,7 +42,7 @@ import SystemSettings from '../components/settings/SystemSettings.vue'
 import WakeWordSettings from '../components/settings/WakeWordSettings.vue'
 import TitleBar from '../components/TitleBar.vue'
 
-type Key = 'system' | 'appearance' | 'model' | 'pets' | 'care' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey' | 'mcp'
+type Key = 'system' | 'appearance' | 'model' | 'pets' | 'care' | 'emotion' | 'wake' | 'camera' | 'music' | 'audio' | 'hotkey' | 'mcp' | 'about'
 const selected = ref<Key>('system')
 const withIcon = (Comp: Component) => () => h(Comp, { class: 'w-4 h-4' })
 const showTitleBar = window.api.getPlatform() !== 'darwin'
@@ -58,6 +60,7 @@ const menuOptions = [
   { label: '音频设备', key: 'audio', icon: withIcon(IconCarbonHeadphones) },
   { label: '快捷键', key: 'hotkey', icon: withIcon(IconCarbonKeyboard) },
   { label: 'MCP 工具', key: 'mcp', icon: withIcon(IconCarbonTools) },
+  { label: '关于', key: 'about', icon: withIcon(IconCarbonInformation) },
 ] satisfies { label: string, key: Key, icon: () => ReturnType<typeof h> }[]
 
 type MaybePromise<T> = T | Promise<T>
@@ -80,6 +83,7 @@ const panelRefs = ref<Record<Key, PanelExposed | null>>({
   audio: null,
   hotkey: null,
   mcp: null,
+  about: null,
 })
 
 // 设置面板引用的辅助函数
@@ -107,6 +111,7 @@ const customButtonTextByKey: Record<Key, string | undefined> = {
   audio: '刷新设备',
   hotkey: '重置所有',
   mcp: '重置',
+  about: undefined,
 }
 const customText = computed(() => customButtonTextByKey[selected.value])
 
@@ -199,12 +204,13 @@ async function onCustomClick() {
                 <AudioSettings v-show="selected === 'audio'" :ref="setPanelRef('audio')" />
                 <HotkeySettings v-show="selected === 'hotkey'" :ref="setPanelRef('hotkey')" />
                 <McpToolsSettings v-show="selected === 'mcp'" :ref="setPanelRef('mcp')" />
+                <AboutSettings v-show="selected === 'about'" :ref="setPanelRef('about')" />
               </n-scrollbar>
             </div>
           </div>
 
-          <!-- 底部按钮：固定行（外观设置不显示按钮） -->
-          <div v-if="selected !== 'appearance'" class="shrink-0">
+          <!-- 底部按钮：固定行（外观 / 关于 不显示保存栏） -->
+          <div v-if="selected !== 'appearance' && selected !== 'about'" class="shrink-0">
             <NSpace justify="end">
               <NButton v-if="customText" :loading="customLoading" @click="onCustomClick">
                 {{ customText }}

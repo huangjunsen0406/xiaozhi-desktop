@@ -3,7 +3,7 @@
  * 使用模块化 API 结构
  */
 import { contextBridge } from 'electron'
-import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, updateApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -191,6 +191,23 @@ const api = {
   mcpToolsDeletePlugin: mcpToolsApi.deletePlugin,
   mcpToolsGetPluginsConfig: mcpToolsApi.getPluginsConfig,
   mcpToolsSetPluginsConfig: mcpToolsApi.setPluginsConfig,
+
+  // 应用内更新
+  updateGetStatus: updateApi.getStatus,
+  updateGetPrefs: updateApi.getPrefs,
+  updateSetAutoCheck: updateApi.setAutoCheck,
+  updateCheck: updateApi.check,
+  updateDownload: updateApi.download,
+  updateQuitAndInstall: updateApi.quitAndInstall,
+  updateCheckDownloadInstall: updateApi.checkDownloadInstall,
+  updateSkipVersion: updateApi.skipVersion,
+  updateOpenReleases: updateApi.openReleases,
+  updateOpenRepo: updateApi.openRepo,
+  updateOnAvailable: updateApi.onAvailable,
+  updateOnNotAvailable: updateApi.onNotAvailable,
+  updateOnDownloadProgress: updateApi.onDownloadProgress,
+  updateOnDownloaded: updateApi.onDownloaded,
+  updateOnError: updateApi.onError,
 
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,

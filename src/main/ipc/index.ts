@@ -1,4 +1,5 @@
 import type { IpcContext } from '../types/ipc'
+import process from 'node:process'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { getLogger } from '../utils/logger'
@@ -22,6 +23,7 @@ import { registerMusicConfigIpc } from './musicConfigIpc'
 import { registerMusicIpc } from './musicIpc'
 import { registerPetsIpc } from './petsIpc'
 import { registerThemeIpc } from './themeIpc'
+import { registerUpdateIpc } from './updateIpc'
 
 const logger = getLogger('Index')
 
@@ -48,6 +50,7 @@ export function registerBasicIpcChannels(): void {
   registerPetsIpc()
   registerCareReminderIpc()
   registerMcpToolsIpc()
+  registerUpdateIpc()
   registerClipboardIpcChannels()
 
   // 注册窗口拖动行为（提取到独立模块）

@@ -17,6 +17,7 @@ import { initializeConfigManager } from './services/configManagerDB'
 import { initializeDatabase } from './services/database'
 import { initializeDeviceFingerprint } from './services/deviceFingerprintDB'
 
+import { initUpdateService, scheduleSilentUpdateCheck } from './services/UpdateService'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
@@ -181,6 +182,7 @@ app.whenReady().then(async () => {
 
   // IPC 注册在 db/config/activation create 之后（handler 依赖 get* 访问器）
   registerBasicIpcChannels()
+  initUpdateService()
   registerTray()
   Menu.setApplicationMenu(buildAppMenu())
 
@@ -215,6 +217,9 @@ app.whenReady().then(async () => {
   }
 
   await container.start()
+
+  // 启动静默检查更新（有新版本才提示；失败忽略）
+  scheduleSilentUpdateCheck(5000)
 
   const ipcContext: IpcContext = { container }
   registerAppIpcChannels(ipcContext)
