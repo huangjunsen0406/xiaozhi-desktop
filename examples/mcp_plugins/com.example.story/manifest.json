@@ -1,0 +1,13 @@
+{
+  "id": "com.example.story",
+  "name": "Story Media Demo",
+  "version": "1.0.0",
+  "api_version": 1,
+  "runtime": "node-inprocess",
+  "entry": "./register.js",
+  "tool_name_prefix": "example.",
+  "enabled_by_default": true,
+  "call_timeout_ms": 30000,
+  "platforms": ["darwin", "win32", "linux"],
+  "description": "示例外挂：AI 传书名 → 插件内模拟查书得 url → media_player 应用内播放（需开启允许外挂应用内播放）"
+}

@@ -189,6 +189,8 @@ const api = {
   mcpToolsGetFolderPath: mcpToolsApi.getFolderPath,
   mcpToolsRefresh: mcpToolsApi.refresh,
   mcpToolsDeletePlugin: mcpToolsApi.deletePlugin,
+  mcpToolsGetPluginsConfig: mcpToolsApi.getPluginsConfig,
+  mcpToolsSetPluginsConfig: mcpToolsApi.setPluginsConfig,
 
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,

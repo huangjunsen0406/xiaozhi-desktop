@@ -5,6 +5,7 @@
 export { createMcpHost } from './host'
 export { loadMcpPluginsFromConfig, readPluginManifest } from './loader'
 export { isPlatformAllowed, validateManifest } from './manifest'
+export { createMediaPlayerFacade, validateMediaUrl } from './mediaPlayerFacade'
 export { McpPluginRegistry } from './registry'
 export {
   BUILTIN_TOOL_LABELS,
@@ -24,6 +25,10 @@ export type {
   McpPluginRuntime,
   McpPluginsLoadConfig,
   McpToolCatalogItem,
+  MediaPlayerFacade,
+  MediaPlayerPlayOptions,
+  MediaPlayerResult,
+  MediaPlayerStatus,
   PropDef,
   ToolDefLike,
 } from './types'

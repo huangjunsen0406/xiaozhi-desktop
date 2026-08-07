@@ -40,6 +40,11 @@ export interface LoadPluginsOptions {
   removeToolsByNames?: (names: string[]) => void
   config?: Partial<McpPluginsLoadConfig>
   pluginsDir?: string
+  /**
+   * Host 额外能力（如 media_player facade）。
+   * 仍受 allowHostGet 白名单约束。
+   */
+  capabilities?: Record<string, unknown>
 }
 
 export interface LoadPluginsResult {
@@ -190,6 +195,7 @@ async function loadOnePlugin(
       toolNamePrefix: manifest.tool_name_prefix,
       enforcePrefix: config.enforcePrefix,
       callTimeoutMs: manifest.call_timeout_ms ?? 30_000,
+      capabilities: options.capabilities,
       onAddTool: (tool) => {
         options.addTool(tool)
         registeredTools.push(tool.name)
