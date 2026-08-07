@@ -148,7 +148,7 @@ export class UIPlugin extends Plugin {
   }
 
   /**
-   * 广播会话创建事件（用于跨天自动创建新会话）
+   * 广播会话创建事件（服务端 session 新建时通知前端刷新列表）
    * @param sessionId - 会话 ID
    */
   broadcastSessionCreated(sessionId: string): void {
