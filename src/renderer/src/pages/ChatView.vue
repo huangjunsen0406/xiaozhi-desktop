@@ -284,7 +284,11 @@ function handleKeydown(event: KeyboardEvent) {
           @click="switchSession(item.sessionId)"
         >
           <icon-carbon-chat class="w-4 h-4 flex-shrink-0 opacity-70" />
-          <span class="truncate flex-1" :class="{ 'opacity-0': !isSidebarOpen }">{{ item.title }}</span>
+          <div class="flex-1 min-w-0" :class="{ 'opacity-0': !isSidebarOpen }">
+            <div class="truncate">
+              {{ item.preview || item.title }}
+            </div>
+          </div>
           <NDropdown
             v-if="item.active && isSidebarOpen"
             trigger="click"

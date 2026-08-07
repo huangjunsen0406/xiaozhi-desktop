@@ -20,6 +20,7 @@ export function mapIpcSessionToChatSession(
     id: session.id,
     sessionId: session.session_id,
     title: session.title || '新对话',
+    preview: session.preview ?? null,
     active: isActive,
     messageCount: session.message_count,
     lastMessageAt: session.last_message_at ?? session.started_at,

@@ -116,6 +116,8 @@ export interface DbChatSession {
   started_at: number
   last_message_at: number | null
   created_at: number
+  /** 会话首条消息内容（会话列表摘要） */
+  preview: string | null
 }
 
 /**
