@@ -984,6 +984,7 @@ export function getBackgroundAudioWindow(): BrowserWindow | null {
 export function toggleToChat(): void {
   const chat = ensureChatWindow()
   chat.show()
+  chat.focus()
   if (windowRefs.main.current)
     windowRefs.main.current.hide()
   if (windowRefs.mini.current)

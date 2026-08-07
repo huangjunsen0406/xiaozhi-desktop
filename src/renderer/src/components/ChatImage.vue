@@ -48,5 +48,6 @@ onUnmounted(() => {
     :class="className"
     object-fit="cover"
     :img-props="{ style: { borderRadius: '0.5rem' } }"
+    loading="lazy"
   />
 </template>
