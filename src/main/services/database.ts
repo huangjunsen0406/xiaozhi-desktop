@@ -1162,8 +1162,13 @@ export class DatabaseManager {
 
   getChatSessions(limit = 50, offset = 0): DbChatSession[] {
     return this.db.prepare(`
-      SELECT * FROM chat_sessions
-      ORDER BY last_message_at DESC
+      SELECT cs.*,
+        (SELECT content FROM chat_messages
+         WHERE session_id = cs.session_id
+         ORDER BY timestamp ASC, id ASC
+         LIMIT 1) AS preview
+      FROM chat_sessions cs
+      ORDER BY cs.last_message_at DESC
       LIMIT ? OFFSET ?
     `).all(limit, offset) as DbChatSession[]
   }
