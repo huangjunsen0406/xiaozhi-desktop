@@ -2,10 +2,9 @@
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "compilerOptions": {
     "composite": true,
-    "baseUrl": ".",
     "moduleResolution": "bundler",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["./src/shared/*"]
     },
     "types": ["electron-vite/node"],
     "noImplicitAny": true
