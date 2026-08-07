@@ -29,6 +29,8 @@ const api = {
   toggleMaximize: windowApi.toggleMaximize,
   close: windowApi.close,
   openExternal: windowApi.openExternal,
+  relaunchApp: windowApi.relaunchApp,
+  openScreenRecordingSettings: windowApi.openScreenRecordingSettings,
 
   // 环境信息
   getPlatform: appEnvApi.getPlatform,
