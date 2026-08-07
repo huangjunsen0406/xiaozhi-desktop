@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import type { AecMode, AecStatus, AudioSettings as AudioSettingsDto } from '@shared/types'
-import { NForm, NFormItem, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
-import { computed, onMounted, ref, watch } from 'vue'
+import { NButton, NForm, NFormItem, NSelect, NSlider, NSwitch, useDialog, useMessage } from 'naive-ui'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { useDevices } from '../../composables/useDevices'
 
 const message = useMessage()
+const dialog = useDialog()
+
+const isMac = window.api.getPlatform() === 'darwin'
 
 const {
   inputDevices,
@@ -24,6 +27,7 @@ const enableNoiseReduction = ref(true)
 const aecMode = ref<AecMode>('app')
 const aecStatus = ref<AecStatus | null>(null)
 const enableRealtimeConversation = ref(false)
+const saving = ref(false)
 
 const inputSampleRate = ref(16000)
 const outputSampleRate = ref(24000)
@@ -69,7 +73,9 @@ const aecModeHint = computed(() => {
     case 'off':
       return '不启用浏览器回声消除，扬声器声音更容易被麦克风拾取。'
     case 'system':
-      return '尝试消除本应用与其它应用外放造成的回声。完整生效可能需要重启应用，并授予系统音频相关权限（macOS 14.2+ 更完整）。'
+      return isMac
+        ? '尝试消除本应用与其它应用外放造成的回声。完整生效需要重启应用，并在 macOS「录屏与系统录音」中授权（14.2+ 更完整；列表中若出现两个「小智」请都打开）。'
+        : '尝试消除本应用与其它应用外放造成的回声。完整生效需要重启应用以加载系统音频参考。'
     default:
       return '使用 Chromium 应用级回声消除，主要抑制本应用播放（如语音播报）造成的回声。'
   }
@@ -162,11 +168,121 @@ async function loadConfig(): Promise<void> {
   }
 }
 
+/**
+ * 系统级 AEC 交叉 system 时：应用内确认 → 保存 → 自动重启。
+ * macOS 额外引导「录屏与系统录音」（可能出现两个「小智」）。
+ * 返回 false 表示用户取消，中止保存。
+ */
+function confirmSystemAecRelaunch(direction: 'enter' | 'leave'): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (ok: boolean) => {
+      if (settled)
+        return
+      settled = true
+      resolve(ok)
+    }
+
+    const entering = direction === 'enter'
+    const showOpenSettings = entering && isMac
+    const title = entering ? '启用系统级回声消除' : '关闭系统级回声消除'
+    const lines = entering
+      ? isMac
+        ? [
+            '系统级模式会读取本机播放的声音作为回声参考，用于消除扬声器与其它应用外放造成的回声，不会用于上传屏幕画面。',
+            'macOS 可能弹出「录制屏幕和音频」授权，或需在「系统设置 → 隐私与安全性 → 录屏与系统录音」中允许「小智」。若列表中出现两个「小智」，请都打开。',
+            '完整生效需要重启应用。点击「保存并重启」将保存设置并立即重启。',
+          ]
+        : [
+            '系统级模式会尝试使用系统音频作为回声参考，以更好地消除外放回声。',
+            '完整生效需要重启应用。点击「保存并重启」将保存设置并立即重启。',
+          ]
+      : [
+          '关闭后将不再使用系统音频参考，完整生效需要重启应用。',
+          '点击「保存并重启」将保存设置并立即重启。',
+        ]
+
+    // action 会替换默认页脚，需自绘全部按钮（mac 进入时多「前往设置」）
+    const d = dialog.warning({
+      title,
+      content: () => h(
+        'div',
+        {
+          style: 'display:flex;flex-direction:column;gap:10px;line-height:1.55;font-size:13px;',
+        },
+        lines.map(text => h('p', { style: 'margin:0;' }, text)),
+      ),
+      closable: true,
+      maskClosable: false,
+      onClose: () => {
+        finish(false)
+      },
+      action: () => h(
+        'div',
+        {
+          style: 'display:flex;justify-content:flex-end;align-items:center;gap:8px;width:100%;flex-wrap:wrap;',
+        },
+        [
+          showOpenSettings
+            ? h(
+                NButton,
+                {
+                  style: 'margin-right:auto;',
+                  onClick: () => {
+                    void window.api.openScreenRecordingSettings().catch((err) => {
+                      console.warn('打开录屏设置失败', err)
+                      message.warning('无法打开系统设置，请手动前往「隐私与安全性 → 录屏与系统录音」')
+                    })
+                  },
+                },
+                { default: () => '前往设置' },
+              )
+            : null,
+          h(
+            NButton,
+            {
+              onClick: () => {
+                finish(false)
+                d.destroy()
+              },
+            },
+            { default: () => '取消' },
+          ),
+          h(
+            NButton,
+            {
+              type: 'primary',
+              onClick: () => {
+                finish(true)
+                d.destroy()
+              },
+            },
+            { default: () => '保存并重启' },
+          ),
+        ],
+      ),
+    })
+  })
+}
+
 async function handleSave(): Promise<void> {
+  if (saving.value)
+    return
+
   try {
+    saving.value = true
     const previousConfig = await window.api.audioGetConfig()
     const previousMode = previousConfig.aecMode
       ?? (previousConfig.enableEchoCancellation === false ? 'off' : 'app')
+
+    const crossingSystem = (previousMode === 'system') !== (aecMode.value === 'system')
+    if (crossingSystem) {
+      const ok = await confirmSystemAecRelaunch(
+        aecMode.value === 'system' ? 'enter' : 'leave',
+      )
+      if (!ok)
+        return
+    }
 
     const config: Partial<AudioSettingsDto> = {
       enableNoiseReduction: enableNoiseReduction.value,
@@ -194,7 +310,7 @@ async function handleSave(): Promise<void> {
     const result = await window.api.audioUpdateConfig(config)
 
     const needsRelaunch = result?.requiresRelaunch
-      ?? ((previousMode === 'system') !== (aecMode.value === 'system'))
+      ?? crossingSystem
 
     if (result?.aecStatus)
       aecStatus.value = result.aecStatus
@@ -203,9 +319,14 @@ async function handleSave(): Promise<void> {
 
     // 文案跟主进程 apply 结果，避免 UI 自猜误报「正在重连」
     if (needsRelaunch) {
-      message.warning('回声消除模式已保存。系统级完整生效需要重启应用。', { duration: 5000 })
+      message.success('设置已保存，正在重启应用…', { duration: 2000 })
+      // 稍留一点时间让 toast / boot 文件落盘
+      await new Promise(r => setTimeout(r, 400))
+      await window.api.relaunchApp()
+      return
     }
-    else if (result?.protocolReconnected || result?.codecRebuilt) {
+
+    if (result?.protocolReconnected || result?.codecRebuilt) {
       message.success('音频设置已保存，正在重新初始化音频和重连...', { duration: 3000 })
     }
     else if (result?.deviceSwitched) {
@@ -221,6 +342,9 @@ async function handleSave(): Promise<void> {
   catch (error) {
     console.error('保存音频配置失败:', error)
     message.error('保存失败')
+  }
+  finally {
+    saving.value = false
   }
 }
 

@@ -120,6 +120,10 @@ export interface RendererApi {
   toggleMaximize: () => void
   close: () => void
   openExternal: (string: string) => void
+  /** 重启整个应用（AEC system 等需启动参数的变更） */
+  relaunchApp: () => Promise<void>
+  /** 打开 macOS 录屏与系统录音设置；非 mac 返回 opened:false */
+  openScreenRecordingSettings: () => Promise<{ opened: boolean }>
   /** process.platform */
   getPlatform: () => NodeJS.Platform | string
   getProcessVersions: () => Partial<NodeJS.ProcessVersions> & Record<string, string | undefined>

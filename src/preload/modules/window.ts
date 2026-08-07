@@ -53,4 +53,19 @@ export const windowApi = {
   toggleMaximize: (): void => ipcRenderer.send('window:toggle-maximize'),
   close: (): void => ipcRenderer.send('window:close'),
   openExternal: (url: string): void => ipcRenderer.send('window:open-external', url),
+
+  /** 重启应用（写入 aec-boot 等后完整生效） */
+  relaunchApp: async (): Promise<void> => {
+    const result: unknown = await ipcRenderer.invoke('app:relaunch')
+    assertIpcSuccess(result, '重启应用失败')
+  },
+
+  /**
+   * 打开 macOS「录屏与系统录音」设置。
+   * 非 darwin 返回 opened:false，不抛错。
+   */
+  openScreenRecordingSettings: async (): Promise<{ opened: boolean }> => {
+    const result: unknown = await ipcRenderer.invoke('app:open-screen-recording-settings')
+    return unwrapIpcResult<{ opened: boolean }>(result, '打开录屏设置失败')
+  },
 }

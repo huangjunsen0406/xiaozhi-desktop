@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { registerHoverIpc } from '../hover/ipc'
 import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
-import { getCurrentDisplayMode, getLive2dWindow, getPetsWindow, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
+import { getCurrentDisplayMode, getLive2dWindow, getPetsWindow, setIsQuitting, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
 
 import { registerAppIpc } from './appIpc'
@@ -60,20 +60,38 @@ export function registerBasicIpcChannels(): void {
 
   ipcMain.on('window:maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (win && !win.isMaximized())
+    if (!win || win.isDestroyed())
+      return
+    // 已在系统全屏时先退出，再走 maximize，避免卡在全屏无法还原
+    if (win.isFullScreen()) {
+      win.setFullScreen(false)
+      return
+    }
+    if (!win.isMaximized())
       win.maximize()
   })
 
   ipcMain.on('window:unmaximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (win && win.isMaximized())
+    if (!win || win.isDestroyed())
+      return
+    if (win.isFullScreen()) {
+      win.setFullScreen(false)
+      return
+    }
+    if (win.isMaximized())
       win.unmaximize()
   })
 
   ipcMain.on('window:toggle-maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win)
+    if (!win || win.isDestroyed())
       return
+    // 全屏优先退出；否则在 maximize / unmaximize 间切换
+    if (win.isFullScreen()) {
+      win.setFullScreen(false)
+      return
+    }
     win.isMaximized() ? win.unmaximize() : win.maximize()
   })
 
@@ -84,6 +102,46 @@ export function registerBasicIpcChannels(): void {
   ipcMain.on('window:open-external', (_, url) => {
     if (/^https?:\/\/.+/i.test(url))
       void shell.openExternal(url)
+  })
+
+  // 打开 macOS「录屏与系统录音」设置（系统级 AEC 引导）
+  createIpcHandler({
+    channel: 'app:open-screen-recording-settings',
+    handler: async () => {
+      if (process.platform !== 'darwin') {
+        return success({ opened: false, reason: 'not_darwin' as const })
+      }
+      // 经典深链在较新 macOS 仍可用，落到「隐私与安全性 → 录屏」
+      const url = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+      try {
+        await shell.openExternal(url)
+        return success({ opened: true as const })
+      }
+      catch (error) {
+        logger.warn('打开录屏隐私设置失败', error)
+        // 退到隐私与安全性总页
+        try {
+          await shell.openExternal('x-apple.systempreferences:com.apple.preference.security')
+          return success({ opened: true as const, fallback: true as const })
+        }
+        catch (fallbackError) {
+          logger.error('打开系统隐私设置失败', fallbackError)
+          throw fallbackError
+        }
+      }
+    },
+  })
+
+  // 重启应用（AEC system 启动 feature 交叉后完整生效）
+  createIpcHandler({
+    channel: 'app:relaunch',
+    handler: async () => {
+      logger.info('应用即将 relaunch（设置变更）')
+      setIsQuitting(true)
+      app.relaunch()
+      app.exit(0)
+      return success(true)
+    },
   })
 
   // 主视图
