@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { NImage } from 'naive-ui'
 import { onUnmounted, ref, watch } from 'vue'
 import { createObjectUrl, revokeObjectUrl } from '../utils/imageUtils'
 
@@ -40,11 +41,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <img
+  <NImage
     v-if="imageUrl"
     :src="imageUrl"
     :alt="alt || 'Image'"
     :class="className"
-    loading="lazy"
-  >
+    object-fit="cover"
+    :img-props="{ style: { borderRadius: '0.5rem' } }"
+  />
 </template>
