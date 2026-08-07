@@ -2,7 +2,6 @@
 import IconCarbonClose from '~icons/carbon/close'
 import IconCarbonMaximize from '~icons/carbon/maximize'
 import IconCarbonSubtract from '~icons/carbon/subtract'
-// import logo from '../assets/icon.png'
 
 withDefaults(defineProps<{ title?: string }>(), {
   title: '小智桌面',
@@ -19,16 +18,22 @@ function handleToggleMaximize(): void {
 function handleClose(): void {
   window.api.close()
 }
+
+/** 双击标题栏空白：最大化 / 还原（Win/Linux） */
+function handleDblClick(): void {
+  window.api.toggleMaximize()
+}
 </script>
 
 <template>
-  <!-- Windows/Linux 样式 - 只在非 macOS 显示 -->
+  <!-- Windows/Linux 无边框窗口自定义标题栏 -->
   <div
-    class="flex items-center justify-between h-8 px-2 select-none bg-white dark:bg-gray-900"
+    class="flex items-center justify-between h-8 px-2 select-none shrink-0 bg-white dark:bg-gray-900"
     style="-webkit-app-region: drag"
+    @dblclick="handleDblClick"
   >
-    <!-- 左侧：空白占位 -->
-    <div class="flex-1" />
+    <!-- 左侧：空白占位（可显示 title，当前保持干净） -->
+    <div class="flex-1 min-w-0" />
 
     <!-- 右侧：Windows 风格按钮 -->
     <div class="flex items-center" style="-webkit-app-region: no-drag">

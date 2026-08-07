@@ -149,9 +149,16 @@ async function onCustomClick() {
 <template>
   <!-- 整页容器 -->
   <div class="h-screen flex flex-col bg-white dark:bg-custom-dark">
-    <!-- 标题栏 -->
+    <!-- 标题栏：Win/Linux 自定义三键；mac 用系统红绿灯 + 拖拽区 -->
     <TitleBar v-if="showTitleBar" />
-    <div v-else class="h-[28px] shrink-0" style="-webkit-app-region: drag" />
+    <div
+      v-else
+      class="h-11 shrink-0 flex items-stretch"
+      style="-webkit-app-region: drag"
+    >
+      <div class="w-[76px] shrink-0" style="-webkit-app-region: no-drag" />
+      <div class="flex-1" />
+    </div>
 
     <!-- 左右分栏 -->
     <NLayout has-sider class="flex-1 min-h-0">
