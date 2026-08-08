@@ -64,7 +64,7 @@ function loadDisplayMode(): DisplayMode {
 }
 
 let currentDisplayMode: DisplayMode = loadDisplayMode()
-let onDisplayModeChanged: ((mode: DisplayMode) => void) | null = null
+const displayModeListeners = new Set<(mode: DisplayMode, prev: DisplayMode) => void>()
 
 // 应用退出标志（用于区分关闭窗口和退出应用）
 let isQuitting = false
@@ -92,13 +92,18 @@ function broadcastDisplayModeChanged(mode: DisplayMode): void {
  */
 function setDisplayMode(mode: DisplayMode): void {
   if (currentDisplayMode !== mode) {
+    const prev = currentDisplayMode
     currentDisplayMode = mode
     saveDisplayMode(mode)
     logger.info(`显示模式已切换: ${mode}`)
 
-    // 触发回调更新菜单
-    if (onDisplayModeChanged) {
-      onDisplayModeChanged(mode)
+    for (const listener of displayModeListeners) {
+      try {
+        listener(mode, prev)
+      }
+      catch (error) {
+        logger.warn('显示模式变更监听失败', error)
+      }
     }
 
     // 通知设置页等 renderer 同步 select
@@ -107,10 +112,16 @@ function setDisplayMode(mode: DisplayMode): void {
 }
 
 /**
- * 注册显示模式变化回调（用于更新托盘和 Dock 菜单）
+ * 注册显示模式变化回调（托盘 / Dock / 埋点等可多次订阅）
+ * @returns 取消订阅函数
  */
-export function onDisplayModeChange(callback: (mode: DisplayMode) => void): void {
-  onDisplayModeChanged = callback
+export function onDisplayModeChange(
+  callback: (mode: DisplayMode, prev: DisplayMode) => void,
+): () => void {
+  displayModeListeners.add(callback)
+  return () => {
+    displayModeListeners.delete(callback)
+  }
 }
 
 /**

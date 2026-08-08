@@ -1,4 +1,5 @@
 export * from './activation'
+export * from './analytics'
 export * from './app'
 export * from './audio'
 export * from './camera'
