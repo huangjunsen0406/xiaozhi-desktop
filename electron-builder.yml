@@ -21,11 +21,11 @@ extraResources:
   - from: resources/wake-word-models
     to: wake-word-models
 
-  # Live2D 默认模型文件（用于首次启动时复制到用户目录）
-  - from: out/renderer/Resources
+  # Live2D 默认模型（Hiyori 等，首次启动复制到 userData/models）
+  - from: resources/live2d-models
     to: live2d-models
 
-  # 内置精灵宠物（月薪喵/usagi/sensen，首次启动时复制到 userData/pets）
+  # 内置精灵宠物（月薪喵/usagi/sensen，首次启动复制到 userData/pets）
   - from: resources/pets
     to: pets
 
