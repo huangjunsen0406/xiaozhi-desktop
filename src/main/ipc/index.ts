@@ -6,6 +6,7 @@ import { getLogger } from '../utils/logger'
 import { registerDragBehavior } from '../windows/behaviors/DragBehavior'
 import { getCurrentDisplayMode, getLive2dWindow, getPetsWindow, setIsQuitting, showActivation, togglePanel, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 import { registerActivationIpc } from './activationIpc'
+import { registerAnalyticsIpc } from './analyticsIpc'
 
 import { registerAppIpc } from './appIpc'
 import { registerAudioIpc } from './audioIpc'
@@ -51,6 +52,7 @@ export function registerBasicIpcChannels(): void {
   registerCareReminderIpc()
   registerMcpToolsIpc()
   registerUpdateIpc()
+  registerAnalyticsIpc()
   registerClipboardIpcChannels()
 
   // 注册窗口拖动行为（提取到独立模块）

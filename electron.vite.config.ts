@@ -32,6 +32,10 @@ export default defineConfig({
           'hmac-sha256',
           'aes-128-ctr',
           '6ba7b810-9dad-11d1-80b4-00c04fd430c8', // UUID namespace
+          // OpenPanel（产品分析）
+          'https://openpanel.junsen.online/api',
+          'a869e57d-7399-47bc-8e4f-15789fa0944c',
+          'sec_8bf9867d7e355eba22d1',
         ],
       }),
     ],
@@ -47,6 +51,10 @@ export default defineConfig({
               || id.includes('deviceFingerprintDB')
               || id.includes('configManagerDB')) {
               return 'activation'
+            }
+            // 产品分析（含 OpenPanel 凭证）
+            if (id.includes('AnalyticsService')) {
+              return 'analytics'
             }
             // 核心服务（Application、ShortcutManager）
             if (id.includes('services/Application')

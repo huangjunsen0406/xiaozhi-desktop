@@ -2,6 +2,7 @@
  * Preload API 模块索引
  */
 export { activationApi } from './activation'
+export { analyticsApi } from './analytics'
 
 export { appApi } from './app'
 export { appEnvApi } from './appEnv'

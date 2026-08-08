@@ -19,6 +19,7 @@ const updateError = ref('')
 const downloadPct = ref(0)
 const downloadLabel = ref('')
 const processVersions = ref<{ electron?: string, chrome?: string, node?: string }>({})
+const analyticsEnabled = ref(true)
 
 let offProgress: (() => void) | null = null
 let offDownloaded: (() => void) | null = null
@@ -44,6 +45,27 @@ async function loadUpdateState() {
   }
   catch (error) {
     console.warn('加载更新状态失败', error)
+  }
+}
+
+async function loadAnalyticsState() {
+  try {
+    const status = await window.api.analyticsGetStatus()
+    analyticsEnabled.value = status.enabled
+  }
+  catch (error) {
+    console.warn('加载分析状态失败', error)
+  }
+}
+
+async function toggleAnalyticsEnabled(v: boolean) {
+  try {
+    const status = await window.api.analyticsSetEnabled(v)
+    analyticsEnabled.value = status.enabled
+  }
+  catch (error) {
+    message.error(error instanceof Error ? error.message : '设置失败')
+    analyticsEnabled.value = !v
   }
 }
 
@@ -146,6 +168,7 @@ onMounted(() => {
   catch { /* ignore */ }
 
   loadUpdateState()
+  loadAnalyticsState()
   offProgress = window.api.updateOnDownloadProgress((p: UpdateDownloadProgress) => {
     downloadPct.value = Math.min(99, Math.round(p.percent))
     const mb = (p.transferred / 1024 / 1024).toFixed(1)
@@ -219,6 +242,22 @@ defineExpose({ handleSave })
         <NButton size="small" secondary @click="handleOpenReleases">
           打开官网
         </NButton>
+      </NFormItem>
+
+      <div class="section-title subsection">
+        使用数据
+      </div>
+
+      <NFormItem label="分享使用数据">
+        <div class="analytics-row">
+          <NSwitch
+            :value="analyticsEnabled"
+            @update:value="toggleAnalyticsEnabled"
+          />
+          <p class="hint">
+            仅统计启动/退出时长与显示模式等匿名使用情况，不含对话内容。用于改进产品。
+          </p>
+        </div>
       </NFormItem>
 
       <div class="section-title subsection">
@@ -358,6 +397,14 @@ defineExpose({ handleSave })
 }
 
 .update-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.analytics-row {
   display: flex;
   flex-direction: column;
   gap: 8px;

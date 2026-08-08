@@ -4,6 +4,7 @@ import type {
   ActivationResult,
   ActivationStatus,
   AddMessageParams,
+  AnalyticsStatus,
   AecCaptureReport,
   AecStatus,
   AppStateSnapshot,
@@ -299,6 +300,10 @@ export interface RendererApi {
   updateOnDownloadProgress: (cb: (p: UpdateDownloadProgress) => void) => () => void
   updateOnDownloaded: (cb: (info: { version: string, currentVersion: string }) => void) => () => void
   updateOnError: (cb: (payload: { message: string }) => void) => () => void
+
+  // 产品分析
+  analyticsGetStatus: () => Promise<AnalyticsStatus>
+  analyticsSetEnabled: (enabled: boolean) => Promise<AnalyticsStatus>
 
   // 剪贴板 API
   clipboardWriteText: (text: string) => Promise<void>

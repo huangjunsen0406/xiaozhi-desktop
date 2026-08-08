@@ -3,7 +3,7 @@
  * 使用模块化 API 结构
  */
 import { contextBridge } from 'electron'
-import { activationApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, updateApi, wakeWordApi, windowApi } from './modules'
+import { activationApi, analyticsApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, updateApi, wakeWordApi, windowApi } from './modules'
 
 /**
  * 暴露给渲染进程的 API
@@ -208,6 +208,10 @@ const api = {
   updateOnDownloadProgress: updateApi.onDownloadProgress,
   updateOnDownloaded: updateApi.onDownloaded,
   updateOnError: updateApi.onError,
+
+  // 产品分析（OpenPanel）
+  analyticsGetStatus: analyticsApi.getStatus,
+  analyticsSetEnabled: analyticsApi.setEnabled,
 
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,

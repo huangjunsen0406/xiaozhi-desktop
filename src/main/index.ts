@@ -6,9 +6,17 @@ import { app, BrowserWindow, Menu, nativeImage, session } from 'electron'
 import appIconPng from '../../resources/icon.png?asset'
 import { applyAecCommandLineFeatures } from './audio/AecPolicy'
 import { initializeAudioRuntime } from './audio/AudioRuntime'
+import { Events } from './core/EventBus'
 import { createServiceContainer, getServiceContainer } from './core/ServiceContainer'
 import { registerAppIpcChannels, registerBasicIpcChannels } from './ipc'
 import { ActivationService } from './services/ActivationService'
+import {
+  initAnalyticsService,
+  trackAppClosedAndFlush,
+  trackAppOpened,
+  trackDisplayModeChanged,
+  trackSessionConnected,
+} from './services/AnalyticsService'
 import {
   startCareReminderService,
   stopCareReminderService,
@@ -16,7 +24,6 @@ import {
 import { initializeConfigManager } from './services/configManagerDB'
 import { initializeDatabase } from './services/database'
 import { initializeDeviceFingerprint } from './services/deviceFingerprintDB'
-
 import { initUpdateService, scheduleSilentUpdateCheck } from './services/UpdateService'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
@@ -139,13 +146,14 @@ app.whenReady().then(async () => {
   }
 
   // 进程级资源显式初始化（禁止懒 getInstance）
-  // 顺序：paths → db → audioRuntime → config/fingerprint → activation → IPC → container
+  // 顺序：paths → db → audioRuntime → config/fingerprint → activation → analytics → IPC → container
   initializeDatabase()
   initializeAudioRuntime()
   initializeConfigManager()
   initializeDeviceFingerprint()
+  initAnalyticsService()
   const activationService = ActivationService.create()
-  logger.info('Database / AudioRuntime / Config / DeviceFingerprint / Activation 已显式初始化')
+  logger.info('Database / AudioRuntime / Config / DeviceFingerprint / Analytics / Activation 已显式初始化')
 
   // 检查并处理企业版代理问题
   if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
@@ -185,6 +193,11 @@ app.whenReady().then(async () => {
   initUpdateService()
   registerTray()
   Menu.setApplicationMenu(buildAppMenu())
+
+  // 显示模式变更：埋点（from/to）；Dock 菜单在下方单独订
+  onDisplayModeChange((mode, prev) => {
+    trackDisplayModeChanged(prev, mode)
+  })
 
   if (isMacOS && hasDock()) {
     app.dock!.setMenu(buildDisplayModeMenu(false))
@@ -244,6 +257,19 @@ app.whenReady().then(async () => {
     default:
       toggleToMain()
       break
+  }
+
+  // 启动完成：一次使用开始（启用→关闭 口径）
+  trackAppOpened(getCurrentDisplayMode())
+
+  // 协议连上后报一次 session_connected（质量粗信号，非对话粒度）
+  try {
+    container.eventBus.on(Events.PROTOCOL_CONNECTED, () => {
+      trackSessionConnected('websocket')
+    })
+  }
+  catch (error) {
+    logger.warn('订阅 PROTOCOL_CONNECTED 失败', error)
   }
 
   // 桌宠本地关怀提醒（无语音/不写对话；依赖 display mode + deviceState）
@@ -341,6 +367,14 @@ app.on('before-quit', async (event) => {
   }
   catch (error) {
     logger.error('ServiceContainer 关闭失败', error)
+  }
+
+  // 上报使用时长并尽量刷出分析队列（超时后继续退出）
+  try {
+    await trackAppClosedAndFlush(1500)
+  }
+  catch (error) {
+    logger.debug('Analytics 退出上报失败', error)
   }
 
   await shutdownLogger()
