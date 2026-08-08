@@ -34,18 +34,17 @@ function getModelsDir(): string {
 }
 
 /**
- * 获取内置模型源目录（仅用于首次复制）
+ * 获取内置 Live2D 模型源目录（仅用于首次复制到 userData/models）
+ * - 生产：{process.resourcesPath}/live2d-models（extraResources，app.asar 外部）
+ * - 开发：项目根 resources/live2d-models
+ *
+ * 与精灵宠物 resources/pets 同一套「仓库 resources/ → 种子 userData」约定。
  */
 function getBuiltinModelsDir(): string {
   if (app.isPackaged) {
-    // 生产环境：从 extraResources 中读取（app.asar 外部）
-    // extraResources 会被复制到 process.resourcesPath 目录
     return path.join(process.resourcesPath, 'live2d-models')
   }
-  else {
-    // 开发环境：从项目目录读取
-    return path.join(process.cwd(), 'src/renderer/public/Resources')
-  }
+  return path.join(app.getAppPath(), 'resources', 'live2d-models')
 }
 
 const CONFIG_FILE_NAME = 'model-config.json'
