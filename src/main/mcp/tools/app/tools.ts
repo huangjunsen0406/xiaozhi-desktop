@@ -57,7 +57,8 @@ The system will try multiple launch strategies including direct execution, syste
       }
       else {
         logger.warn(`应用启动失败: ${result.message}`)
-        return 'false'
+        // 把失败原因带给模型，便于向用户解释（例如路径不存在、平台不支持）
+        return `false: ${result.message}`
       }
     }
     catch (error) {

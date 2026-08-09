@@ -267,35 +267,39 @@ export class WindowsScanner {
    * 获取常用系统工具
    */
   private static getSystemTools(): AppInfo[] {
+    const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32')
+    const winDir = process.env.SystemRoot || 'C:\\Windows'
+
     return [
       {
         name: 'notepad',
         displayName: '记事本',
-        path: 'C:\\Windows\\System32\\notepad.exe',
+        path: path.join(system32, 'notepad.exe'),
         type: 'system',
       },
       {
         name: 'calc',
         displayName: '计算器',
-        path: 'calc',
+        // Win10+ 计算器是 UWP，system32\\calc.exe 只是启动器；保留 calc.exe 路径便于 openPath
+        path: path.join(system32, 'calc.exe'),
         type: 'system',
       },
       {
         name: 'mspaint',
         displayName: '画图',
-        path: 'C:\\Windows\\System32\\mspaint.exe',
+        path: path.join(system32, 'mspaint.exe'),
         type: 'system',
       },
       {
         name: 'explorer',
         displayName: '资源管理器',
-        path: 'C:\\Windows\\explorer.exe',
+        path: path.join(winDir, 'explorer.exe'),
         type: 'system',
       },
       {
         name: 'cmd',
         displayName: '命令提示符',
-        path: 'C:\\Windows\\System32\\cmd.exe',
+        path: path.join(system32, 'cmd.exe'),
         type: 'system',
       },
     ]
