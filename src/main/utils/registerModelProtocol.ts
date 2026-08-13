@@ -8,7 +8,7 @@ import path from 'node:path'
 import { net, protocol } from 'electron'
 import fs from 'fs-extra'
 
-import { getCodexPetsDir, resolvePetDir } from '../services/PetsManager'
+import { getCodexPetsDir, resolvePetDir } from '../services/petPaths'
 import { getLogger } from './logger'
 import {
   isPathInside,

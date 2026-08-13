@@ -127,8 +127,21 @@ jobs:
       - name: Override supported architectures
         shell: bash
         run: |
-          echo "supportedArchitectures.os=current" >> .npmrc
-          echo "supportedArchitectures.cpu=${{ matrix.arch }}" >> .npmrc
+          # mac：x64 + arm64 都装。Apple Silicon 包被 Rosetta 打开时 process.arch=x64，
+          # 只打单 arch 会报 Could not load sharp using the darwin-x64 runtime。
+          # 其它平台只装当前 matrix arch，避免把无关原生包打进去。
+          tmp="$(mktemp)"
+          grep -v '^supportedArchitectures' .npmrc > "$tmp" || true
+          mv "$tmp" .npmrc
+          echo "supportedArchitectures.os[]=current" >> .npmrc
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo "supportedArchitectures.cpu[]=x64" >> .npmrc
+            echo "supportedArchitectures.cpu[]=arm64" >> .npmrc
+          else
+            echo "supportedArchitectures.cpu[]=${{ matrix.arch }}" >> .npmrc
+          fi
+          echo "---- .npmrc ----"
+          cat .npmrc
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile

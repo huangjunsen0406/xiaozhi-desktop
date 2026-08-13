@@ -5,9 +5,8 @@
 
 import { Buffer } from 'node:buffer'
 import { Monitor } from 'node-screenshots'
-import sharp from 'sharp'
-
 import { getLogger } from '../../../utils/logger'
+import { getSharp } from '../../../utils/sharp'
 
 const logger = getLogger('ScreenshotTool')
 
@@ -101,6 +100,7 @@ export class ScreenshotTool {
       let finalBuffer: Buffer
       let mime: 'image/jpeg' | 'image/png'
       try {
+        const sharp = await getSharp()
         const jpegBuffer = await sharp(pngBuffer)
           .resize({
             width: COMPRESS_MAX_DIMENSION,

@@ -12,25 +12,29 @@ import type {
   PetSpritesheetPayload,
   PetSpriteVersion,
 } from '@shared/types'
-import type { Dirent } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
-import process from 'node:process'
 import {
   clampPetDisplayWidth,
   PET_DISPLAY_WIDTH_DEFAULT,
   PET_SPRITE_FRAME_H,
   PET_SPRITE_FRAME_W,
 } from '@shared/types'
-import { app } from 'electron'
 import fs from 'fs-extra'
-import sharp from 'sharp'
 import { getLogger } from '../utils/logger'
 import {
   getPetsConfigFile,
   isPathInside,
   getPetsDir as resolvePetsDir,
 } from '../utils/paths'
+import { getSharp } from '../utils/sharp'
+import {
+  findPetDirInRoot,
+  getBundledPetsDir,
+  getCodexPetsDir,
+  resolvePetDir,
+} from './petPaths'
+
+export { getBundledPetsDir, getCodexPetsDir, resolvePetDir } from './petPaths'
 
 const logger = getLogger('PetsManager')
 
@@ -122,33 +126,6 @@ function getPetsDir(): string {
 }
 
 /**
- * Codex 桌宠目录（只读来源）。
- * `$CODEX_HOME/pets` 或 `~/.codex/pets`。
- * 仅返回路径字符串，不 ensureDir、不创建。
- */
-export function getCodexPetsDir(): string {
-  const codexHome = process.env.CODEX_HOME?.trim()
-  const root = codexHome && codexHome.length > 0
-    ? codexHome
-    : path.join(os.homedir(), '.codex')
-  return path.join(root, 'pets')
-}
-
-/**
- * 内置宠物源目录（只读，随应用分发）
- * - 生产：{process.resourcesPath}/pets（extraResources，app.asar 外部）
- * - 开发：out/main → 项目根 resources/pets
- *
- * 仅用于首次启动种子复制，不写入。
- */
-export function getBundledPetsDir(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'pets')
-  }
-  return path.join(__dirname, '../../resources/pets')
-}
-
-/**
  * 确保内置宠物（月薪喵/usagi/sensen）已种子到本地可写目录。
  *
  * 策略：
@@ -230,74 +207,6 @@ export async function ensureBuiltinPetsCopied(): Promise<number> {
 }
 
 /**
- * 在单个 root 下按 petId 查找宠物目录。
- *
- * 匹配规则（与 scanPets 一致）：
- * 1. 快路径：`root/petId/pet.json` 存在（文件夹名 === id）
- * 2. 扫描子目录：`pet.json.id === petId` 或 `entry.name === petId`
- *
- * 用于 id 与文件夹名不一致的情况（如 codex `gugugaga-2` / id `gugugaga小企鹅`）。
- */
-async function findPetDirInRoot(root: string, petId: string): Promise<string | null> {
-  if (!petId || !(await fs.pathExists(root)))
-    return null
-
-  // 快路径：文件夹名与 id 相同
-  const directDir = path.join(root, petId)
-  if (await fs.pathExists(path.join(directDir, 'pet.json')))
-    return directDir
-
-  // 慢路径：扫描子目录，按 pet.json.id 匹配（文件夹名快路径已处理）
-  let entries: Dirent[]
-  try {
-    entries = await fs.readdir(root, { withFileTypes: true })
-  }
-  catch (error) {
-    logger.warn(`读取宠物目录失败: ${root}`, error)
-    return null
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory())
-      continue
-    // 快路径已覆盖 entry.name === petId 且有 pet.json 的情况
-    if (entry.name === petId)
-      continue
-
-    const petDir = path.join(root, entry.name)
-    const petJsonPath = path.join(petDir, 'pet.json')
-    if (!(await fs.pathExists(petJsonPath)))
-      continue
-
-    try {
-      const petJson = await fs.readJson(petJsonPath) as PetJsonManifest
-      if (petJson.id === petId)
-        return petDir
-    }
-    catch (error) {
-      logger.warn(`读取 pet.json 失败: ${petJsonPath}`, error)
-    }
-  }
-
-  return null
-}
-
-/**
- * 解析宠物目录：local 优先，否则 codex。不复制。
- * 支持 pet.json.id 与文件夹名不一致。
- */
-export async function resolvePetDir(petId: string): Promise<string | null> {
-  if (!petId)
-    return null
-
-  const localDir = await findPetDirInRoot(getPetsDir(), petId)
-  if (localDir)
-    return localDir
-
-  return findPetDirInRoot(getCodexPetsDir(), petId)
-}
-
-/**
  * 获取宠物配置文件路径
  */
 function getConfigFilePath(): string {
@@ -360,6 +269,7 @@ async function extractPreview(spritesheetPath: string): Promise<string | undefin
       return undefined
     }
 
+    const sharp = await getSharp()
     const preview = await sharp(spritesheetPath)
       .extract({ left: 0, top: 0, width: FRAME_WIDTH, height: FRAME_HEIGHT })
       .resize(PREVIEW_WIDTH, PREVIEW_HEIGHT)
@@ -398,6 +308,7 @@ async function readPetManifest(petDir: string): Promise<{
     return null
   }
 
+  const sharp = await getSharp()
   const meta = await sharp(spritesheetFullPath).metadata()
   const width = meta.width || 0
   const height = meta.height || 0

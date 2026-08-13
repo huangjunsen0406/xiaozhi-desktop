@@ -7,10 +7,14 @@ import { parseServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Protocol } from './Protocol'
 import { isCleanCloseCode } from './wsCloseCodes'
+import { closeWsSocket } from './wsCloseSocket'
 
 export { isCleanCloseCode, WS_CLEAN_CLOSE_CODES } from './wsCloseCodes'
 
 const logger = getLogger('WebSocket')
+
+/** 用户在握手完成前取消连接（停止对话 / 关通道） */
+const CONNECT_CANCELLED = '连接已取消'
 
 /**
  * WebSocket 协议实现
@@ -53,6 +57,9 @@ export class WebSocketProtocol extends Protocol {
   // ========== 重连控制 ==========
   private reconnectDelayTimeout: NodeJS.Timeout | null = null
   private isHandlingConnectionLoss: boolean = false
+
+  /** 握手未完成就被取消时，用来结束 connect() 的 Promise，避免 connectLock 永久挂起 */
+  private pendingConnectReject: ((error: Error) => void) | null = null
 
   constructor() {
     super()
@@ -135,12 +142,29 @@ export class WebSocketProtocol extends Protocol {
       // 设置事件监听器
       this.setupEventListeners()
 
-      // 等待连接建立
-      return new Promise((resolve, reject) => {
+      // 必须 await：拒绝会被本函数 catch 收成 false，避免取消连接冒成未处理异常
+      return await new Promise((resolve, reject) => {
+        let settled = false
+        const resolveOnce = (value: boolean) => {
+          if (settled)
+            return
+          settled = true
+          this.pendingConnectReject = null
+          resolve(value)
+        }
+        const rejectOnce = (error: Error) => {
+          if (settled)
+            return
+          settled = true
+          this.pendingConnectReject = null
+          this.clearConnectionTimers()
+          reject(error)
+        }
+        this.pendingConnectReject = rejectOnce
+
         // 使用类成员保存定时器引用
         this.connectionTimeout = setTimeout(() => {
-          this.clearConnectionTimers()
-          reject(new Error('连接超时'))
+          rejectOnce(new Error('连接超时'))
         }, 20000)
 
         this.ws!.once('open', async () => {
@@ -191,31 +215,32 @@ export class WebSocketProtocol extends Protocol {
               this.onConnectionStateChangedCallback(true, '连接成功')
             }
 
-            resolve(true)
+            resolveOnce(true)
           }
           catch (error) {
-            this.clearConnectionTimers()
-            reject(error)
+            rejectOnce(error instanceof Error ? error : new Error(String(error)))
           }
         })
 
         this.ws!.once('error', (error) => {
-          this.clearConnectionTimers()
-          reject(error)
+          rejectOnce(error)
         })
 
         // 处理握手期间连接关闭（如服务端主动断开）
         this.ws!.once('close', (code, reason) => {
-          this.clearConnectionTimers()
-          reject(new Error(`连接在握手期间关闭: ${code} ${reason?.toString()}`))
+          rejectOnce(new Error(`连接在握手期间关闭: ${code} ${reason?.toString()}`))
         })
       })
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error('连接失败', error)
-      await this.cleanup()
-      if (this.onNetworkErrorCallback) {
+      const cancelled = error instanceof Error && error.message === CONNECT_CANCELLED
+      if (!cancelled)
+        logger.error('连接失败', error)
+      // 取消来自 cleanup() 本身，再清一次会拆掉随后新建的连接
+      if (!cancelled)
+        await this.cleanup()
+      if (!cancelled && this.onNetworkErrorCallback) {
         this.onNetworkErrorCallback(`无法连接服务: ${errorMessage}`)
       }
       return false
@@ -648,18 +673,21 @@ export class WebSocketProtocol extends Protocol {
       this.reconnectDelayTimeout = null
     }
 
+    // 握手中被取消：先结束 connect()，避免监听被卸掉后 Promise / connectLock 永久挂起
+    if (this.pendingConnectReject) {
+      this.pendingConnectReject(new Error(CONNECT_CANCELLED))
+    }
+
     // 移除事件监听器
     this.removeEventListeners()
 
     // 关闭 WebSocket
     if (this.ws) {
       try {
-        // 移除所有剩余的监听器
-        this.ws.removeAllListeners()
-
-        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-          this.ws.close()
-        }
+        const socket = this.ws
+        // 先卸掉业务监听，避免 close 再触发 handleConnectionLoss
+        socket.removeAllListeners()
+        closeWsSocket(socket)
       }
       catch (error) {
         logger.error('关闭 WebSocket 时出错', error)

@@ -1,8 +1,8 @@
 import type { AnalyzeResult, CameraToolConfig, CaptureResult } from './types'
 import { Buffer } from 'node:buffer'
 import { BrowserWindow, ipcMain } from 'electron'
-import sharp from 'sharp'
 import { getLogger } from '../../../utils/logger'
+import { getSharp } from '../../../utils/sharp'
 
 const logger = getLogger('BaseCamera')
 
@@ -34,6 +34,7 @@ export abstract class BaseCamera {
 
       const imageData = await this.waitForCaptureResult()
 
+      const sharp = await getSharp()
       const resizedBuffer = await sharp(imageData)
         .resize(this.config.maxDimension, this.config.maxDimension, {
           fit: 'inside',
