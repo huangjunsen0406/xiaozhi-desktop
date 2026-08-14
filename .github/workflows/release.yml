@@ -127,19 +127,13 @@ jobs:
       - name: Override supported architectures
         shell: bash
         run: |
-          # mac：x64 + arm64 都装。Apple Silicon 包被 Rosetta 打开时 process.arch=x64，
-          # 只打单 arch 会报 Could not load sharp using the darwin-x64 runtime。
-          # 其它平台只装当前 matrix arch，避免把无关原生包打进去。
+          # 覆盖仓库默认：当前 OS + 本次 matrix arch。
+          # pnpm 9 认 cpu=x64 这种写法；os[]= 在 9 上无效。
           tmp="$(mktemp)"
           grep -v '^supportedArchitectures' .npmrc > "$tmp" || true
           mv "$tmp" .npmrc
-          echo "supportedArchitectures.os[]=current" >> .npmrc
-          if [[ "${{ runner.os }}" == "macOS" ]]; then
-            echo "supportedArchitectures.cpu[]=x64" >> .npmrc
-            echo "supportedArchitectures.cpu[]=arm64" >> .npmrc
-          else
-            echo "supportedArchitectures.cpu[]=${{ matrix.arch }}" >> .npmrc
-          fi
+          echo "supportedArchitectures.os=current" >> .npmrc
+          echo "supportedArchitectures.cpu=${{ matrix.arch }}" >> .npmrc
           echo "---- .npmrc ----"
           cat .npmrc
 
@@ -148,6 +142,9 @@ jobs:
         env:
           npm_config_arch: ${{ matrix.arch }}
           npm_config_target_arch: ${{ matrix.arch }}
+
+      - name: Verify sharp native for target arch
+        run: node scripts/verify-sharp-native.js ${{ matrix.arch }}
 
       - name: Build
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never

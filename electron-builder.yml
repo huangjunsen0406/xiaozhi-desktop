@@ -33,9 +33,9 @@ asarUnpack:
   # ASAR 解包: 原生 .node 模块需要在文件系统中直接访问
   # 注意: resources/ 不需要 unpack，唤醒词模型已通过 extraResources 处理，图标可在 asar 内正常访问
   - node_modules/sherpa-onnx-*/**/*
-  # sharp 官方要求从 asar 解包，否则 darwin-x64 等平台 require 失败会炸主进程
-  - node_modules/sharp/**/*
-  - node_modules/@img/**/*
+  # sharp 官方要求从 asar 解包；pnpm 实际路径在 .pnpm/@img+* 下
+  - '**/{sharp,@img}/**/*'
+  - '**/*.node'
 afterPack: scripts/afterPack.js
 
 win:

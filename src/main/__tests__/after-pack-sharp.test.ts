@@ -11,9 +11,11 @@ import { describe, it } from 'node:test'
 const require = createRequire(import.meta.url)
 const {
   candidateSharpNodes,
+  findProjectSharpDir,
   runtimePlatforms,
 } = require('../../../scripts/afterPack.js') as {
   candidateSharpNodes: (resourcesRoot: string, runtime: string) => string[]
+  findProjectSharpDir: (projectDir: string, pkgName: string) => string | null
   runtimePlatforms: (electronPlatformName: string, arch: number) => string[]
 }
 
@@ -33,5 +35,14 @@ describe('afterPack sharp lookup', () => {
       path.join('/res', 'app.asar.unpacked', 'node_modules', '@img/sharp-darwin-x64', 'lib', 'sharp-darwin-x64.node'),
     )
     assert.ok(files.some((file: string) => file.endsWith(`${path.sep}sharp.node`)))
+  })
+
+  it('finds the hoisted @img/sharp-* dir in this repo when present', () => {
+    const root = path.resolve(__dirname, '../../..')
+    const found = findProjectSharpDir(root, `sharp-${process.platform}-${process.arch}`)
+    if (process.platform === 'darwin' || process.platform === 'linux' || process.platform === 'win32') {
+      assert.ok(found, `expected local sharp for ${process.platform}-${process.arch}`)
+      assert.ok(found.includes(`sharp-${process.platform}-${process.arch}`))
+    }
   })
 })
