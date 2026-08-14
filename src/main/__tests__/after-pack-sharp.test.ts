@@ -3,10 +3,19 @@
  *
  * 运行：npx tsx --test src/main/__tests__/after-pack-sharp.test.ts
  */
-const assert = require('node:assert/strict')
-const path = require('node:path')
-const { describe, it } = require('node:test')
-const { candidateSharpNodes, runtimePlatforms } = require('../../../scripts/afterPack.js')
+import assert from 'node:assert/strict'
+import path from 'node:path'
+import { createRequire } from 'node:module'
+import { describe, it } from 'node:test'
+
+const require = createRequire(import.meta.url)
+const {
+  candidateSharpNodes,
+  runtimePlatforms,
+} = require('../../../scripts/afterPack.js') as {
+  candidateSharpNodes: (resourcesRoot: string, runtime: string) => string[]
+  runtimePlatforms: (electronPlatformName: string, arch: number) => string[]
+}
 
 describe('afterPack sharp lookup', () => {
   it('maps electron-builder arch ids to one runtime per platform', () => {
@@ -23,6 +32,6 @@ describe('afterPack sharp lookup', () => {
       files[0],
       path.join('/res', 'app.asar.unpacked', 'node_modules', '@img/sharp-darwin-x64', 'lib', 'sharp-darwin-x64.node'),
     )
-    assert.ok(files.some(file => file.endsWith(`${path.sep}sharp.node`)))
+    assert.ok(files.some((file: string) => file.endsWith(`${path.sep}sharp.node`)))
   })
 })
