@@ -1,6 +1,9 @@
 /**
- * 打包后校验目标平台的 sharp 原生二进制已解包。
- * Intel Mac 缺 @img/sharp-darwin-x64 时，主进程 require('sharp') 会直接弹框。
+ * 打包后校验当前目标平台的 sharp 原生二进制已解包。
+ *
+ * 真实文件在 lib/sharp-<runtime>.node（package exports 映射 ./sharp.node），
+ * 不是包根下的 sharp.node。只检查本次打包的 arch，不强求把另一边
+ * 的 Darwin 二进制塞进单 arch 包（electron-builder 通常不会打进去）。
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -15,10 +18,6 @@ const ARCH_NAME = {
 }
 
 function runtimePlatforms(electronPlatformName, arch) {
-  // mac 包无论打 arm64 还是 x64，都带上另一边：Rosetta / 下错 arch 时 sharp 才找得到
-  if (electronPlatformName === 'darwin') {
-    return ['darwin-x64', 'darwin-arm64']
-  }
   const cpu = ARCH_NAME[arch] ?? String(arch)
   if (cpu === 'universal') {
     return [`${electronPlatformName}-x64`, `${electronPlatformName}-arm64`]
@@ -39,11 +38,27 @@ function resourcesDir(context) {
   return path.join(appOutDir, 'resources')
 }
 
-function candidateSharpNodes(root, runtime) {
+function moduleRoots(resourcesRoot, runtime) {
   return [
-    path.join(root, 'app.asar.unpacked', 'node_modules', `@img/sharp-${runtime}`, 'sharp.node'),
-    path.join(root, 'app', 'node_modules', `@img/sharp-${runtime}`, 'sharp.node'),
+    path.join(resourcesRoot, 'app.asar.unpacked', 'node_modules', `@img/sharp-${runtime}`),
+    path.join(resourcesRoot, 'app', 'node_modules', `@img/sharp-${runtime}`),
   ]
+}
+
+function candidateSharpNodes(resourcesRoot, runtime) {
+  return moduleRoots(resourcesRoot, runtime).flatMap(dir => [
+    path.join(dir, 'lib', `sharp-${runtime}.node`),
+    path.join(dir, 'sharp.node'),
+  ])
+}
+
+function listDir(dir) {
+  try {
+    return fs.readdirSync(dir, { recursive: true }).join('\n')
+  }
+  catch (error) {
+    return `(unreadable ${dir}: ${error.message})`
+  }
 }
 
 async function afterPack(context) {
@@ -54,10 +69,14 @@ async function afterPack(context) {
     const candidates = candidateSharpNodes(root, runtime)
     const found = candidates.find(file => fs.existsSync(file))
     if (!found) {
+      const listings = moduleRoots(root, runtime)
+        .map(dir => `${dir}\n${listDir(dir)}`)
+        .join('\n\n')
       throw new Error(
         `Packed app missing sharp native binary for ${runtime}.\n`
         + `Looked in:\n${candidates.map(file => `  - ${file}`).join('\n')}\n`
-        + 'Install the matching optional package (e.g. @img/sharp-darwin-x64) and unpack node_modules/@img.',
+        + `Unpacked @img/sharp-${runtime}:\n${listings}\n`
+        + 'Install the matching optional package and unpack node_modules/@img.',
       )
     }
     console.log(`[afterPack] sharp native ok: ${found}`)
@@ -66,3 +85,5 @@ async function afterPack(context) {
 
 module.exports = afterPack
 module.exports.default = afterPack
+module.exports.runtimePlatforms = runtimePlatforms
+module.exports.candidateSharpNodes = candidateSharpNodes
