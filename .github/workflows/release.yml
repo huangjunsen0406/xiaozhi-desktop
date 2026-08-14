@@ -143,8 +143,8 @@ jobs:
           npm_config_arch: ${{ matrix.arch }}
           npm_config_target_arch: ${{ matrix.arch }}
 
-      - name: Verify sharp native for target arch
-        run: node scripts/verify-sharp-native.js ${{ matrix.arch }}
+      - name: Ensure sharp native for target arch
+        run: node scripts/ensure-sharp-native.js ${{ matrix.arch }}
 
       - name: Build
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never
