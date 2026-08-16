@@ -153,6 +153,8 @@ jobs:
           # 与 install 一致，避免 electron-builder / rebuild 回到 host arch
           npm_config_arch: ${{ matrix.arch }}
           npm_config_target_arch: ${{ matrix.arch }}
+          # 禁止在 runner 钥匙串里乱抓证书；mac 用 electron-builder identity: "-"
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       # 只收集用户下载包 + 应用内更新必需文件；排除 builder-debug.yml 等调试产物
       - name: Collect release assets

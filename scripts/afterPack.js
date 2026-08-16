@@ -5,6 +5,7 @@
  * pnpm 下 electron-builder 有时不会把 @img/sharp-* 打进 asar.unpacked，
  * 缺失时从工程 node_modules（含 .pnpm store）解引用拷进去。
  */
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -145,10 +146,39 @@ function ensureRuntime(context, runtime) {
   console.log(`[afterPack] sharp native ok after copy: ${found}`)
 }
 
+function macAppPath(context) {
+  return path.join(
+    context.appOutDir,
+    `${context.packager.appInfo.productFilename}.app`,
+  )
+}
+
+/**
+ * extraResources / asarUnpack / 补拷 sharp 之后，Electron 自带的签名清单会过期。
+ * ShipIt 校验失败：代码不含资源，但签名指示这些资源必须存在。
+ * ad-hoc 重签让资源封印与当前包一致；正式 Developer ID 仍由 builder 后续步骤处理。
+ */
+function resignMacAppAdHoc(context) {
+  if (context.electronPlatformName !== 'darwin')
+    return
+
+  const appPath = macAppPath(context)
+  if (!fs.existsSync(appPath)) {
+    console.warn(`[afterPack] skip ad-hoc sign, app not found: ${appPath}`)
+    return
+  }
+
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], {
+    stdio: 'inherit',
+  })
+  console.log(`[afterPack] ad-hoc signed ${appPath}`)
+}
+
 async function afterPack(context) {
   const runtimes = runtimePlatforms(context.electronPlatformName, context.arch)
   for (const runtime of runtimes)
     ensureRuntime(context, runtime)
+  resignMacAppAdHoc(context)
 }
 
 module.exports = afterPack
