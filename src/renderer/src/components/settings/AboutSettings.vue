@@ -4,8 +4,9 @@
  * 布局与系统选项 / 关怀等页一致：NForm 左标签
  */
 import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
+import { stripReleaseNotesHtml } from '@shared/releaseNotes'
 import { NButton, NForm, NFormItem, NProgress, NSpace, NSwitch, useMessage } from 'naive-ui'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const message = useMessage()
 
@@ -20,6 +21,7 @@ const downloadPct = ref(0)
 const downloadLabel = ref('')
 const processVersions = ref<{ electron?: string, chrome?: string, node?: string }>({})
 const analyticsEnabled = ref(true)
+const releaseNotesText = computed(() => stripReleaseNotesHtml(updateInfo.value?.releaseNotes))
 
 let offProgress: (() => void) | null = null
 let offDownloaded: (() => void) | null = null
@@ -309,10 +311,10 @@ defineExpose({ handleSave })
             发现新版本 v{{ updateInfo.version }}（当前 v{{ updateInfo.currentVersion }}）
           </p>
           <p
-            v-if="updateInfo?.releaseNotes && updateInfo.available"
+            v-if="releaseNotesText && updateInfo?.available"
             class="hint notes"
           >
-            {{ updateInfo.releaseNotes }}
+            {{ releaseNotesText }}
           </p>
 
           <div v-if="updateInstalling" class="progress-block">

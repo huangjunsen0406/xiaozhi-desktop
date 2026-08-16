@@ -10,14 +10,15 @@ import type {
   PetsConfigFile,
   PetSource,
   PetSpritesheetPayload,
-  PetSpriteVersion,
 } from '@shared/types'
 import path from 'node:path'
+import { shouldCopyBuiltinPet } from '@shared/petsSeed'
 import {
   clampPetDisplayWidth,
   PET_DISPLAY_WIDTH_DEFAULT,
   PET_SPRITE_FRAME_H,
   PET_SPRITE_FRAME_W,
+  resolveSpriteVersion,
 } from '@shared/types'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger'
@@ -41,9 +42,6 @@ const logger = getLogger('PetsManager')
 /** 精灵图参数（Codex 兼容） */
 const FRAME_WIDTH = PET_SPRITE_FRAME_W
 const FRAME_HEIGHT = PET_SPRITE_FRAME_H
-/** v1 atlas 高 1872（8×9）；v2 高 2288（8×11） */
-const V1_ATLAS_HEIGHT = FRAME_HEIGHT * 9
-const V2_ATLAS_HEIGHT = FRAME_HEIGHT * 11
 
 /** 预览图缩放尺寸 */
 const PREVIEW_WIDTH = 96
@@ -52,19 +50,40 @@ const PREVIEW_HEIGHT = 104
 const CODEX_DELETE_ERROR = 'Codex 来源宠物不可删除，请在本地导入副本或到 ~/.codex/pets 管理'
 
 /**
- * 内置宠物种子完成标记（隐藏文件，位于 userData/pets/ 根下）。
- *
- * 为什么选标记文件而非 pets-config.json 字段：
- * - pets-config.json 是 shared DTO，加字段要同步 shared 类型与读写，侵入面大；
- * - 标记与 pets 目录本身绑定：用户切换 XIAOZHI_PETS_DIR / PATHS.petsDir 时新目录
- *   自然无标记、重新种子，语义一致；
- * - 安全：scanPetsFromDir 只读目录项（文件天然跳过）；deletePet 只删真实宠物子目录，
- *   不会触碰该文件。
+ * 用户主动删除过的内置宠物 id（隐藏文件，位于 userData/pets/ 根下）。
+ * 只记录 bundled 目录里的 id；scanPets 跳过文件，deletePet 不会删它。
  */
-const BUILTIN_SEEDED_MARKER = '.builtin-seeded'
+const BUILTIN_REMOVED_FILE = '.builtin-removed.json'
 
-function getBuiltinSeededMarkerPath(): string {
-  return path.join(getPetsDir(), BUILTIN_SEEDED_MARKER)
+function getBuiltinRemovedFilePath(): string {
+  return path.join(getPetsDir(), BUILTIN_REMOVED_FILE)
+}
+
+async function readRemovedBuiltinIds(): Promise<Set<string>> {
+  const file = getBuiltinRemovedFilePath()
+  try {
+    if (!(await fs.pathExists(file)))
+      return new Set()
+    const raw = await fs.readJson(file)
+    if (!Array.isArray(raw))
+      return new Set()
+    return new Set(raw.filter((id): id is string => typeof id === 'string' && id.length > 0))
+  }
+  catch (error) {
+    logger.warn('读取内置宠物删除记录失败', error)
+    return new Set()
+  }
+}
+
+async function markBuiltinRemoved(petId: string): Promise<void> {
+  const bundledDir = getBundledPetsDir()
+  if (!(await fs.pathExists(path.join(bundledDir, petId, 'pet.json'))))
+    return
+  const ids = await readRemovedBuiltinIds()
+  if (ids.has(petId))
+    return
+  ids.add(petId)
+  await fs.writeJson(getBuiltinRemovedFilePath(), [...ids], { spaces: 2 })
 }
 
 type PetsConfig = PetsConfigFile
@@ -78,47 +97,6 @@ interface PetJsonManifest {
 }
 
 /**
- * 将 pet.json 中的版本字段规范为 1 | 2
- */
-function normalizeSpriteVersion(value: unknown): PetSpriteVersion | undefined {
-  if (value === 1 || value === 2)
-    return value
-  if (value === '1')
-    return 1
-  if (value === '2')
-    return 2
-  return undefined
-}
-
-/**
- * 按 atlas 像素高度推断版本（Codex：1872→v1，2288→v2）
- */
-function inferSpriteVersionFromHeight(height: number): PetSpriteVersion {
-  if (height >= V2_ATLAS_HEIGHT - FRAME_HEIGHT / 2)
-    return 2
-  if (height >= V1_ATLAS_HEIGHT - FRAME_HEIGHT / 2)
-    return 1
-  // 非标准高度：按行数估算
-  const rows = Math.max(1, Math.round(height / FRAME_HEIGHT))
-  return rows >= 11 ? 2 : 1
-}
-
-/**
- * 解析最终 sprite 版本：显式 manifest > 高度推断 > 默认 1
- */
-function resolveSpriteVersion(
-  manifestVersion: unknown,
-  imageHeight?: number,
-): PetSpriteVersion {
-  const fromManifest = normalizeSpriteVersion(manifestVersion)
-  if (fromManifest)
-    return fromManifest
-  if (typeof imageHeight === 'number' && imageHeight > 0)
-    return inferSpriteVersionFromHeight(imageHeight)
-  return 1
-}
-
-/**
  * 获取本地可写宠物存储目录
  */
 function getPetsDir(): string {
@@ -128,31 +106,25 @@ function getPetsDir(): string {
 /**
  * 确保内置宠物（月薪喵/usagi/sensen）已种子到本地可写目录。
  *
- * 策略：
- * 1. 只种子一次：首次完整成功后写标记文件 `userData/pets/.builtin-seeded`，
- *    之后直接 no-op（用户删除的内置宠物保持删除，不复活）。
- * 2. Codex 已有同 id 宠物（含 pet.json）则跳过，用户 Codex 版本优先。
- * 3. 幂等：仅复制缺失目录（或缺失 pet.json 的残缺目录），
- *    不覆盖已存在 pet.json 的用户版本（可导入/可删除的普通本地宠物）。
+ * 按 id 补洞，不靠全局一次性标记：
+ * - 本地已有 pet.json：不覆盖
+ * - Codex 仍有同 id：不复制（Codex 优先）
+ * - 用户在设置里删过该内置 id：不复活
+ * - 以上都没有：从安装包拷到本地
  *
- * 标记只在整轮成功（或全部跳过）后写入；中途异常不写，下次启动重试。
+ * 覆盖「首次种子时 Codex 占坑、后来 Codex 被删」——月薪喵/usagi 会补回来。
+ *
  * @returns 本次复制的宠物数量
  */
 export async function ensureBuiltinPetsCopied(): Promise<number> {
   const petsDir = getPetsDir()
-  const markerPath = getBuiltinSeededMarkerPath()
-
-  // 已完成首次种子：直接跳过（含用户删除内置宠物后的场景）
-  if (await fs.pathExists(markerPath)) {
-    return 0
-  }
-
   const bundledDir = getBundledPetsDir()
   if (!(await fs.pathExists(bundledDir))) {
     logger.warn(`内置宠物目录不存在: ${bundledDir}`)
     return 0
   }
 
+  const removed = await readRemovedBuiltinIds()
   const codexDir = getCodexPetsDir()
   let copiedCount = 0
   try {
@@ -164,20 +136,23 @@ export async function ensureBuiltinPetsCopied(): Promise<number> {
       const petId = entry.name
       const sourcePath = path.join(bundledDir, petId)
       const targetPath = path.join(petsDir, petId)
+      const localExists = await fs.pathExists(path.join(targetPath, 'pet.json'))
+      const codexExists = Boolean(await findPetDirInRoot(codexDir, petId))
 
-      // Codex 已有同 id 宠物（文件夹名或 pet.json.id 命中）：不复制，Codex 版本优先
-      if (await findPetDirInRoot(codexDir, petId)) {
-        logger.info(`Codex 已有同 id 宠物，跳过种子: ${petId}`)
+      if (!shouldCopyBuiltinPet({
+        localExists,
+        codexExists,
+        userRemoved: removed.has(petId),
+      })) {
+        if (localExists)
+          logger.info(`内置宠物已存在，跳过: ${petId}`)
+        else if (codexExists)
+          logger.info(`Codex 已有同 id 宠物，跳过种子: ${petId}`)
+        else if (removed.has(petId))
+          logger.info(`用户已删除内置宠物，跳过种子: ${petId}`)
         continue
       }
 
-      // 已有有效本地版本（含 pet.json）视为用户版本，不覆盖
-      if (await fs.pathExists(path.join(targetPath, 'pet.json'))) {
-        logger.info(`内置宠物已存在，跳过: ${petId}`)
-        continue
-      }
-
-      // 残缺目标目录（无 pet.json，非有效宠物）：清除后整体复制，避免残留
       if (await fs.pathExists(targetPath)) {
         logger.warn(`内置宠物目标目录不完整（缺 pet.json），重新复制: ${targetPath}`)
         await fs.remove(targetPath)
@@ -189,20 +164,12 @@ export async function ensureBuiltinPetsCopied(): Promise<number> {
     }
   }
   catch (error) {
-    // 部分失败：不写标记，下次启动重试（幂等，已复制的不重复）
     logger.error('复制内置宠物失败', error)
     return copiedCount
   }
 
-  // 整轮成功（含全部跳过）：写一次性标记；失败则下次启动重试（无害，幂等）
-  try {
-    await fs.writeFile(markerPath, new Date().toISOString())
-  }
-  catch (error) {
-    logger.error('写入内置宠物种子标记失败，下次启动将重试', error)
-  }
-
-  logger.info(`内置宠物种子完成，共复制 ${copiedCount} 个`)
+  if (copiedCount > 0)
+    logger.info(`内置宠物种子完成，共复制 ${copiedCount} 个`)
   return copiedCount
 }
 
@@ -285,13 +252,11 @@ async function extractPreview(spritesheetPath: string): Promise<string | undefin
 }
 
 /**
- * 读取 pet.json + 精灵图元数据
+ * 读取 pet.json + 精灵图路径。不碰 sharp：缺原生包时设置页仍能列出宠物。
  */
-async function readPetManifest(petDir: string): Promise<{
+async function readPetFiles(petDir: string): Promise<{
   petJson: PetJsonManifest
   spritesheetFullPath: string
-  width: number
-  height: number
 } | null> {
   const petJsonPath = path.join(petDir, 'pet.json')
   if (!(await fs.pathExists(petJsonPath))) {
@@ -308,12 +273,27 @@ async function readPetManifest(petDir: string): Promise<{
     return null
   }
 
-  const sharp = await getSharp()
-  const meta = await sharp(spritesheetFullPath).metadata()
-  const width = meta.width || 0
-  const height = meta.height || 0
+  return { petJson, spritesheetFullPath }
+}
 
-  return { petJson, spritesheetFullPath, width, height }
+/**
+ * 用 sharp 读精灵图像素尺寸。原生包缺失或解码失败时返回 null，调用方回退。
+ */
+async function readSpritesheetSize(
+  spritesheetFullPath: string,
+): Promise<{ width: number, height: number } | null> {
+  try {
+    const sharp = await getSharp()
+    const meta = await sharp(spritesheetFullPath).metadata()
+    return {
+      width: meta.width || 0,
+      height: meta.height || 0,
+    }
+  }
+  catch (error) {
+    logger.warn(`读取精灵图尺寸失败（将跳过预览/按 manifest 推断版本）: ${spritesheetFullPath}`, error)
+    return null
+  }
 }
 
 /**
@@ -325,12 +305,13 @@ async function parsePetInfo(
   source: PetSource,
 ): Promise<PetInfo | null> {
   try {
-    const loaded = await readPetManifest(petDir)
+    const loaded = await readPetFiles(petDir)
     if (!loaded)
       return null
 
-    const { petJson, spritesheetFullPath, height } = loaded
-    const spriteVersionNumber = resolveSpriteVersion(petJson.spriteVersionNumber, height)
+    const { petJson, spritesheetFullPath } = loaded
+    const size = await readSpritesheetSize(spritesheetFullPath)
+    const spriteVersionNumber = resolveSpriteVersion(petJson.spriteVersionNumber, size?.height)
     const previewBase64 = await extractPreview(spritesheetFullPath)
 
     return {
@@ -389,22 +370,23 @@ export async function getPetSpritesheet(petId: string): Promise<PetSpritesheetPa
       return null
     }
 
-    const loaded = await readPetManifest(petDir)
+    const loaded = await readPetFiles(petDir)
     if (!loaded) {
       return null
     }
 
-    const { petJson, spritesheetFullPath, width, height } = loaded
+    const { petJson, spritesheetFullPath } = loaded
     const buffer = await fs.readFile(spritesheetFullPath)
     const ext = path.extname(spritesheetFullPath).toLowerCase()
     const mime = ext === '.png' ? 'image/png' : 'image/webp'
-    const spriteVersionNumber = resolveSpriteVersion(petJson.spriteVersionNumber, height)
+    const size = await readSpritesheetSize(spritesheetFullPath)
+    const spriteVersionNumber = resolveSpriteVersion(petJson.spriteVersionNumber, size?.height)
 
     return {
       dataUrl: `data:${mime};base64,${buffer.toString('base64')}`,
       spriteVersionNumber,
-      width,
-      height,
+      width: size?.width ?? 0,
+      height: size?.height ?? 0,
     }
   }
   catch (error) {
@@ -422,8 +404,7 @@ export async function scanPets(): Promise<PetInfo[]> {
   try {
     await ensurePetsDir()
 
-    // 0) 内置宠物种子：有标记文件时为一次 pathExists 的廉价 no-op，
-    //    保证全新安装的 UI 首次列出前宠物已就位
+    // 0) 内置宠物按 id 补洞（Codex 占坑后消失的会补拷；用户删过的不复活）
     await ensureBuiltinPetsCopied()
 
     // 1) 本地可写目录（优先）
@@ -533,6 +514,7 @@ export async function deletePet(petId: string): Promise<{ success: boolean, erro
     ) {
       await fs.remove(resolvedPetPath)
       logger.info(`已删除宠物: ${petId} (${resolvedPetPath})`)
+      await markBuiltinRemoved(petId)
 
       // 如果删除的是当前宠物，清空选择
       const config = await getConfig()

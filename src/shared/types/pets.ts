@@ -15,6 +15,50 @@ export const PET_DISPLAY_WIDTH_DEFAULT = 112
 /** 精灵图单元格宽高（Codex atlas cell） */
 export const PET_SPRITE_FRAME_W = 192
 export const PET_SPRITE_FRAME_H = 208
+/** v1 atlas 高 1872（8×9）；v2 高 2288（8×11） */
+export const PET_SPRITE_V1_ATLAS_HEIGHT = PET_SPRITE_FRAME_H * 9
+export const PET_SPRITE_V2_ATLAS_HEIGHT = PET_SPRITE_FRAME_H * 11
+
+/**
+ * 将 pet.json 中的版本字段规范为 1 | 2
+ */
+export function normalizeSpriteVersion(value: unknown): PetSpriteVersion | undefined {
+  if (value === 1 || value === 2)
+    return value
+  if (value === '1')
+    return 1
+  if (value === '2')
+    return 2
+  return undefined
+}
+
+/**
+ * 按 atlas 像素高度推断版本（Codex：1872→v1，2288→v2）
+ */
+export function inferSpriteVersionFromHeight(height: number): PetSpriteVersion {
+  if (height >= PET_SPRITE_V2_ATLAS_HEIGHT - PET_SPRITE_FRAME_H / 2)
+    return 2
+  if (height >= PET_SPRITE_V1_ATLAS_HEIGHT - PET_SPRITE_FRAME_H / 2)
+    return 1
+  const rows = Math.max(1, Math.round(height / PET_SPRITE_FRAME_H))
+  return rows >= 11 ? 2 : 1
+}
+
+/**
+ * 解析最终 sprite 版本：显式 manifest > 高度推断 > 默认 1。
+ * 高度未知（sharp 不可用）时回退 1，不阻断列表扫描。
+ */
+export function resolveSpriteVersion(
+  manifestVersion: unknown,
+  imageHeight?: number,
+): PetSpriteVersion {
+  const fromManifest = normalizeSpriteVersion(manifestVersion)
+  if (fromManifest)
+    return fromManifest
+  if (typeof imageHeight === 'number' && imageHeight > 0)
+    return inferSpriteVersionFromHeight(imageHeight)
+  return 1
+}
 
 /** Live2D 在默认 displayWidth=112 时的经典视口 */
 export const LIVE2D_BASE_VIEWPORT_W = 200

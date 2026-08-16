@@ -14,6 +14,7 @@ import type {
   UpdatePrefs,
   UpdateStatusSnapshot,
 } from '@shared/types'
+import { extractReleaseNotes } from '@shared/releaseNotes'
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { getLogger } from '../utils/logger'
@@ -170,11 +171,7 @@ export function initUpdateService(): void {
         available: true,
         currentVersion: app.getVersion(),
         version: info.version,
-        releaseNotes: typeof info.releaseNotes === 'string'
-          ? info.releaseNotes
-          : Array.isArray(info.releaseNotes)
-            ? info.releaseNotes.map(n => (typeof n === 'string' ? n : n.note)).join('\n')
-            : '',
+        releaseNotes: extractReleaseNotes(info.releaseNotes),
       }
       lastCheck = result
       broadcast('update:available', result)
@@ -307,13 +304,7 @@ export async function checkForUpdates(options?: { silent?: boolean }): Promise<U
     const current = currentVersion.replace(/^v/i, '')
     const prefs = readPrefs()
 
-    const notes = !info
-      ? ''
-      : typeof info.releaseNotes === 'string'
-        ? info.releaseNotes
-        : Array.isArray(info.releaseNotes)
-          ? info.releaseNotes.map(n => (typeof n === 'string' ? n : n.note || '')).join('\n')
-          : ''
+    const notes = extractReleaseNotes(info?.releaseNotes)
 
     if (remote && isRemoteNewer(current, remote)) {
       if (prefs.skippedVersion && prefs.skippedVersion === remote) {
