@@ -181,6 +181,23 @@ jobs:
             cp -v "$f" .release-upload/
           done
 
+          # GitHub 会剥掉文件名里的非 ASCII。productName「小智」会变成
+          # -1.1.8-arm64-mac.zip，和 latest-mac.yml 对不上。上传前改成 package name。
+          pkg_name="$(node -p "require('./package.json').name")"
+          for f in .release-upload/*; do
+            [[ -f "$f" ]] || continue
+            base="$(basename "$f")"
+            case "$base" in
+              latest*|"${pkg_name}"*) continue ;;
+            esac
+            cleaned="${base#小智}"
+            cleaned="${cleaned#-}"
+            dest=".release-upload/${pkg_name}-${cleaned}"
+            if [[ "$f" != "$dest" ]]; then
+              mv -v "$f" "$dest"
+            fi
+          done
+
           count="$(find .release-upload -type f | wc -l | tr -d ' ')"
           echo "Collected $count asset(s) for upload"
           ls -la .release-upload || true

@@ -87,6 +87,10 @@ mac:
     NSDownloadsFolderUsageDescription: 小智桌面需要访问您的下载文件夹以保存下载的文件。
     NSDesktopFolderUsageDescription: 小智桌面需要访问您的桌面以保存文件。
   notarize: false
+  # zip 默认用 productName（「小智」），GitHub Release 会剥掉非 ASCII，
+  # 上传成 -1.1.8-arm64-mac.zip，和 latest-mac.yml 对不上 → 应用内更新 404。
+  # 与 dmg / nsis 一样用 package.json name。
+  artifactName: ${name}-${version}-${arch}-mac.${ext}
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 linux:
