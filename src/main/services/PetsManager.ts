@@ -313,14 +313,16 @@ async function parsePetInfo(
     const size = await readSpritesheetSize(spritesheetFullPath)
     const spriteVersionNumber = resolveSpriteVersion(petJson.spriteVersionNumber, size?.height)
     const previewBase64 = await extractPreview(spritesheetFullPath)
+    const id = petJson.id || petId
 
     return {
-      id: petJson.id || petId,
+      id,
       displayName: petJson.displayName || petId,
       description: petJson.description || '',
       spritesheetPath: spritesheetFullPath,
       spriteVersionNumber,
       previewBase64,
+      previewUrl: `sprite-pet://${encodeURIComponent(id)}/${path.basename(spritesheetFullPath)}`,
       source,
     }
   }

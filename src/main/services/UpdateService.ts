@@ -15,11 +15,13 @@ import type {
   UpdateStatusSnapshot,
 } from '@shared/types'
 import { extractReleaseNotes } from '@shared/releaseNotes'
+import process from 'node:process'
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { getLogger } from '../utils/logger'
 import { setIsQuitting } from '../windows/windowManager'
 import { getDatabase } from './database'
+import { installMacZipAndRelaunch } from './macZipInstall'
 
 const logger = getLogger('UpdateService')
 
@@ -46,6 +48,12 @@ let updateDownloaded = false
 let lastCheck: UpdateCheckResult | null = null
 let lastError: string | null = null
 let downloadProgress: UpdateDownloadProgress | null = null
+/** Mac 自替换安装用：Squirrel.Mac 验签过不了未签名包 */
+let lastDownloadedFile: string | null = null
+
+function isMac(): boolean {
+  return process.platform === 'darwin'
+}
 
 /** downloadUpdate 与 update-downloaded 事件之间的桥接 */
 let downloadFinishedResolve: (() => void) | null = null
@@ -122,6 +130,9 @@ function mapError(error: unknown): string {
   if (/Could not fetch|net::|ENOTFOUND|ECONNREFUSED|timed out|unable to connect/i.test(msg)) {
     return '检查更新失败：网络不可用或无法访问更新源（GitHub）'
   }
+  if (/Code signature|未能满足指定的代码要求|签名指示这些资源必须存在/i.test(msg)) {
+    return '应用内更新无法通过系统签名校验。请点「打开官网」下载安装包手动覆盖。'
+  }
   return `更新失败：${msg}`
 }
 
@@ -141,7 +152,8 @@ export function initUpdateService(): void {
 
   try {
     autoUpdater.autoDownload = false
-    autoUpdater.autoInstallOnAppQuit = true
+    // Mac 未签名包不能交给 Squirrel.Mac；下载后由 installMacZipAndRelaunch 替换
+    autoUpdater.autoInstallOnAppQuit = !isMac()
     // 允许降级测试时可开；生产保持 false
     autoUpdater.allowDowngrade = false
     autoUpdater.logger = {
@@ -206,6 +218,7 @@ export function initUpdateService(): void {
       downloading = false
       updateDownloaded = true
       downloadProgress = null
+      lastDownloadedFile = typeof info.downloadedFile === 'string' ? info.downloadedFile : lastDownloadedFile
       settleDownloadWait()
       broadcast('update:downloaded', {
         version: info.version,
@@ -425,6 +438,16 @@ export function quitAndInstallUpdate(): void {
   }
   // 与窗口 close→hide 逻辑配合：先标记退出
   setIsQuitting(true)
+  if (isMac()) {
+    if (!lastDownloadedFile)
+      throw new Error('未找到已下载的更新包，请打开官网手动安装')
+    void installMacZipAndRelaunch(lastDownloadedFile).catch((error) => {
+      lastError = mapError(error)
+      logger.error('Mac zip 替换安装失败', error)
+      broadcast('update:error', { message: lastError })
+    })
+    return
+  }
   autoUpdater.quitAndInstall(false, true)
 }
 

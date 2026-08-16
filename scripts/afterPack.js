@@ -5,7 +5,6 @@
  * pnpm 下 electron-builder 有时不会把 @img/sharp-* 打进 asar.unpacked，
  * 缺失时从工程 node_modules（含 .pnpm store）解引用拷进去。
  */
-const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -154,31 +153,50 @@ function macAppPath(context) {
 }
 
 /**
- * extraResources / asarUnpack / 补拷 sharp 之后，Electron 自带的签名清单会过期。
- * ShipIt 校验失败：代码不含资源，但签名指示这些资源必须存在。
- * ad-hoc 重签让资源封印与当前包一致；正式 Developer ID 仍由 builder 后续步骤处理。
+ * 只删 bundle 级 _CodeSignature / CodeResources，不动 Mach-O 的 linker-signed。
+ * extraResources 之后若留下过期封印，ShipIt 会报「签名指示这些资源必须存在」。
  */
-function resignMacAppAdHoc(context) {
+function stripMacBundleCodeSignature(dir, removed) {
+  if (!fs.existsSync(dir))
+    return
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name)
+    if (!entry.isDirectory())
+      continue
+    if (entry.name === '_CodeSignature') {
+      fs.rmSync(full, { recursive: true, force: true })
+      removed.push(full)
+      continue
+    }
+    stripMacBundleCodeSignature(full, removed)
+  }
+  const codeResources = path.join(dir, 'CodeResources')
+  if (fs.existsSync(codeResources)) {
+    fs.rmSync(codeResources, { force: true })
+    removed.push(codeResources)
+  }
+}
+
+function stripStaleMacSignatures(context) {
   if (context.electronPlatformName !== 'darwin')
     return
 
   const appPath = macAppPath(context)
-  if (!fs.existsSync(appPath)) {
-    console.warn(`[afterPack] skip ad-hoc sign, app not found: ${appPath}`)
+  if (!fs.existsSync(appPath))
     return
-  }
 
-  execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], {
-    stdio: 'inherit',
-  })
-  console.log(`[afterPack] ad-hoc signed ${appPath}`)
+  const removed = []
+  stripMacBundleCodeSignature(appPath, removed)
+  if (removed.length > 0)
+    console.log(`[afterPack] stripped stale mac signatures:\n${removed.join('\n')}`)
 }
 
 async function afterPack(context) {
   const runtimes = runtimePlatforms(context.electronPlatformName, context.arch)
   for (const runtime of runtimes)
     ensureRuntime(context, runtime)
-  resignMacAppAdHoc(context)
+  stripStaleMacSignatures(context)
 }
 
 module.exports = afterPack
@@ -186,3 +204,4 @@ module.exports.default = afterPack
 module.exports.runtimePlatforms = runtimePlatforms
 module.exports.candidateSharpNodes = candidateSharpNodes
 module.exports.findProjectSharpDir = findProjectSharpDir
+module.exports.stripMacBundleCodeSignature = stripMacBundleCodeSignature

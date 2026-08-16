@@ -184,6 +184,13 @@ defineExpose({
               class="w-full h-full object-contain"
               style="image-rendering: pixelated;"
             >
+            <img
+              v-else-if="pet.previewUrl"
+              :src="pet.previewUrl"
+              :alt="pet.displayName"
+              class="absolute top-0 left-0 w-[800%] max-w-none h-auto"
+              style="image-rendering: pixelated;"
+            >
             <div v-else class="flex items-center justify-center w-full h-full text-gray-400 text-2xl font-bold">
               <span>{{ pet.displayName.charAt(0).toUpperCase() }}</span>
             </div>

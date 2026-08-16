@@ -76,13 +76,8 @@ mac:
   target:
     - dmg
     - zip
-  # 不走 Developer ID。Squirrel.Mac / ShipIt 仍要求 zip 里的 .app 有一份
-  # 和资源一致的签名；完全不签会留下 Electron 原包的过期清单，报
-  # 「代码不含资源，但签名指示这些资源必须存在」。
-  # "-" = ad-hoc，CI 无证书也能签。
-  identity: '-'
-  hardenedRuntime: false
-  gatekeeperAssess: false
+  # 不走 Developer ID。不要 ad-hoc 重签主程序：1.1.7 的指定要求是
+  # Electron 主二进制 cdhash，重签后应用内更新会报「未能满足指定的代码要求」。
   extendInfo:
     LSUIElement: false
     NSCameraUsageDescription: 小智桌面需要访问您的摄像头以提供视觉识别功能。

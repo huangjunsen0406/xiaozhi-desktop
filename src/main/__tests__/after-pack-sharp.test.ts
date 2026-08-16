@@ -4,6 +4,14 @@
  * 运行：npx tsx --test src/main/__tests__/after-pack-sharp.test.ts
  */
 import assert from 'node:assert/strict'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
@@ -13,10 +21,12 @@ const {
   candidateSharpNodes,
   findProjectSharpDir,
   runtimePlatforms,
+  stripMacBundleCodeSignature,
 } = require('../../../scripts/afterPack.js') as {
   candidateSharpNodes: (resourcesRoot: string, runtime: string) => string[]
   findProjectSharpDir: (projectDir: string, pkgName: string) => string | null
   runtimePlatforms: (electronPlatformName: string, arch: number) => string[]
+  stripMacBundleCodeSignature: (dir: string, removed: string[]) => void
 }
 
 describe('afterPack sharp lookup', () => {
@@ -43,6 +53,31 @@ describe('afterPack sharp lookup', () => {
     if (process.platform === 'darwin' || process.platform === 'linux' || process.platform === 'win32') {
       assert.ok(found, `expected local sharp for ${process.platform}-${process.arch}`)
       assert.ok(found.includes(`sharp-${process.platform}-${process.arch}`))
+    }
+  })
+})
+
+describe('stripMacBundleCodeSignature', () => {
+  it('removes _CodeSignature dirs and CodeResources, keeps Mach-O files', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'xiaozhi-codesign-'))
+    try {
+      const sig = path.join(root, 'Contents', '_CodeSignature')
+      mkdirSync(sig, { recursive: true })
+      writeFileSync(path.join(sig, 'CodeResources'), 'stale')
+      writeFileSync(path.join(root, 'Contents', 'CodeResources'), 'stale-root')
+      const bin = path.join(root, 'Contents', 'MacOS', 'app')
+      mkdirSync(path.dirname(bin), { recursive: true })
+      writeFileSync(bin, 'mach-o')
+
+      const removed: string[] = []
+      stripMacBundleCodeSignature(root, removed)
+      assert.equal(existsSync(sig), false)
+      assert.equal(existsSync(path.join(root, 'Contents', 'CodeResources')), false)
+      assert.equal(existsSync(bin), true)
+      assert.ok(removed.some(item => item.endsWith('_CodeSignature')))
+    }
+    finally {
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })

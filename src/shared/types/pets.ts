@@ -117,8 +117,13 @@ export interface PetInfo {
    * 缺省时由主进程按 atlas 高度推断，再回退 1。
    */
   spriteVersionNumber: PetSpriteVersion
-  /** 预览图（base64，第一帧） */
+  /** 预览图（base64，第一帧）。sharp 可用时才有 */
   previewBase64?: string
+  /**
+   * 精灵图自定义协议，设置页在无 previewBase64 时裁第一帧当缩略图。
+   * 例：sprite-pet://usagi/spritesheet.webp
+   */
+  previewUrl?: string
   /**
    * 资源来源。
    * - local：userData/pets（可导入/删除）
