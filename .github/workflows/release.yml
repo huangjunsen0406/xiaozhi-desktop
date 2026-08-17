@@ -99,15 +99,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Apple Silicon 包（runner 本身多为 arm64）
-          - os: macos-latest
-            arch: arm64
-            build_cmd: --mac --arm64
-          # Intel Mac 包：在 arm runner 上交叉出 x64（不再依赖退役风险高的 macos-13）
-          # 需要 Rosetta + npm_config_arch=x64 拉取/编译 darwin-x64 原生模块
-          - os: macos-latest
-            arch: x64
-            build_cmd: --mac --x64
+          # mac 两个架构拆成独立 job（build-mac-*）：latest-mac.yml 需合并，
+          # 矩阵内并行上传同名文件会互相覆盖（曾导致 arm64 用户更新到 x64 包）
           - os: windows-latest
             arch: x64
             build_cmd: --win --x64
@@ -187,6 +180,12 @@ jobs:
           npm_config_arch: ${{ matrix.arch }}
           npm_config_target_arch: ${{ matrix.arch }}
 
+      # postinstall 的 install-app-deps 按 runner 本机架构编译 better-sqlite3 /
+      # uiohook-napi 等（arm64 runner 出 x64 包时会得到 arm64 模块 → dlopen 架构不匹配，
+      # 曾导致 1.2.0 x64 包启动即挂）。显式按目标架构重编。
+      - name: Rebuild native modules for target arch
+        run: pnpm exec electron-builder install-app-deps --arch ${{ matrix.arch }}
+
       - name: Ensure sharp native for target arch
         run: node scripts/ensure-sharp-native.js ${{ matrix.arch }}
 
@@ -264,3 +263,295 @@ jobs:
           # 不传 body，避免多 matrix 并发把已同步的说明覆盖成空
           files: .release-upload/*
           fail_on_unmatched_files: false
+
+  # ── 3a. mac 双架构独立 job（latest-mac.yml 需合并，矩阵内并行上传会互相覆盖）──
+  build-mac-x64:
+    needs: create-public-release
+    runs-on: macos-latest
+    env:
+      npm_config_arch: x64
+      npm_config_target_arch: x64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Python for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # arm64 runner 交叉出 x64 需要 x86_64 工具链
+      - name: Install Rosetta 2
+        run: |
+          if /usr/bin/pgrep oahd >/dev/null 2>&1; then
+            echo "Rosetta already available"
+          else
+            softwareupdate --install-rosetta --agree-to-license
+          fi
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Override supported architectures (host + x64)
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs')
+            const cpus = [...new Set([process.arch, 'x64'])]
+            const yaml = 'packages: []\n'
+              + 'supportedArchitectures:\n'
+              + '  os:\n'
+              + '    - current\n'
+              + '  cpu:\n'
+              + cpus.map(c => '    - ' + c).join('\n') + '\n'
+            fs.writeFileSync('pnpm-workspace.yaml', yaml)
+          "
+          cat pnpm-workspace.yaml
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          npm_config_arch: x64
+          npm_config_target_arch: x64
+
+      # 按目标架构重编原生模块（postinstall 的 install-app-deps 会按 runner 架构编译）
+      - name: Rebuild native modules for x64
+        run: pnpm exec electron-builder install-app-deps --arch x64
+
+      - name: Ensure sharp native for x64
+        run: node scripts/ensure-sharp-native.js x64
+
+      - name: Build (mac x64)
+        run: pnpm run clean && pnpm run build && pnpm exec electron-builder --mac --x64 --publish=never
+        env:
+          npm_config_arch: x64
+          npm_config_target_arch: x64
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Collect release assets (feed → latest-mac-x64.yml)
+        id: assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release-upload
+          shopt -s nullglob
+          for f in release/*.{dmg,zip}; do
+            [[ -f "$f" ]] || continue
+            cp -v "$f" .release-upload/
+          done
+          for f in release/*.blockmap; do
+            [[ -f "$f" ]] || continue
+            cp -v "$f" .release-upload/
+          done
+          # mac feed 改名：最终 latest-mac.yml 由 merge-mac-feed 合并生成
+          if [[ -f release/latest-mac.yml ]]; then
+            cp -v release/latest-mac.yml .release-upload/latest-mac-x64.yml
+          fi
+          pkg_name="$(node -p "require('./package.json').name")"
+          for f in .release-upload/*; do
+            [[ -f "$f" ]] || continue
+            base="$(basename "$f")"
+            case "$base" in
+              latest*|"${pkg_name}"*) continue ;;
+            esac
+            cleaned="${base#小智}"; cleaned="${cleaned#-}"
+            dest=".release-upload/${pkg_name}-${cleaned}"
+            [[ "$f" != "$dest" ]] && mv -v "$f" "$dest"
+          done
+          count="$(find .release-upload -type f | wc -l | tr -d ' ')"
+          echo "Collected $count asset(s)"
+          ls -la .release-upload || true
+          if [[ "$count" -eq 0 ]]; then
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload assets to Public Release
+        if: steps.assets.outputs.has_files == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: huangjunsen0406/xiaozhi-desktop-release
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+          files: .release-upload/*
+          fail_on_unmatched_files: false
+
+  build-mac-arm64:
+    needs: create-public-release
+    runs-on: macos-latest
+    env:
+      npm_config_arch: arm64
+      npm_config_target_arch: arm64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Python for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Override supported architectures (host + arm64)
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs')
+            const cpus = [...new Set([process.arch, 'arm64'])]
+            const yaml = 'packages: []\n'
+              + 'supportedArchitectures:\n'
+              + '  os:\n'
+              + '    - current\n'
+              + '  cpu:\n'
+              + cpus.map(c => '    - ' + c).join('\n') + '\n'
+            fs.writeFileSync('pnpm-workspace.yaml', yaml)
+          "
+          cat pnpm-workspace.yaml
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          npm_config_arch: arm64
+          npm_config_target_arch: arm64
+
+      - name: Rebuild native modules for arm64
+        run: pnpm exec electron-builder install-app-deps --arch arm64
+
+      - name: Ensure sharp native for arm64
+        run: node scripts/ensure-sharp-native.js arm64
+
+      - name: Build (mac arm64)
+        run: pnpm run clean && pnpm run build && pnpm exec electron-builder --mac --arm64 --publish=never
+        env:
+          npm_config_arch: arm64
+          npm_config_target_arch: arm64
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Collect release assets (feed → latest-mac-arm64.yml)
+        id: assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release-upload
+          shopt -s nullglob
+          for f in release/*.{dmg,zip}; do
+            [[ -f "$f" ]] || continue
+            cp -v "$f" .release-upload/
+          done
+          for f in release/*.blockmap; do
+            [[ -f "$f" ]] || continue
+            cp -v "$f" .release-upload/
+          done
+          if [[ -f release/latest-mac.yml ]]; then
+            cp -v release/latest-mac.yml .release-upload/latest-mac-arm64.yml
+          fi
+          pkg_name="$(node -p "require('./package.json').name")"
+          for f in .release-upload/*; do
+            [[ -f "$f" ]] || continue
+            base="$(basename "$f")"
+            case "$base" in
+              latest*|"${pkg_name}"*) continue ;;
+            esac
+            cleaned="${base#小智}"; cleaned="${cleaned#-}"
+            dest=".release-upload/${pkg_name}-${cleaned}"
+            [[ "$f" != "$dest" ]] && mv -v "$f" "$dest"
+          done
+          count="$(find .release-upload -type f | wc -l | tr -d ' ')"
+          echo "Collected $count asset(s)"
+          ls -la .release-upload || true
+          if [[ "$count" -eq 0 ]]; then
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload assets to Public Release
+        if: steps.assets.outputs.has_files == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: huangjunsen0406/xiaozhi-desktop-release
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+          files: .release-upload/*
+          fail_on_unmatched_files: false
+
+  # ── 3b. 合并 mac 更新 feed：两个架构的 zip 都在 latest-mac.yml 里 ──
+  merge-mac-feed:
+    needs: [build-mac-x64, build-mac-arm64]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+    steps:
+      - name: Download per-arch mac feeds
+        run: |
+          gh release download "${{ github.ref_name }}" \
+            --repo huangjunsen0406/xiaozhi-desktop-release \
+            --pattern 'latest-mac-*.yml' --clobber
+          ls -la latest-mac-*.yml
+
+      - name: Merge feeds into latest-mac.yml
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs')
+            function parse(text) {
+              const out = { files: [] }
+              let cur = null
+              for (const line of text.split('\n')) {
+                if (line.startsWith('version:')) out.version = line.slice(8).trim()
+                else if (line.startsWith('path:')) { out.path = line.slice(5).trim(); cur = null }
+                else if (line.startsWith('sha512:') && !cur) out.sha512 = line.slice(7).trim()
+                else if (line.startsWith('releaseDate:')) out.releaseDate = line.slice(12).trim()
+                else if (/^\s*- url:/.test(line)) { cur = { url: line.replace(/^\s*- url:\s*/, '') }; out.files.push(cur) }
+                else if (/^\s*sha512:/.test(line) && cur) cur.sha512 = line.trim().slice(7).trim()
+                else if (/^\s*size:/.test(line) && cur) cur.size = line.trim().slice(5).trim()
+              }
+              return out
+            }
+            const x64 = parse(fs.readFileSync('latest-mac-x64.yml', 'utf8'))
+            const arm64 = parse(fs.readFileSync('latest-mac-arm64.yml', 'utf8'))
+            const seen = new Set()
+            const files = [...x64.files, ...arm64.files].filter(f => {
+              if (seen.has(f.url)) return false
+              seen.add(f.url)
+              return true
+            })
+            const merged = {
+              version: arm64.version || x64.version,
+              files,
+              path: arm64.path || x64.path,
+              sha512: arm64.sha512 || x64.sha512,
+              releaseDate: arm64.releaseDate || x64.releaseDate,
+            }
+            let out = 'version: ' + merged.version + '\nfiles:\n'
+            for (const f of merged.files)
+              out += '  - url: ' + f.url + '\n    sha512: ' + f.sha512 + '\n    size: ' + f.size + '\n'
+            out += 'path: ' + merged.path + '\nsha512: ' + merged.sha512 + '\nreleaseDate: ' + merged.releaseDate + '\n'
+            fs.writeFileSync('latest-mac.yml', out)
+            console.log(out)
+          "
+
+      - name: Upload merged latest-mac.yml
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            --repo huangjunsen0406/xiaozhi-desktop-release \
+            latest-mac.yml --clobber
