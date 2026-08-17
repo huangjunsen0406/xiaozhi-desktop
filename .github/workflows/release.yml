@@ -161,16 +161,23 @@ jobs:
       - name: Override supported architectures
         shell: bash
         run: |
-          # 覆盖仓库默认：当前 OS + 本次 matrix arch（单架构出包）。
+          # 覆盖仓库默认：当前 OS + 【本机架构 + 目标架构】去重。
           # pnpm 10 只认 pnpm-workspace.yaml 里的 supportedArchitectures。
-          cat > pnpm-workspace.yaml << EOF
-          packages: []
-          supportedArchitectures:
-            os:
-              - current
-            cpu:
-              - ${{ matrix.arch }}
-          EOF
+          # 必须同时装本机架构：build 阶段 rollup 等原生模块按 runner 架构运行
+          # （如 arm64 runner 交叉出 mac x64 包时，rollup 需要 darwin-arm64）。
+          node -e "
+            const fs = require('fs')
+            const host = process.arch
+            const target = '${{ matrix.arch }}'
+            const cpus = [...new Set([host, target])]
+            const yaml = 'packages: []\n'
+              + 'supportedArchitectures:\n'
+              + '  os:\n'
+              + '    - current\n'
+              + '  cpu:\n'
+              + cpus.map(c => '    - ' + c).join('\n') + '\n'
+            fs.writeFileSync('pnpm-workspace.yaml', yaml)
+          "
           echo "---- pnpm-workspace.yaml ----"
           cat pnpm-workspace.yaml
 
