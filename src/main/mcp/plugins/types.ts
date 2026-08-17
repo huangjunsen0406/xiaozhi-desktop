@@ -44,10 +44,11 @@ export interface LoadedMcpPlugin {
 /**
  * host.get 白名单键
  * - logger / config_readonly：默认开放
- * - media_player：应用内媒体播放 SDK（需配置显式加入；与 py 的 music_player 角色对齐）
- * - music_player：media_player 别名（跨端插件兼容）
+ * - media_player：应用内媒体播放 SDK（需配置显式加入；支持本地文件 / http(s) / HLS(m3u8)）
+ * - bubble：字幕/消息条展示 SDK（需配置显式加入；复用关怀气泡通道，不进聊天历史）
+ * - subtitle：bubble 别名（语义化命名，跨端插件兼容）
  */
-export type McpHostGetKey = 'logger' | 'config_readonly' | 'media_player' | 'music_player'
+export type McpHostGetKey = 'logger' | 'config_readonly' | 'media_player' | 'bubble' | 'subtitle'
 
 /** 媒体播放 SDK 操作结果 */
 export interface MediaPlayerResult {
@@ -74,7 +75,8 @@ export interface MediaPlayerPlayOptions {
 
 /**
  * 外挂可用的应用内媒体播放 SDK（Host capability）
- * 实现复用主进程 MusicPlayer → 后台窗 HTMLAudio，不暴露搜歌/内部 IPC。
+ * 实现复用主进程 MusicPlayer → 后台窗 HTMLAudio（HLS 走 hls.js），
+ * 不暴露搜歌/内部 IPC。playUrl 支持本地绝对路径 / http(s) / m3u8。
  */
 export interface MediaPlayerFacade {
   playUrl: (url: string, opts?: MediaPlayerPlayOptions) => Promise<MediaPlayerResult>
@@ -83,6 +85,27 @@ export interface MediaPlayerFacade {
   stop: () => Promise<MediaPlayerResult>
   seek: (positionSec: number) => Promise<MediaPlayerResult>
   getStatus: () => Promise<MediaPlayerStatus>
+}
+
+/** 字幕/消息条 SDK 操作结果 */
+export interface BubbleResult {
+  success: boolean
+  message?: string
+}
+
+export interface BubbleShowOptions {
+  /** 展示时长 ms，默认 5000 */
+  durationMs?: number
+}
+
+/**
+ * 外挂可用的字幕/消息条展示 SDK（Host capability: bubble / subtitle）
+ * 复用关怀气泡通道（bubble:show-local → BubbleView），不进聊天历史、只做展示；
+ * 依赖 pets / live2d 模式（桌宠 surface），无 surface 时返回明确错误。
+ */
+export interface BubbleFacade {
+  show: (text: string, opts?: BubbleShowOptions) => Promise<BubbleResult>
+  hide: () => Promise<BubbleResult>
 }
 
 /** 插件侧可传入的简化属性定义 */

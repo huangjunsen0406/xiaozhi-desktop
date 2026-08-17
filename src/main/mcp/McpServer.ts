@@ -17,6 +17,7 @@ import { getLogger } from '../utils/logger'
 import { getMcpPluginsDir, isPathInside } from '../utils/paths'
 import { resetMcpContext, setMcpContext, setMcpToolRuntime } from './McpContext'
 import {
+  createBubbleFacade,
   createMediaPlayerFacade,
   deriveCatalogGroupKey,
   getGroupLabel,
@@ -369,7 +370,6 @@ export class McpServer {
         'logger',
         'config_readonly',
         'media_player',
-        'music_player',
       ])
       let pluginsConfig = {
         enabled: true,
@@ -397,14 +397,14 @@ export class McpServer {
       // 应用内媒体 SDK：有 MusicPlayer 时注入；是否对插件可见仍看 allowHostGet
       const capabilities: Record<string, unknown> = {}
       if (this.musicPlayer) {
-        const facade = createMediaPlayerFacade(this.musicPlayer)
-        capabilities.media_player = facade
-        // 与 py-xiaozhi 的 music_player 键对齐，便于跨端插件
-        capabilities.music_player = facade
+        capabilities.media_player = createMediaPlayerFacade(this.musicPlayer)
       }
       else {
         logger.debug('MusicPlayer 未注入，外挂 media_player 能力不可用')
       }
+      // 字幕/消息条 SDK：复用关怀气泡通道（bubble:show-local），无额外依赖
+      capabilities.bubble = createBubbleFacade()
+      capabilities.subtitle = capabilities.bubble
 
       const result = await loadMcpPluginsFromConfig({
         registry: this.pluginRegistry,

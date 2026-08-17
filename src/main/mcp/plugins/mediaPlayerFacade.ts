@@ -1,8 +1,9 @@
 /**
- * 外挂媒体播放 SDK（Host capability: media_player / music_player）
+ * 外挂媒体播放 SDK（Host capability: media_player）
  *
  * 包装主进程 MusicPlayer，只暴露播控，不暴露 search / 配置 / sendCommand。
- * 出声路径：MusicPlayer → music:command → 后台音频窗 HTMLAudioElement。
+ * 出声路径：MusicPlayer → music:command → 后台音频窗 HTMLAudioElement
+ * （HLS m3u8 由后台窗 hls.js 播放）。playUrl 支持本地绝对路径 / http(s) / m3u8。
  */
 
 import type { MusicPlayer } from '../tools/music/MusicPlayer'

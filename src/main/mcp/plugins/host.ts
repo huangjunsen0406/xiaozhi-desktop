@@ -3,7 +3,7 @@
  *
  * 插件禁止依赖 getServiceContainer / 应用内部实现细节。
  * host.get 仅暴露白名单键（默认 logger、config_readonly；
- * media_player / music_player 需配置显式加入）。
+ * media_player / bubble 需配置显式加入）。
  */
 
 import type { McpTool, Property, ToolCallback } from '../types'
@@ -30,7 +30,7 @@ export interface McpHostOptions {
   /** 注册工具到 McpServer */
   onAddTool: (tool: McpTool) => void
   /**
-   * 额外 Host 能力（如 media_player facade）。
+   * 额外 Host 能力（如 media_player / bubble facade）。
    * get 时：白名单通过后优先查本表；logger / config_readonly 仍由内建提供。
    */
   capabilities?: Record<string, unknown>
@@ -214,7 +214,7 @@ export function createMcpHost(options: McpHostOptions): McpHost {
         case 'config_readonly':
           return getConfigReadonlySlice()
         default:
-          // media_player / music_player 等由 capabilities 注入
+          // media_player / bubble 等由 capabilities 注入
           if (Object.prototype.hasOwnProperty.call(capabilities, name)) {
             return capabilities[name]
           }

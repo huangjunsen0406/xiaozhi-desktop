@@ -2,6 +2,7 @@
  * MCP 外挂插件模块导出
  */
 
+export { createBubbleFacade } from './bubbleFacade'
 export { createMcpHost } from './host'
 export { loadMcpPluginsFromConfig, readPluginManifest } from './loader'
 export { isPlatformAllowed, validateManifest } from './manifest'

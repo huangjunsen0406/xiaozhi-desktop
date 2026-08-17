@@ -689,7 +689,7 @@ function showBubbleAbove(targetWindow: BrowserWindow): void {
 /**
  * 隐藏气泡窗口
  */
-function hideBubbleWindow(): void {
+export function hideBubbleWindow(): void {
   const bubble = windowRefs.bubble.current
   if (bubble && !bubble.isDestroyed()) {
     bubble.hide()

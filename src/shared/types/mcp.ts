@@ -39,7 +39,7 @@ export interface McpPluginsHostConfig {
   enabled: boolean
   disabledIds: string[]
   enabledIds: string[]
-  /** host.get 白名单：logger / config_readonly / media_player / music_player */
+  /** host.get 白名单：logger / config_readonly / media_player / bubble / subtitle */
   allowHostGet: string[]
   enforcePrefix: boolean
 }

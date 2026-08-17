@@ -15,11 +15,11 @@ function parseLocalShowPayload(raw: unknown): BubbleLocalShowPayload | null {
   const obj = raw as Record<string, unknown>
   if (typeof obj.text !== 'string' || obj.text.length === 0)
     return null
-  if (obj.source !== 'reminder')
+  if (obj.source !== 'reminder' && obj.source !== 'plugin')
     return null
   const payload: BubbleLocalShowPayload = {
     text: obj.text,
-    source: 'reminder',
+    source: obj.source,
   }
   if (typeof obj.durationMs === 'number' && Number.isFinite(obj.durationMs) && obj.durationMs > 0)
     payload.durationMs = obj.durationMs

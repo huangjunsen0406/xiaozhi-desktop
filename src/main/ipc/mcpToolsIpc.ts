@@ -261,7 +261,8 @@ export function registerMcpToolsIpc(): void {
         'logger',
         'config_readonly',
         'media_player',
-        'music_player',
+        'bubble',
+        'subtitle',
       ])
 
       const toSave: Parameters<ReturnType<typeof getDatabase>['setMcpPluginsConfig']>[0] = {}

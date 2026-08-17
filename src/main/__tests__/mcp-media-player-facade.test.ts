@@ -55,10 +55,10 @@ describe('createMcpHost capabilities', () => {
       enforcePrefix: false,
       callTimeoutMs: 1000,
       onAddTool: noopAdd,
-      capabilities: { media_player: facade, music_player: facade },
+      capabilities: { media_player: facade },
     })
     assert.equal(host.get('media_player'), undefined)
-    assert.equal(host.get('music_player'), undefined)
+    assert.equal(host.get('subtitle'), undefined)
   })
 
   it('returns media_player facade when allowed and injected', () => {
@@ -68,14 +68,28 @@ describe('createMcpHost capabilities', () => {
     }
     const host = createMcpHost({
       pluginId: 'test',
-      allowHostGet: ['logger', 'config_readonly', 'media_player', 'music_player'],
+      allowHostGet: ['logger', 'config_readonly', 'media_player'],
       enforcePrefix: false,
       callTimeoutMs: 1000,
       onAddTool: noopAdd,
-      capabilities: { media_player: facade, music_player: facade },
+      capabilities: { media_player: facade },
     })
     assert.equal(host.get('media_player'), facade)
-    assert.equal(host.get('music_player'), facade)
+    assert.equal(host.get('music_player'), undefined)
+  })
+
+  it('returns bubble facade via subtitle alias when allowed and injected', () => {
+    const bubble = { show: async () => ({ success: true }), hide: async () => ({ success: true }) }
+    const host = createMcpHost({
+      pluginId: 'test',
+      allowHostGet: ['logger', 'config_readonly', 'bubble', 'subtitle'],
+      enforcePrefix: false,
+      callTimeoutMs: 1000,
+      onAddTool: noopAdd,
+      capabilities: { bubble, subtitle: bubble },
+    })
+    assert.equal(host.get('bubble'), bubble)
+    assert.equal(host.get('subtitle'), bubble)
   })
 
   it('returns undefined for allowed key without capability', () => {

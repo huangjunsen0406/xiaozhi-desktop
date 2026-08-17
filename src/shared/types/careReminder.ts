@@ -30,13 +30,13 @@ export const DEFAULT_CARE_REMINDER_CONFIG: CareReminderConfig = {
 
 /**
  * 气泡本地展示 payload（非服务端消息）
- * source 固定 'reminder'，便于 BubbleView 与会话气泡区分优先级
+ * source 区分来源：reminder=关怀提醒 / plugin=外挂插件字幕，便于 BubbleView 与会话气泡区分优先级
  */
 export interface BubbleLocalShowPayload {
   text: string
   /** 展示时长，默认约 5000ms */
   durationMs?: number
-  source: 'reminder'
+  source: 'reminder' | 'plugin'
 }
 
 export type CareReminderConfigUpdate = Partial<CareReminderConfig>

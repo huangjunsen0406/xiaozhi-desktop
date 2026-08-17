@@ -33,7 +33,7 @@ function resolveDemoByTitle(query) {
 
 function register(host) {
   const logger = host.get('logger')
-  const media = host.get('media_player') || host.get('music_player')
+  const media = host.get('media_player')
 
   function needMedia() {
     if (media)
