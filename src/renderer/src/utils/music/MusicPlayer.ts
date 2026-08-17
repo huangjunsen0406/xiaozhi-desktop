@@ -1,7 +1,11 @@
 /**
  * 音乐播放器（渲染进程）
- * 使用 HTML5 Audio API 播放音乐
+ * 使用 HTML5 Audio API 播放音乐；HLS（m3u8）流走 hls.js（MSE）。
+ *
+ * HLS 说明：后台音频窗 webSecurity:false 已禁用 CORS，hls.js 可直连任意流源。
  */
+
+import Hls from 'hls.js'
 
 export type PlaybackState = 'idle' | 'loading' | 'playing' | 'paused' | 'stopped' | 'error'
 
@@ -15,6 +19,7 @@ export interface MusicCommand {
  */
 export class MusicPlayer {
   private audio: HTMLAudioElement
+  private hls: Hls | null = null
   private currentState: PlaybackState = 'idle'
   private lastTimeUpdateNotify = 0
 
@@ -159,6 +164,57 @@ export class MusicPlayer {
     console.log('已注册主进程指令监听器')
   }
 
+  /** m3u8（含 query 参数）判定 */
+  private isHlsUrl(url: string): boolean {
+    return /\.m3u8(?:$|\?)/i.test(url)
+  }
+
+  /** 销毁 hls.js 实例（切源/停止/dispose 时调用） */
+  private destroyHls(): void {
+    if (this.hls) {
+      this.hls.destroy()
+      this.hls = null
+    }
+  }
+
+  /** HLS（m3u8）播放：hls.js 接管 audio 元素（MSE），无需手动设置 src */
+  private playHls(url: string): void {
+    this.destroyHls()
+    if (!Hls.isSupported()) {
+      this.currentState = 'error'
+      this.notifyMainProcess({ state: 'error', error: '当前环境不支持 HLS（m3u8）播放' })
+      return
+    }
+    const hls = new Hls({
+      // 流媒体/电台：不因 live 清单更新中断播放
+      liveDurationInfinity: true,
+      // 后台音频窗从 file:// 加载，Web Worker 脚本受限，必须关 worker
+      enableWorker: false,
+    })
+    this.hls = hls
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) {
+        const resp = data.response
+        console.error('[MusicPlayer] HLS 致命错误', {
+          type: data.type,
+          details: data.details,
+          url: data.url,
+          status: resp?.code ?? null,
+        })
+        this.currentState = 'error'
+        this.notifyMainProcess({
+          state: 'error',
+          error: `HLS 播放错误: ${data.type} ${data.details}`,
+        })
+        this.destroyHls()
+      }
+    })
+    hls.loadSource(url)
+    hls.attachMedia(this.audio)
+    console.log(`[MusicPlayer] HLS 播放: ${url}`)
+    this.notifyMainProcess({ message: `HLS 流播放: ${url}` })
+  }
+
   /**
    * 播放音乐
    */
@@ -177,8 +233,12 @@ export class MusicPlayer {
       this.currentState = 'loading'
       this.notifyMainProcess({ state: 'loading', message: `准备播放: ${filePath}` })
 
-      // 设置音频源（支持 URL 和本地文件路径）
-      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+      // 设置音频源（HLS 流走 hls.js；其余支持 URL 和本地文件路径）
+      if (this.isHlsUrl(filePath)) {
+        this.playHls(filePath)
+      }
+      else if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+        this.destroyHls()
         this.audio.src = filePath
         console.log(`[MusicPlayer] 设置在线音源: ${filePath}`)
         this.notifyMainProcess({ message: `设置在线音源: ${filePath}` })
@@ -186,6 +246,7 @@ export class MusicPlayer {
       else {
         // Windows 路径: D:\path\to\file.mp3 -> file:///D:/path/to/file.mp3
         // macOS/Linux: /path/to/file.mp3 -> file:///path/to/file.mp3
+        this.destroyHls()
         const normalizedPath = filePath.replace(/\\/g, '/')
         const fileUrl = normalizedPath.startsWith('/')
           ? `file://${normalizedPath}`
@@ -270,6 +331,7 @@ export class MusicPlayer {
     try {
       this.audio.pause()
       this.audio.currentTime = 0
+      this.destroyHls()
       this.currentState = 'stopped'
       this.notifyMainProcess({
         state: 'stopped',
@@ -353,6 +415,7 @@ export class MusicPlayer {
     console.log('清理资源')
     this.audio.pause()
     this.audio.src = ''
+    this.destroyHls()
     // 移除所有事件监听器
     this.audio.removeEventListener('play', this.onPlay)
     this.audio.removeEventListener('pause', this.onPause)

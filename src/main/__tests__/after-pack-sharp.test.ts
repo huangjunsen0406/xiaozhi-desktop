@@ -11,9 +11,9 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
 
 const require = createRequire(import.meta.url)

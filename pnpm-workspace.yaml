@@ -4,8 +4,8 @@
 # CI 构建时会按 matrix.arch 覆盖为单架构（见 .github/workflows/release.yml）。
 packages: []
 supportedArchitectures:
-  os:
-    - current
   cpu:
     - x64
     - arm64
+  os:
+    - current

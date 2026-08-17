@@ -229,7 +229,7 @@ function assertPlatformNative(context, pkgName) {
       + `检查 pnpm-workspace.yaml 的 supportedArchitectures 与本机安装是否一致。`,
     )
   }
-  const nodes = fs.readdirSync(pkgDir).filter((f) => f.endsWith('.node'))
+  const nodes = fs.readdirSync(pkgDir).filter(f => f.endsWith('.node'))
   if (nodes.length === 0) {
     throw new Error(
       `[afterPack] ${pkgName} 目录存在但没有 .node 文件（${pkgDir}）`,
