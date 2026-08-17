@@ -192,10 +192,60 @@ function stripStaleMacSignatures(context) {
     console.log(`[afterPack] stripped stale mac signatures:\n${removed.join('\n')}`)
 }
 
+/**
+ * 校验其他平台原生包（sherpa-onnx / node-screenshots）已解包到 asar.unpacked。
+ * 与 sharp 不同：这些包平台声明齐全，缺了说明依赖/配置问题，直接抛错让 CI 红，
+ * 而不是像 sharp 那样补拷（补拷只兜 sharp 的 pnpm 特例）。
+ */
+function platformNativePackages(electronPlatformName, arch) {
+  const cpu = ARCH_NAME[arch] ?? String(arch)
+  const mac = electronPlatformName === 'darwin'
+  const win = electronPlatformName === 'win32'
+  const linux = electronPlatformName === 'linux'
+
+  // sherpa-onnx：win 特名 sherpa-onnx-win-<arch>，其余 <platform>-<arch>
+  const sherpaName = win
+    ? `sherpa-onnx-win-${cpu}`
+    : `sherpa-onnx-${electronPlatformName}-${cpu}`
+
+  // node-screenshots：linux 带 libc 后缀（glibc 构建目标）；win 带 msvc 后缀
+  const nsOs = win ? 'win32' : electronPlatformName
+  const nsSuffix = linux
+    ? `-${cpu}-gnu`
+    : win
+      ? `-${cpu}-msvc`
+      : `-${cpu}`
+  const nsName = `node-screenshots-${nsOs}${nsSuffix}`
+
+  return mac || win || linux ? [sherpaName, nsName] : []
+}
+
+function assertPlatformNative(context, pkgName) {
+  const root = resourcesDir(context)
+  const pkgDir = path.join(root, 'app.asar.unpacked', 'node_modules', pkgName)
+  if (!fs.existsSync(pkgDir)) {
+    throw new Error(
+      `[afterPack] 打包产物缺少平台原生包 ${pkgName}（asar.unpacked 下未找到）。\n`
+      + `检查 pnpm-workspace.yaml 的 supportedArchitectures 与本机安装是否一致。`,
+    )
+  }
+  const nodes = fs.readdirSync(pkgDir).filter((f) => f.endsWith('.node'))
+  if (nodes.length === 0) {
+    throw new Error(
+      `[afterPack] ${pkgName} 目录存在但没有 .node 文件（${pkgDir}）`,
+    )
+  }
+  console.log(`[afterPack] ${pkgName} native ok: ${nodes.join(', ')}`)
+}
+
 async function afterPack(context) {
   const runtimes = runtimePlatforms(context.electronPlatformName, context.arch)
   for (const runtime of runtimes)
     ensureRuntime(context, runtime)
+
+  for (const pkg of platformNativePackages(context.electronPlatformName, context.arch))
+    assertPlatformNative(context, pkg)
+
   stripStaleMacSignatures(context)
 }
 

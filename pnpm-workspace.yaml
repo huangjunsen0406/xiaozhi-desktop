@@ -1,0 +1,11 @@
+# pnpm 10 配置中心（pnpm 9 不认此文件；本地/CI 统一用 pnpm 10）
+# supportedArchitectures 从 pnpm 10 起必须在 pnpm-workspace.yaml 声明，
+# .npmrc 里的写法（等号/逗号/数组）pnpm 10 均不生效。
+# CI 构建时会按 matrix.arch 覆盖为单架构（见 .github/workflows/release.yml）。
+packages: []
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - x64
+    - arm64

@@ -6,42 +6,76 @@ on:
       - 'v*'
   workflow_dispatch:
 
-# 私仓：自动生成 Release Notes（.github/release.yml）
+# 私仓：生成结构化 changelog（git log 按类型分组）+ 创建 Release（不含安装包）
 # 公仓 xiaozhi-desktop-release：同步同一份说明 + 仅上传安装包/更新所需元数据
 jobs:
-  # ── 1. 私仓 Release（仅 notes，不含安装包）────────────────
+  # ── 1. 私仓 Release（生成 changelog + 建 release，不含安装包）────────────────
   create-private-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
-      release_body: ${{ steps.notes.outputs.body }}
+      release_body: ${{ steps.changelog.outputs.body }}
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
+        with:
+          # 生成 changelog 需要完整历史与 tags
+          fetch-depth: 0
+
+      # 按 Conventional Commits 前缀分组生成 changelog，替代 GitHub 自动生成的
+      # 一行 "Full Changelog: <私仓 compare 链接>" HTML（248a08b 引入，曾流入 latest*.yml 的 releaseNotes）
+      - name: Generate structured changelog
+        id: changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          CUR_TAG="${{ github.ref_name }}"
+          # tag 按语义版本倒序，第一个是当前 tag，第二个是上一个版本
+          PREV_TAG="$(git tag --sort=-version:refname | sed -n 2p || true)"
+          if [[ -n "$PREV_TAG" ]]; then
+            RANGE="${PREV_TAG}..${CUR_TAG}"
+            LOG="$(git log --pretty=format:'%s' "$RANGE" 2>/dev/null || true)"
+            echo "changelog range: ${RANGE}"
+          else
+            # workflow_dispatch 无 tag：取最近 50 条提交
+            LOG="$(git log --pretty=format:'%s' -50 2>/dev/null || true)"
+            echo "changelog range: <last 50 commits>"
+          fi
+          # 去掉版本发布提交本身
+          LOG="$(printf '%s\n' "$LOG" | grep -vE '^chore: release' || true)"
+
+          FEATURES="$(printf '%s\n' "$LOG" | grep -E '^(feat|feature)' || true)"
+          FIXES="$(printf '%s\n' "$LOG" | grep -E '^fix' || true)"
+          OTHERS="$(printf '%s\n' "$LOG" | grep -vE '^(feat|feature|fix)' || true)"
+
+          count() { printf '%s\n' "$1" | grep -c . || true; }
+          BODY="本次发布包含 $(count "$FEATURES") 项新功能、$(count "$FIXES") 项修复、$(count "$OTHERS") 项其他改动。"
+
+          if [[ -n "$FEATURES" ]]; then
+            BODY+=$'\n\n## 新功能\n'"$FEATURES"
+          fi
+          if [[ -n "$FIXES" ]]; then
+            BODY+=$'\n\n## 修复\n'"$FIXES"
+          fi
+          if [[ -n "$OTHERS" ]]; then
+            BODY+=$'\n\n## 其他\n'"$OTHERS"
+          fi
+
+          {
+            echo "body<<__CHANGELOG_EOF__"
+            printf '%s\n' "$BODY"
+            echo "__CHANGELOG_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "changelog length: ${#BODY}"
 
       - name: Create Private Repo Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # softprops 不输出 body，创建后再读回，供公仓同步
-      - name: Export release notes body
-        id: notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          BODY="$(gh api "repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" --jq '.body // empty')"
-          {
-            echo "body<<__RELEASE_NOTES_EOF__"
-            printf '%s\n' "$BODY"
-            echo "__RELEASE_NOTES_EOF__"
-          } >> "$GITHUB_OUTPUT"
-          echo "Private release notes length: ${#BODY}"
 
   # ── 2. 公仓 Release（同步私仓说明，先建空壳再由 build 传包）─
   create-public-release:
@@ -122,20 +156,23 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 10
 
       - name: Override supported architectures
         shell: bash
         run: |
-          # 覆盖仓库默认：当前 OS + 本次 matrix arch。
-          # pnpm 9 认 cpu=x64 这种写法；os[]= 在 9 上无效。
-          tmp="$(mktemp)"
-          grep -v '^supportedArchitectures' .npmrc > "$tmp" || true
-          mv "$tmp" .npmrc
-          echo "supportedArchitectures.os=current" >> .npmrc
-          echo "supportedArchitectures.cpu=${{ matrix.arch }}" >> .npmrc
-          echo "---- .npmrc ----"
-          cat .npmrc
+          # 覆盖仓库默认：当前 OS + 本次 matrix arch（单架构出包）。
+          # pnpm 10 只认 pnpm-workspace.yaml 里的 supportedArchitectures。
+          cat > pnpm-workspace.yaml << EOF
+          packages: []
+          supportedArchitectures:
+            os:
+              - current
+            cpu:
+              - ${{ matrix.arch }}
+          EOF
+          echo "---- pnpm-workspace.yaml ----"
+          cat pnpm-workspace.yaml
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile

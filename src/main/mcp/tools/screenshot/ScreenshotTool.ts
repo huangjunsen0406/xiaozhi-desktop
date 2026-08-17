@@ -86,7 +86,7 @@ export class ScreenshotTool {
         }
       }
 
-      logger.info(`Capturing monitor ${targetMonitor.id}, size: ${targetMonitor.width}x${targetMonitor.height}`)
+      logger.info(`Capturing monitor ${targetMonitor.id()}, size: ${targetMonitor.width()}x${targetMonitor.height()}`)
 
       // 截图（Electron 环境需要传 true 避免崩溃）
       const image = await targetMonitor.captureImage()
@@ -131,7 +131,7 @@ export class ScreenshotTool {
       const base64 = finalBuffer.toString('base64')
 
       logger.info(
-        `Screenshot captured: ${targetMonitor.width}x${targetMonitor.height}, `
+        `Screenshot captured: ${targetMonitor.width()}x${targetMonitor.height()}, `
         + `${finalBuffer.length} bytes, mime=${mime}`,
       )
 
@@ -139,8 +139,8 @@ export class ScreenshotTool {
         success: true,
         data: finalBuffer,
         base64,
-        width: targetMonitor.width,
-        height: targetMonitor.height,
+        width: targetMonitor.width(),
+        height: targetMonitor.height(),
         mime,
       }
     }
@@ -173,7 +173,7 @@ export class ScreenshotTool {
     if (typeof display === 'number') {
       if (display > 0 && display <= monitors.length) {
         const targetMonitor = monitors[display - 1]
-        logger.info(`Display index ${display} -> Monitor ID ${targetMonitor.id}`)
+        logger.info(`Display index ${display} -> Monitor ID ${targetMonitor.id()}`)
         return targetMonitor
       }
       logger.warn(`Invalid display index: ${display}`)
@@ -204,7 +204,7 @@ export class ScreenshotTool {
       const num = Number.parseInt(display, 10)
       if (!Number.isNaN(num) && num > 0 && num <= monitors.length) {
         const targetMonitor = monitors[num - 1]
-        logger.info(`Display index ${num} -> Monitor ID ${targetMonitor.id}`)
+        logger.info(`Display index ${num} -> Monitor ID ${targetMonitor.id()}`)
         return targetMonitor
       }
     }
@@ -227,12 +227,12 @@ export class ScreenshotTool {
   }> {
     const monitors = Monitor.all()
     return monitors.map((monitor, index) => ({
-      id: monitor.id,
+      id: monitor.id(),
       index: index + 1,
-      width: monitor.width,
-      height: monitor.height,
-      x: monitor.x,
-      y: monitor.y,
+      width: monitor.width(),
+      height: monitor.height(),
+      x: monitor.x(),
+      y: monitor.y(),
       isPrimary: index === 0, // 第一个通常是主显示器
     }))
   }
