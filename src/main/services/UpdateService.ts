@@ -14,8 +14,8 @@ import type {
   UpdatePrefs,
   UpdateStatusSnapshot,
 } from '@shared/types'
-import { extractReleaseNotes } from '@shared/releaseNotes'
 import process from 'node:process'
+import { extractReleaseNotes } from '@shared/releaseNotes'
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { getLogger } from '../utils/logger'
@@ -40,6 +40,21 @@ export const APP_WEBSITE_URL = 'https://xiaozhi.junsen.online/'
 export const GITHUB_SOURCE_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_SOURCE_REPO}`
 /** 作者主页（设置 → 关于 · 作者链接） */
 export const AUTHOR_HOME_URL = 'https://github.com/huangjunsen0406'
+
+// ── 更新下载加速（与官网下载页同源节点池）────────────────────
+// 前缀式代理，实测筛选（2026-08）：ghproxy.net 超时、gh.h233.eu.org 403 已剔除。
+// 检查更新前 HEAD 测速选最优节点，把 feed 切到 generic + 节点前缀；
+// 全部失败保持 GitHub 官方直连。结果缓存 10 分钟。
+const ACCELERATORS: Array<{ name: string, prefix: string }> = [
+  { name: 'gh-proxy.com', prefix: 'https://gh-proxy.com/' },
+  { name: 'gh.llkk.cc', prefix: 'https://gh.llkk.cc/' },
+  { name: 'ghfast.top', prefix: 'https://ghfast.top/' },
+  { name: 'ghfile.geekertao.top', prefix: 'https://ghfile.geekertao.top/' },
+  { name: 'github.dpik.top', prefix: 'https://github.dpik.top/' },
+]
+const PROBE_TIMEOUT_MS = 5000
+const PROBE_CACHE_TTL_MS = 10 * 60 * 1000
+let probeCache: { time: number, prefix: string | null } = { time: 0, prefix: null }
 
 let initialized = false
 let checking = false
@@ -230,6 +245,8 @@ export function initUpdateService(): void {
       checking = false
       downloading = false
       lastError = mapError(err)
+      // 加速节点下载失败：清测速缓存，下次检查重新选节点
+      probeCache = { time: 0, prefix: null }
       logger.error('updater error', err)
       settleDownloadWait(new Error(lastError))
       broadcast('update:error', { message: lastError })
@@ -278,6 +295,67 @@ export function getUpdateStatus(): UpdateStatusSnapshot {
   }
 }
 
+/** HEAD 测速单个节点，返回耗时 ms；失败/超时返回 null */
+async function probeAccelerator(prefix: string, probeUrl: string): Promise<number | null> {
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
+    const t0 = Date.now()
+    const resp = await fetch(prefix + probeUrl, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (!resp.ok)
+      return null
+    return Date.now() - t0
+  }
+  catch {
+    return null
+  }
+}
+
+/** 并发探测全部节点，取最快可用；缓存 10 分钟。全挂返回 null（保持官方直连） */
+async function bestAcceleratorPrefix(): Promise<string | null> {
+  if (probeCache.prefix !== null && Date.now() - probeCache.time < PROBE_CACHE_TTL_MS)
+    return probeCache.prefix
+
+  const probeUrl = `${GITHUB_RELEASES_URL}/latest/download/latest-mac.yml`
+  const results = await Promise.all(ACCELERATORS.map(async (node) => {
+    const ms = await probeAccelerator(node.prefix, probeUrl)
+    return ms === null ? null : { ...node, ms }
+  }))
+  const sorted = results
+    .filter((r): r is { name: string, prefix: string, ms: number } => r !== null)
+    .sort((a, b) => a.ms - b.ms)
+  probeCache = { time: Date.now(), prefix: sorted[0]?.prefix ?? null }
+  if (probeCache.prefix)
+    logger.info('更新加速节点已选择', { node: sorted[0]?.name, ms: sorted[0]?.ms })
+  return probeCache.prefix
+}
+
+/**
+ * 把更新 feed 切到加速节点（generic + 前缀 URL）。
+ * GitHub 的 /releases/latest/download/ 会 302 到最新版资产，代理在服务端跟随重定向，
+ * electron-updater 解析 files.url 后整体走代理带宽。失败则保持 github provider 直连。
+ */
+async function applyAcceleratorFeed(): Promise<void> {
+  try {
+    const prefix = await bestAcceleratorPrefix()
+    if (!prefix)
+      return
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: `${prefix}${GITHUB_RELEASES_URL}/latest/download/`,
+    })
+    logger.info('更新通道已切换到加速节点')
+  }
+  catch (error) {
+    logger.warn('切换加速节点失败，保持官方直连', error)
+  }
+}
+
 /**
  * 检查更新。packaged 下走 electron-updater；开发态返回 not available。
  */
@@ -311,6 +389,8 @@ export async function checkForUpdates(options?: { silent?: boolean }): Promise<U
   lastError = null
 
   try {
+    // 先测速选最优加速节点，再检查更新；失败保持官方直连
+    await applyAcceleratorFeed()
     const result = await autoUpdater.checkForUpdates()
     const info = result?.updateInfo
     const remote = (info?.version || '').replace(/^v/i, '')
