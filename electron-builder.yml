@@ -3,17 +3,31 @@ productName: 小智
 directories:
   buildResources: build
   output: release
+# 排除规则必须全部集中在根 files：一旦同时给 win/mac/linux 定义 files:，
+# electron-builder 会把根 files 的字符串列表 normalize 成独立的 FileSet matcher
+# （从 appDir 再走一遍），与主 matcher 遍历结果取并集打包 → 两边各自漏排，
+# v1.2.1 曾因此把 .git、src、scripts、.npmrc、release/（含 app 自身）整包打进 asar。
 files:
   # 排除源代码和配置文件（electron-builder 会自动包含 out、resources、node_modules）
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.eslintcache,eslint.config.mjs,eslint.config.mts,.eslintrc-auto-import.json,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml,pnpm-workspace.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tsconfig.node.tsbuildinfo,tsconfig.web.tsbuildinfo}'
   - '!config/*'
   - '!*.md'
   - '!scripts/*'
+  - '!examples{,/**/*}'
+  - '!tools{,/**/*}'
+  # 显式排除版本库元数据（默认排除策略是兜底，显式列出防止回归）
+  - '!**/.git{,/**/*}'
+  - '!**/.claude{,/**/*}'
+  # 注意：不要把「排除其他平台原生模块包」写到这里或 win/mac/linux 的 files:。
+  # 放到平台 files: 会让根 files 被 normalizeFiles 拆成独立 matcher（上文已述）；
+  # 合并到根 files 则会误伤当前平台的包。正确做法：用 pnpm-workspace.yaml 的
+  # supportedArchitectures 让安装端只装当前平台（CI 已如此，本机同样）。
+  # 本仓库所有平台包均依赖安装源裁剪，无需在打包配置里二次排除。
 
 # 额外资源：复制到 app.asar 外部的 Contents/Resources 目录
 extraResources:
@@ -41,15 +55,6 @@ afterPack: scripts/afterPack.js
 win:
   executableName: xiaozhi-desktop
   icon: build/icon.ico
-  # 排除其他平台的原生模块包（减小包体积）
-  files:
-    - '!node_modules/sherpa-onnx-darwin-*/**/*'
-    - '!node_modules/sherpa-onnx-linux-*/**/*'
-    # 排除其他平台的 sharp 预编译包
-    - '!node_modules/@img/sharp-darwin-*/**/*'
-    - '!node_modules/@img/sharp-linux-*/**/*'
-    - '!node_modules/@img/sharp-libvips-darwin-*/**/*'
-    - '!node_modules/@img/sharp-libvips-linux-*/**/*'
   target:
     - target: nsis
 nsis:
@@ -67,14 +72,6 @@ nsis:
 mac:
   icon: build/icon.icns
   category: public.app-category.productivity
-  # 排除其他平台的原生模块包（减小包体积）
-  files:
-    - '!node_modules/sherpa-onnx-win-*/**/*'
-    - '!node_modules/sherpa-onnx-linux-*/**/*'
-    # 排除其他平台的 sharp 预编译包
-    - '!node_modules/@img/sharp-win32-*/**/*'
-    - '!node_modules/@img/sharp-linux-*/**/*'
-    - '!node_modules/@img/sharp-libvips-linux-*/**/*'
   target:
     - dmg
     - zip
@@ -97,14 +94,6 @@ dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   icon: build/icon.png
-  # 排除其他平台的原生模块包（减小包体积）
-  files:
-    - '!node_modules/sherpa-onnx-darwin-*/**/*'
-    - '!node_modules/sherpa-onnx-win-*/**/*'
-    # 排除其他平台的 sharp 预编译包
-    - '!node_modules/@img/sharp-darwin-*/**/*'
-    - '!node_modules/@img/sharp-win32-*/**/*'
-    - '!node_modules/@img/sharp-libvips-darwin-*/**/*'
   target:
     - AppImage
     - deb
