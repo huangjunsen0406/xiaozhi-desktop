@@ -1,6 +1,6 @@
 {
   "name": "xiaozhi-desktop",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "packageManager": "pnpm@10.24.0",
   "description": "小智桌面",
   "author": "junsen",
