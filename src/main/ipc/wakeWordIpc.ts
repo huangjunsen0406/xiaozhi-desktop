@@ -37,6 +37,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
         threshold?: number
         score?: number
         cooldownMs?: number
+        greet?: boolean
       }
       logger.info('更新唤醒词配置', updates)
 
@@ -85,6 +86,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
         cooldown_ms?: number
         keyword_zh?: string
         keyword_en?: string
+        greet?: boolean
       } = {}
       if (updates.enabled !== undefined)
         dbUpdates.enabled = updates.enabled
@@ -96,6 +98,8 @@ export function registerWakeWordIpc(context: IpcContext): void {
         dbUpdates.score = updates.score
       if (updates.cooldownMs !== undefined)
         dbUpdates.cooldown_ms = updates.cooldownMs
+      if (updates.greet !== undefined)
+        dbUpdates.greet = updates.greet
       if (updates.keyword !== undefined && updates.keyword.trim() !== '') {
         if (finalLanguage === 'zh')
           dbUpdates.keyword_zh = updates.keyword.trim()
@@ -139,6 +143,10 @@ export function registerWakeWordIpc(context: IpcContext): void {
 
       logger.info(`模拟检测到唤醒词: ${config.keyword}`)
       await context.container.startAutoConversation()
+      if (config.greet && config.keyword) {
+        logger.info('测试：唤醒后问候 listen/detect', { keyword: config.keyword })
+        await context.container.sendWakeWordDetected(config.keyword)
+      }
       // keyword 放在 data 内，preload 用 unwrapIpcResult 取 data
       return success({ keyword: config.keyword })
     },

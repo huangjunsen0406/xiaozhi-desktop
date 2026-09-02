@@ -158,6 +158,7 @@ export class DatabaseManager {
         threshold REAL DEFAULT 0.2,
         score REAL DEFAULT 1.8,
         cooldown_ms INTEGER DEFAULT 1500,
+        greet INTEGER DEFAULT 0,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
         updated_at INTEGER DEFAULT (strftime('%s', 'now'))
       )
@@ -422,6 +423,7 @@ export class DatabaseManager {
     if (current >= CONFIG_VERSION) {
       // 已是最新；仍幂等跑一遍结构修复（旧库可能 stamp 前半完成）
       this.migrateWakeWordConfig()
+      this.migrateWakeWordGreet()
       this.migrateNetworkConfigDefaults()
       this.migrateMusicConfigUrlResponsePath()
       this.migrateAudioAecMode()
@@ -432,6 +434,7 @@ export class DatabaseManager {
     if (current < 1) {
       this.logger.info('执行配置迁移 v0 → v1...')
       this.migrateWakeWordConfig()
+      this.migrateWakeWordGreet()
       this.migrateNetworkConfigDefaults()
       this.migrateMusicConfigUrlResponsePath()
       this.setConfigVersion(1)
@@ -583,6 +586,25 @@ export class DatabaseManager {
     }
     catch (error) {
       this.logger.error('迁移唤醒词配置失败:', error)
+    }
+  }
+
+  /**
+   * 唤醒后问候：wake_word_config.greet，默认关闭（只进入聆听）
+   */
+  private migrateWakeWordGreet(): void {
+    try {
+      const tableInfo = this.db.prepare('PRAGMA table_info(wake_word_config)').all() as Array<{
+        name: string
+      }>
+      const hasGreet = tableInfo.some(col => col.name === 'greet')
+      if (!hasGreet) {
+        this.db.exec('ALTER TABLE wake_word_config ADD COLUMN greet INTEGER DEFAULT 0')
+        this.logger.info('wake_word_config 已添加 greet 列')
+      }
+    }
+    catch (error) {
+      this.logger.error('migrateWakeWordGreet 失败', error)
     }
   }
 
@@ -902,10 +924,10 @@ export class DatabaseManager {
     const result = this.db.prepare(`
       INSERT INTO wake_word_config (
         enabled, language, keyword_zh, keyword_en,
-        threshold, score, cooldown_ms
+        threshold, score, cooldown_ms, greet
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(1, 'zh', '你好小智', '', 0.2, 1.8, 1500)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(1, 'zh', '你好小智', '', 0.2, 1.8, 1500, 0)
 
     return this.db.prepare('SELECT * FROM wake_word_config WHERE id = ?').get(result.lastInsertRowid) as DbWakeWordConfig
   }
@@ -922,6 +944,7 @@ export class DatabaseManager {
     threshold?: number
     score?: number
     cooldown_ms?: number
+    greet?: boolean
   }): void {
     let config = this.getWakeWordConfig()
     if (!config) {
@@ -960,6 +983,7 @@ export class DatabaseManager {
     threshold: number
     score: number
     cooldownMs: number
+    greet: boolean
   } {
     const config = this.getOrCreateWakeWordConfig()
     const language = config.language || 'zh'
@@ -976,6 +1000,7 @@ export class DatabaseManager {
       threshold: config.threshold || 0.2,
       score: config.score || 1.8,
       cooldownMs: config.cooldown_ms || 1500,
+      greet: Boolean(config.greet),
     }
   }
 

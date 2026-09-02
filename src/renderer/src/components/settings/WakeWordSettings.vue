@@ -9,6 +9,7 @@ const isUpdatingLanguage = ref(false)
 
 // 配置项
 const enableWakeWord = ref(true)
+const greetOnWake = ref(false)
 const wakeWord = ref('小智')
 const threshold = ref(0.2)
 const language = ref('zh')
@@ -54,6 +55,7 @@ async function loadConfig() {
     loading.value = true
     const config = await window.api.wakeWordGetConfig()
     enableWakeWord.value = config.enabled
+    greetOnWake.value = config.greet ?? false
     wakeWord.value = config.keyword ?? ''
     threshold.value = config.threshold ?? 0.2
     language.value = config.language
@@ -76,6 +78,7 @@ async function handleSave() {
 
     await window.api.wakeWordUpdateConfig({
       enabled: enableWakeWord.value,
+      greet: greetOnWake.value,
       keyword: wakeWord.value,
       threshold: threshold.value,
       language: language.value,
@@ -122,6 +125,14 @@ defineExpose({ handleSave, handleCustomButton })
   <NForm label-placement="left" :label-width="120">
     <NFormItem label="启用唤醒词">
       <NSwitch v-model:value="enableWakeWord" :disabled="loading" />
+    </NFormItem>
+    <NFormItem label="唤醒后问候">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <NSwitch v-model:value="greetOnWake" :disabled="!enableWakeWord || loading" />
+        <span style="color: #999; font-size: 12px">
+          关闭时唤醒后只进入聆听；开启后小智会主动打招呼
+        </span>
+      </div>
     </NFormItem>
     <NFormItem label="唤醒词">
       <div class="wake-word-field">

@@ -287,9 +287,15 @@ export class WakeWordPlugin extends Plugin {
         return
       }
 
-      // 情况2 & 通用: 建立新连接并启动自动对话
-      logger.info('启动自动对话')
+      // 默认：建立连接并进入聆听（listen/start），小智待命不主动说话
+      logger.info('启动自动对话（进入聆听）')
       await this.cmd.startListening('realtime')
+
+      const greet = getDatabase().getFormattedWakeWordConfig().greet
+      if (greet) {
+        logger.info('唤醒后问候：发送 listen/detect', { keyword })
+        await this.cmd.sendWakeWordDetected(keyword)
+      }
     }
     catch (error) {
       logger.error('处理唤醒词失败', error)

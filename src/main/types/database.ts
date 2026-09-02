@@ -81,6 +81,8 @@ export interface DbWakeWordConfig {
   threshold: number
   score: number
   cooldown_ms: number
+  /** 0/1，缺列时按 0 */
+  greet?: number
   created_at: number
   updated_at: number
 }
