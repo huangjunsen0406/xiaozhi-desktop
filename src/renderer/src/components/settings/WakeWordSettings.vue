@@ -124,11 +124,17 @@ defineExpose({ handleSave, handleCustomButton })
       <NSwitch v-model:value="enableWakeWord" :disabled="loading" />
     </NFormItem>
     <NFormItem label="唤醒词">
-      <NInput
-        v-model:value="wakeWord"
-        placeholder="请输入唤醒词"
-        :disabled="!enableWakeWord || loading"
-      />
+      <div class="wake-word-field">
+        <NInput
+          v-model:value="wakeWord"
+          :placeholder="language === 'en' ? 'e.g. Hello Moss' : '例如 你好小智'"
+          :disabled="!enableWakeWord || loading"
+          :maxlength="language === 'en' ? 40 : 12"
+        />
+        <p class="wake-word-hint">
+          中文模型只能用汉字（如「你好小智」），英文模型只能用字母。中英混写（如「你好moss」）会导致无法启动。
+        </p>
+      </div>
     </NFormItem>
     <NFormItem label="语言">
       <NSelect
@@ -151,3 +157,19 @@ defineExpose({ handleSave, handleCustomButton })
     </NFormItem>
   </NForm>
 </template>
+
+<style scoped>
+.wake-word-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.wake-word-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #999;
+}
+</style>

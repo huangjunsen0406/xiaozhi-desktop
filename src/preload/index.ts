@@ -30,6 +30,7 @@ const api = {
   close: windowApi.close,
   openExternal: windowApi.openExternal,
   relaunchApp: windowApi.relaunchApp,
+  resetUserData: windowApi.resetUserData,
   openScreenRecordingSettings: windowApi.openScreenRecordingSettings,
 
   // 环境信息

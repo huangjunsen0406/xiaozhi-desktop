@@ -149,6 +149,17 @@ export function registerBasicIpcChannels(): void {
     },
   })
 
+  // 清除本地配置（userData：DB / 唤醒词 / 日志等），然后重启
+  createIpcHandler({
+    channel: 'app:reset-user-data',
+    handler: async () => {
+      logger.info('用户请求清除本地配置')
+      const { resetUserDataAndRelaunch } = await import('../services/resetUserData')
+      await resetUserDataAndRelaunch()
+      return success(true)
+    },
+  })
+
   // 主视图
   ipcMain.on('window:toggle-to-mini', () => {
     toggleToMini()

@@ -61,16 +61,19 @@ export function registerWakeWordIpc(context: IpcContext): void {
 
       const keywordForLanguage = finalLanguage === 'en' ? finalKeywordEn : finalKeywordZh
       const effectiveKeyword = resolveWakeWordKeyword(finalLanguage, keywordForLanguage)
+      const willEnable = updates.enabled ?? current.enabled
 
-      // 2. 先写 userData keywords.txt（失败则 IPC 失败，避免静默成功）
-      //    语言切换、关键词变更、或仅改阈值时都保持文件与最终 language/keyword 一致
-      try {
-        ensureWakeWordKeywordsFile(finalLanguage, effectiveKeyword)
-      }
-      catch (fileError) {
-        const message = fileError instanceof Error ? fileError.message : String(fileError)
-        logger.error('写入 userData keywords.txt 失败', fileError)
-        return failure(`写入唤醒词文件失败: ${message}`)
+      // 2. 启用时才写 keywords.txt。中英混写（你好moss）会生成 oss 等未知音节，
+      //    sherpa 会 abort 进程；关闭时可跳过编码，方便先关掉再打开。
+      if (willEnable) {
+        try {
+          ensureWakeWordKeywordsFile(finalLanguage, effectiveKeyword)
+        }
+        catch (fileError) {
+          const message = fileError instanceof Error ? fileError.message : String(fileError)
+          logger.error('写入 userData keywords.txt 失败', fileError)
+          return failure(message)
+        }
       }
 
       // 3. 再写 DB

@@ -133,6 +133,8 @@ export interface RendererApi {
   openExternal: (string: string) => void
   /** 重启整个应用（AEC system 等需启动参数的变更） */
   relaunchApp: () => Promise<void>
+  /** 清除本地配置（userData：数据库 / 唤醒词等）并重启 */
+  resetUserData: () => Promise<void>
   /** 打开 macOS 录屏与系统录音设置；非 mac 返回 opened:false */
   openScreenRecordingSettings: () => Promise<{ opened: boolean }>
   /** process.platform */

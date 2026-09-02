@@ -5,10 +5,12 @@
  */
 import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
 import { stripReleaseNotesHtml } from '@shared/releaseNotes'
-import { NButton, NForm, NFormItem, NProgress, NSpace, NSwitch, useMessage } from 'naive-ui'
+import { NButton, NForm, NFormItem, NProgress, NSpace, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const message = useMessage()
+const dialog = useDialog()
+const resetting = ref(false)
 
 const appVersion = ref('')
 const isPackaged = ref(false)
@@ -161,6 +163,25 @@ async function handleOpenRepo() {
   catch {
     message.error('无法打开浏览器')
   }
+}
+
+function handleResetUserData() {
+  dialog.warning({
+    title: '清除本地配置',
+    content: '将删除本机数据库、唤醒词、日志和缓存，应用会立即重启。卸载重装不会清这些数据。对话记录也会一并删除。',
+    positiveText: '清除并重启',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      resetting.value = true
+      try {
+        await window.api.resetUserData()
+      }
+      catch (error) {
+        resetting.value = false
+        message.error(error instanceof Error ? error.message : '清除失败')
+      }
+    },
+  })
 }
 
 onMounted(() => {
@@ -335,6 +356,28 @@ defineExpose({ handleSave })
 
           <p class="hint">
             通过官网分发安装包；应用内更新需能访问更新通道。开发态不检查远程。
+          </p>
+        </div>
+      </NFormItem>
+
+      <div class="section-title subsection">
+        本地数据
+      </div>
+
+      <NFormItem label="清除本地配置">
+        <div class="update-actions">
+          <NButton
+            size="small"
+            type="error"
+            ghost
+            :loading="resetting"
+            @click="handleResetUserData"
+          >
+            清除并重启
+          </NButton>
+          <p class="hint">
+            改唤醒词后打不开、卸载重装仍异常时用这个。配置在用户数据目录，不随卸载删除。打不开时也可在终端加参数启动：
+            <code>--reset-data</code>
           </p>
         </div>
       </NFormItem>

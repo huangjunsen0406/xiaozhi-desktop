@@ -60,6 +60,12 @@ export const windowApi = {
     assertIpcSuccess(result, '重启应用失败')
   },
 
+  /** 清除本地配置（DB / 唤醒词等）并重启 */
+  resetUserData: async (): Promise<void> => {
+    const result: unknown = await ipcRenderer.invoke('app:reset-user-data')
+    assertIpcSuccess(result, '清除本地配置失败')
+  },
+
   /**
    * 打开 macOS「录屏与系统录音」设置。
    * 非 darwin 返回 opened:false，不抛错。

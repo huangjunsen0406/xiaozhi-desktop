@@ -24,6 +24,8 @@ import {
 import { initializeConfigManager } from './services/configManagerDB'
 import { initializeDatabase } from './services/database'
 import { initializeDeviceFingerprint } from './services/deviceFingerprintDB'
+import { hasResetDataFlag } from './services/resetDataFlag'
+import { isResettingUserData, resetUserDataAndRelaunch } from './services/resetUserData'
 import { initUpdateService, scheduleSilentUpdateCheck } from './services/UpdateService'
 import { registerTray } from './tray'
 import { getLogger, initLogger, shutdownLogger } from './utils/logger'
@@ -38,6 +40,8 @@ const APP_DISPLAY_NAME = '小智'
 let isQuittingFlag = false
 
 app.setName(APP_DISPLAY_NAME)
+
+const wantsResetData = hasResetDataFlag() || app.commandLine.hasSwitch('reset-data')
 
 // 按 aec-boot.json / 默认 app 设置 Chromium AEC features（须在 ready 前）
 const bootAecMode = applyAecCommandLineFeatures()
@@ -94,19 +98,33 @@ app.on('ready', () => {
 registerModelProtocolScheme()
 
 // 初始化日志系统（在单实例锁检查前，确保 logger 可用）
-initLogger()
+// --reset-data 不写日志到即将删除的目录
+if (!wantsResetData)
+  initLogger()
 
 // 单实例锁定：防止多开
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   // 如果获取锁失败，说明已经有实例在运行，直接退出
+  // 带 --reset-data 时由第一个实例在 second-instance 里执行清除
   logger.info('应用已在运行，退出当前实例')
   app.quit()
 }
+else if (wantsResetData) {
+  app.whenReady().then(() => {
+    void resetUserDataAndRelaunch()
+  })
+}
 else {
   // 当第二个实例尝试启动时，唤醒第一个实例的窗口
-  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+  app.on('second-instance', (_event, commandLine, _workingDirectory) => {
+    if (hasResetDataFlag(commandLine)) {
+      logger.info('收到 --reset-data，清除本地配置并重启')
+      void resetUserDataAndRelaunch()
+      return
+    }
+
     logger.info('检测到第二个实例启动，唤醒现有窗口')
 
     // 获取当前显示模式对应的窗口
@@ -134,6 +152,9 @@ else {
 }
 
 app.whenReady().then(async () => {
+  if (wantsResetData)
+    return
+
   logger.info('应用启动', { version: app.getVersion(), platform: process.platform })
 
   // PATHS：env 覆盖生效时从默认目录复制迁移（不删源、不迁 DB）
@@ -329,6 +350,8 @@ app.on('window-all-closed', () => {
 
 // 应用退出前清理所有资源
 app.on('before-quit', async (event) => {
+  if (isResettingUserData())
+    return
   if (isQuittingFlag)
     return
   isQuittingFlag = true

@@ -60,6 +60,8 @@ nsis:
   createStartMenuShortcut: true
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # 卸载时清掉 Roaming 下的配置。mac/linux 仍需关于页「清除本地配置」或 --reset-data
+  deleteAppDataOnUninstall: true
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
 mac:

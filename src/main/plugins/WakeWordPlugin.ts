@@ -5,7 +5,7 @@ import { AbortReason } from '../protocols/Protocol'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { getWakeWordKeywordsPath, getWakeWordModelsBundledDir } from '../utils/paths'
-import { ensureWakeWordKeywordsFile } from '../wake-word/keywordsFile'
+import { ensureSafeWakeWordKeywordsFile, ensureWakeWordKeywordsFile } from '../wake-word/keywordsFile'
 import { WakeWordDetector } from '../wake-word/WakeWordDetector'
 
 import { Plugin } from './Plugin'
@@ -59,7 +59,6 @@ export class WakeWordPlugin extends Plugin {
     numTrailingBlanks: number
   } {
     const modelsPath = this.getModelsBasePath()
-    // 初始化 / reload 前把 DB 关键词落到 userData，避免仍读打包默认词
     const keywordsFile = ensureWakeWordKeywordsFile(config.language, config.keyword)
 
     logger.info('唤醒词路径', {
@@ -81,6 +80,17 @@ export class WakeWordPlugin extends Plugin {
     }
   }
 
+  private attachDetectorCallbacks(): void {
+    if (!this.detector)
+      return
+    this.detector.onDetected((keyword) => {
+      this.onWakeWordDetected(keyword)
+    })
+    this.detector.onError((error) => {
+      logger.error('检测器错误', error)
+    })
+  }
+
   /**
    * 插件初始化
    */
@@ -96,22 +106,37 @@ export class WakeWordPlugin extends Plugin {
 
       logger.info('唤醒词配置:', config)
 
-      // 创建检测器（keywords 来自 userData）
-      this.detector = new WakeWordDetector(this.buildDetectorConfig(config))
+      if (!config.enabled) {
+        logger.info('唤醒词已关闭，跳过 KeywordSpotter 初始化')
+        this.detector = null
+        return
+      }
+
+      const safe = ensureSafeWakeWordKeywordsFile(config.language, config.keyword)
+      if (safe.fellBack) {
+        logger.warn('非法唤醒词已重置为默认', {
+          language: config.language,
+          from: config.keyword,
+          to: safe.keyword,
+          reason: safe.reason,
+        })
+        if (config.language === 'en')
+          db.updateWakeWordConfig({ keyword_en: safe.keyword })
+        else
+          db.updateWakeWordConfig({ keyword_zh: safe.keyword })
+      }
+
+      this.detector = new WakeWordDetector(this.buildDetectorConfig({
+        ...config,
+        keyword: safe.keyword,
+      }))
 
       // 设置冷却时间
       if (this.detector.isEnabled()) {
         this.detector.setCooldown(config.cooldownMs)
       }
 
-      // 绑定回调
-      this.detector.onDetected((keyword) => {
-        this.onWakeWordDetected(keyword)
-      })
-
-      this.detector.onError((error) => {
-        logger.error('检测器错误', error)
-      })
+      this.attachDetectorCallbacks()
 
       if (this.detector.isEnabled()) {
         logger.info('设置完成')
@@ -130,24 +155,49 @@ export class WakeWordPlugin extends Plugin {
    * 重新加载配置（用于热更新）
    */
   async reloadConfig(): Promise<void> {
-    if (!this.detector) {
-      logger.warn('检测器未初始化，无法重新加载')
-      return
-    }
-
     logger.info('重新加载配置...')
 
     try {
-      // 从数据库读取最新配置
       const db = getDatabase()
       const config = db.getFormattedWakeWordConfig()
-
       logger.info('新配置:', config)
 
-      // 重新加载模型（会再次 ensure userData keywords）
-      this.detector.reload(this.buildDetectorConfig(config))
+      if (!config.enabled) {
+        if (this.detector) {
+          try {
+            const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
+            audioPlugin.removeAudioListener(this.detector)
+          }
+          catch {
+            // 依赖可能未就绪
+          }
+          this.detector.shutdown()
+          this.detector = null
+        }
+        logger.info('唤醒词已关闭，检测器已停用')
+        return
+      }
 
-      // 更新冷却时间
+      const detectorConfig = this.buildDetectorConfig(config)
+
+      if (!this.detector) {
+        this.detector = new WakeWordDetector(detectorConfig)
+        this.attachDetectorCallbacks()
+        if (this.detector.isEnabled()) {
+          this.detector.setCooldown(config.cooldownMs)
+          try {
+            const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
+            audioPlugin.addAudioListener(this.detector)
+          }
+          catch (error) {
+            logger.warn('订阅音频流失败（插件可能尚未启动）', error)
+          }
+        }
+        logger.info('检测器已按新配置创建')
+        return
+      }
+
+      this.detector.reload(detectorConfig)
       if (this.detector.isEnabled()) {
         this.detector.setCooldown(config.cooldownMs)
       }
@@ -156,6 +206,7 @@ export class WakeWordPlugin extends Plugin {
     }
     catch (error) {
       logger.error('配置重新加载失败', error)
+      throw error
     }
   }
 
