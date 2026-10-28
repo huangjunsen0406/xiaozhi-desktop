@@ -58,7 +58,7 @@ export interface McpInstalledPlugin {
 }
 
 export interface McpToolsSyncResult {
-  status: 'synced' | 'deferred' | 'failed'
+  status: 'reconnected' | 'deferred' | 'failed'
   error?: string
 }
 

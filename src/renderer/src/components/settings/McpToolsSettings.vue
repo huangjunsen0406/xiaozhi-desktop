@@ -317,7 +317,7 @@ async function handleSave() {
     return
   message.success(
     result.reconnected
-      ? '已保存，工具列表将在重连后对云端生效'
+      ? '已保存并重连，等待云端重新获取工具列表'
       : '已保存（当前无活跃连接，下次连接生效）',
   )
 }

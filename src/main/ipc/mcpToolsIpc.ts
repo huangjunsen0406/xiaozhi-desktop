@@ -92,7 +92,7 @@ export function registerMcpToolsIpc(): void {
       const sync = await syncMcpTools()
       const result: McpToolsSaveResult = {
         disabled: server.getDisabledTools(),
-        reconnected: sync.status === 'synced',
+        reconnected: sync.status === 'reconnected',
         sync,
       }
       logger.info('MCP 工具禁用列表已保存', result)

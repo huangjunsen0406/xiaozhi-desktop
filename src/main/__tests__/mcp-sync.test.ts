@@ -21,7 +21,7 @@ it('distinguishes offline deferred sync, successful reconnect, and failed reconn
     assert.deepEqual(await syncMcpTools(), { status: 'deferred' })
     connected = true
     reconnected = true
-    assert.deepEqual(await syncMcpTools(), { status: 'synced' })
+    assert.deepEqual(await syncMcpTools(), { status: 'reconnected' })
     reconnected = false
     assert.equal((await syncMcpTools()).status, 'failed')
     failure = new Error('network unavailable')
