@@ -181,6 +181,7 @@ const api = {
   petsOnDisplayWidthChanged: petsApi.onDisplayWidthChanged,
 
   // MCP 工具 API
+  mcpToolsGetInstalled: mcpToolsApi.getInstalled,
   mcpToolsGetCatalog: mcpToolsApi.getCatalog,
   mcpToolsGetDisabled: mcpToolsApi.getDisabled,
   mcpToolsSaveDisabled: mcpToolsApi.saveDisabled,

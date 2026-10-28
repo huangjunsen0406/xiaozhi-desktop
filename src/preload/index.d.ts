@@ -26,6 +26,7 @@ import type {
   FileDialogResult,
   HoverAnchor,
   ImageCapturedEvent,
+  McpInstalledPlugin,
   McpPluginImportResult,
   McpPluginsHostConfig,
   McpToolCatalogItem,
@@ -271,6 +272,7 @@ export interface RendererApi {
   petsOnDisplayWidthChanged: (callback: (width: number) => void) => () => void
 
   // MCP 工具 APIs
+  mcpToolsGetInstalled: () => Promise<McpInstalledPlugin[]>
   mcpToolsGetCatalog: () => Promise<McpToolCatalogItem[]>
   mcpToolsGetDisabled: () => Promise<string[]>
   mcpToolsSaveDisabled: (disabledNames: string[]) => Promise<McpToolsSaveResult>

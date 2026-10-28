@@ -49,6 +49,11 @@ export function registerMcpToolsIpc(): void {
     },
   })
 
+  createIpcHandler({
+    channel: 'mcp-tools:get-installed',
+    handler: async () => runMcpPluginOperation(async () => success(await getMcpServerOrThrow().getInstalledPlugins())),
+  })
+
   /**
    * 获取当前禁用工具列表
    */
@@ -244,18 +249,18 @@ export function registerMcpToolsIpc(): void {
   createIpcHandler({
     channel: 'mcp-tools:delete-plugin',
     schema: {
-      pluginId: { type: 'string', required: true, minLength: 1 },
+      directoryName: { type: 'string', required: true, minLength: 1 },
     },
-    handler: async (_event, pluginIdUnknown: unknown) => runMcpPluginOperation(async () => {
-      const pluginId = String(pluginIdUnknown)
-      if (!pluginId) {
+    handler: async (_event, directoryNameUnknown: unknown) => runMcpPluginOperation(async () => {
+      const directoryName = String(directoryNameUnknown)
+      if (!directoryName) {
         return failure('无效的插件 id')
       }
       const server = getMcpServerOrThrow()
-      const result = await server.deleteInstalledPlugin(pluginId)
+      const result = await server.deleteInstalledPlugin(directoryName)
       const catalog: McpToolCatalogItem[] = server.getToolCatalog()
       return success({
-        pluginId,
+        directoryName,
         removedTools: result.removedTools,
         deletedDir: result.deletedDir,
         catalog,

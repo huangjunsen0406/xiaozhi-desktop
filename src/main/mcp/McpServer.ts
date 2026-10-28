@@ -1,4 +1,6 @@
 import type { ImageSourceType } from '@shared/types'
+import type { McpInstalledPlugin } from '../../shared/types/mcp'
+import type { LoadPluginsResult } from './plugins/loader'
 import type { McpHostGetKey, McpToolCatalogItem } from './plugins/types'
 import type { MusicPlayer } from './tools/music/MusicPlayer'
 import type {
@@ -15,7 +17,7 @@ import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
 import { getConfigManager } from '../services/configManagerDB'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
-import { getMcpPluginsDir, isPathInside } from '../utils/paths'
+import { getMcpPluginsDir } from '../utils/paths'
 import { resetMcpContext, setMcpContext, setMcpToolRuntime } from './McpContext'
 import {
   createBubbleFacade,
@@ -26,6 +28,7 @@ import {
   loadMcpPluginsFromConfig,
   McpPluginRegistry,
 } from './plugins'
+import { resolveInstalledPluginDirectory, scanInstalledMcpPlugins } from './plugins/inventory'
 import { getCameraInstance } from './tools/camera'
 import { ScreenshotTool } from './tools/screenshot/ScreenshotTool'
 import { SystemToolsManager } from './tools/SystemToolsManager'
@@ -56,6 +59,7 @@ export class McpServer {
   private musicPlayer: MusicPlayer | null = null
   /** 外挂工具归属 */
   private pluginRegistry = new McpPluginRegistry()
+  private pluginLoadResult: LoadPluginsResult = { loaded: [], skipped: [], errors: [] }
   /** 内存中的禁用工具集合（与 DB 同步） */
   private disabledTools = new Set<string>()
 
@@ -282,41 +286,46 @@ export class McpServer {
   /**
    * 删除已安装外挂：卸载工具 + 删除 mcp_plugins/<id> 目录
    */
-  async deleteInstalledPlugin(
-    pluginId: string,
-  ): Promise<{ removedTools: string[], deletedDir: boolean }> {
-    if (!pluginId || pluginId.includes('/') || pluginId.includes('\\') || pluginId.includes('..')) {
-      throw new Error('插件 id 非法')
+  async getInstalledPlugins(): Promise<McpInstalledPlugin[]> {
+    const root = await fs.realpath(getMcpPluginsDir())
+    const items = await scanInstalledMcpPlugins(root)
+    return items.map((item) => {
+      const directory = path.join(root, item.directoryName)
+      const loaded = this.pluginRegistry.getAllPlugins().find(plugin => plugin.rootDir === directory)
+      const failed = this.pluginLoadResult.errors.find(error => error.rootDir === directory)
+      const skipped = this.pluginLoadResult.skipped.find(skip => skip.rootDir === directory)
+      if (loaded)
+        return { ...item, status: 'loaded', toolCount: loaded.toolNames.length, reason: undefined }
+      if (item.status === 'failed')
+        return item
+      if (failed)
+        return { ...item, status: 'failed', reason: failed.error }
+      if (skipped)
+        return { ...item, status: 'skipped', reason: skipped.reason }
+      return item
+    })
+  }
+
+  async deleteInstalledPlugin(directoryName: string): Promise<{ removedTools: string[], deletedDir: boolean }> {
+    const destDir = await resolveInstalledPluginDirectory(getMcpPluginsDir(), directoryName)
+    const plugin = this.pluginRegistry.getAllPlugins().find(plugin => plugin.rootDir === destDir)
+    const removedTools = plugin ? await this.unloadPlugin(plugin.id) : []
+    try {
+      // Remove this exact checked immediate child; fs.remove unlinks symlinks.
+      await fs.remove(destDir)
     }
-
-    const plugin = this.pluginRegistry.getPlugin(pluginId)
-    if (!plugin) {
-      throw new Error(`插件未加载或不存在: ${pluginId}`)
+    catch (error) {
+      await this.reloadExternalPlugins()
+      throw error
     }
-
-    const removedTools = await this.unloadPlugin(pluginId)
-
-    // 清理禁用名单中已删除工具，避免脏数据
-    if (removedTools.length > 0) {
+    if (removedTools.length) {
+      this.loadDisabledToolsFromDb()
       const removedSet = new Set(removedTools)
-      const nextDisabled = this.getDisabledTools().filter(n => !removedSet.has(n))
-      if (nextDisabled.length !== this.disabledTools.size) {
-        this.setDisabledTools(nextDisabled)
-      }
+      this.setDisabledTools(this.getDisabledTools().filter(name => !removedSet.has(name)))
     }
-
-    const pluginsDir = getMcpPluginsDir()
-    const destDir = path.join(pluginsDir, pluginId)
-    let deletedDir = false
-    if (isPathInside(pluginsDir, destDir) && path.resolve(destDir) !== path.resolve(pluginsDir)) {
-      if (await fs.pathExists(destDir)) {
-        await fs.remove(destDir)
-        deletedDir = true
-      }
-    }
-
-    logger.info('已删除外挂插件', { pluginId, removedTools: removedTools.length, deletedDir })
-    return { removedTools, deletedDir }
+    this.pluginLoadResult.errors = this.pluginLoadResult.errors.filter(item => item.rootDir !== destDir)
+    this.pluginLoadResult.skipped = this.pluginLoadResult.skipped.filter(item => item.rootDir !== destDir)
+    return { removedTools, deletedDir: true }
   }
 
   /**
@@ -416,11 +425,13 @@ export class McpServer {
         capabilities,
       })
 
+      this.pluginLoadResult = result
       if (result.errors.length > 0) {
         logger.warn('部分外挂插件加载失败', { errors: result.errors })
       }
     }
     catch (error) {
+      this.pluginLoadResult = { loaded: [], skipped: [], errors: [{ error: String(error) }] }
       logger.error('加载外挂插件失败（不影响内置工具）', error)
     }
   }

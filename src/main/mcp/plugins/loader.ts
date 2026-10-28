@@ -53,8 +53,8 @@ export interface LoadPluginsOptions {
 
 export interface LoadPluginsResult {
   loaded: LoadedMcpPlugin[]
-  skipped: Array<{ id?: string, reason: string }>
-  errors: Array<{ id?: string, error: string }>
+  skipped: Array<{ id?: string, rootDir?: string, reason: string }>
+  errors: Array<{ id?: string, rootDir?: string, error: string }>
 }
 
 function shouldLoadPlugin(
@@ -150,7 +150,7 @@ async function loadOnePlugin(
 ): Promise<void> {
   const manifestPath = path.join(pluginRoot, 'manifest.json')
   if (!(await fs.pathExists(manifestPath))) {
-    result.skipped.push({ reason: `无 manifest.json: ${pluginRoot}` })
+    result.skipped.push({ rootDir: pluginRoot, reason: `无 manifest.json: ${pluginRoot}` })
     return
   }
 
@@ -160,6 +160,7 @@ async function loadOnePlugin(
   }
   catch (error) {
     result.errors.push({
+      rootDir: pluginRoot,
       error: `读取 manifest 失败: ${pluginRoot}: ${String(error)}`,
     })
     return
@@ -167,7 +168,7 @@ async function loadOnePlugin(
 
   const validated = validateManifest(raw, pluginRoot)
   if (!validated.ok) {
-    result.errors.push({ error: `${pluginRoot}: ${validated.error}` })
+    result.errors.push({ rootDir: pluginRoot, error: `${pluginRoot}: ${validated.error}` })
     return
   }
 
@@ -175,7 +176,7 @@ async function loadOnePlugin(
   const id = manifest.id
 
   if (!shouldLoadPlugin(id, config, manifest.enabled_by_default !== false)) {
-    result.skipped.push({ id, reason: '已禁用或不在 enabled 列表' })
+    result.skipped.push({ id, rootDir: pluginRoot, reason: '已禁用或不在 enabled 列表' })
     return
   }
 
@@ -186,6 +187,7 @@ async function loadOnePlugin(
     })
     result.skipped.push({
       id,
+      rootDir: pluginRoot,
       reason: `runtime 不支持: ${manifest.runtime}（MVP 仅 node-inprocess）`,
     })
     return
@@ -194,6 +196,7 @@ async function loadOnePlugin(
   if (!isPlatformAllowed(manifest.platforms)) {
     result.skipped.push({
       id,
+      rootDir: pluginRoot,
       reason: `当前平台 ${process.platform} 不在 platforms 列表`,
     })
     return
@@ -203,12 +206,12 @@ async function loadOnePlugin(
     await validatePluginEntry(pluginRoot, entryPath)
   }
   catch (error) {
-    result.errors.push({ id, error: String(error) })
+    result.errors.push({ id, rootDir: pluginRoot, error: String(error) })
     return
   }
 
   if (options.registry.getPlugin(id)) {
-    result.errors.push({ id, error: `插件 id 冲突: ${id}` })
+    result.errors.push({ id, rootDir: pluginRoot, error: `插件 id 冲突: ${id}` })
     return
   }
 
@@ -307,7 +310,7 @@ async function loadOnePlugin(
     }
     const msg = error instanceof Error ? error.message : String(error)
     logger.error('外挂插件加载失败（已隔离）', { id, error: msg })
-    result.errors.push({ id, error: msg })
+    result.errors.push({ id, rootDir: pluginRoot, error: msg })
   }
 }
 
@@ -326,11 +329,6 @@ export async function loadMcpPluginsFromConfig(
     loaded: [],
     skipped: [],
     errors: [],
-  }
-
-  if (!config.enabled) {
-    logger.info('MCP 外挂插件总开关已关闭，跳过加载')
-    return result
   }
 
   const configuredDir = options.pluginsDir ?? getMcpPluginsDir()
@@ -353,9 +351,13 @@ export async function loadMcpPluginsFromConfig(
     const full = path.join(pluginsDir, name)
     let stat
     try {
-      stat = await fs.stat(full)
+      stat = await fs.lstat(full)
     }
     catch {
+      continue
+    }
+    if (stat.isSymbolicLink()) {
+      result.errors.push({ rootDir: full, error: '插件目录不能为符号链接' })
       continue
     }
     if (!stat.isDirectory())

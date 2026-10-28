@@ -43,3 +43,14 @@ export interface McpPluginsHostConfig {
   allowHostGet: string[]
   enforcePrefix: boolean
 }
+
+/** Installed directory packages, including failed and zero-tool plugins. */
+export interface McpInstalledPlugin {
+  directoryName: string
+  pluginId?: string
+  name: string
+  version?: string
+  status: 'loaded' | 'skipped' | 'failed'
+  toolCount: number
+  reason?: string
+}

@@ -3,6 +3,7 @@
  */
 import type {
   FileDialogResult,
+  McpInstalledPlugin,
   McpPluginImportResult,
   McpPluginsHostConfig,
   McpToolCatalogItem,
@@ -12,6 +13,10 @@ import { ipcRenderer } from 'electron'
 import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
 export const mcpToolsApi = {
+  getInstalled: async (): Promise<McpInstalledPlugin[]> => {
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:get-installed')
+    return unwrapIpcResult<McpInstalledPlugin[]>(result, '获取已安装插件失败')
+  },
   /** 获取统一工具 catalog（内置+外挂） */
   getCatalog: async (): Promise<McpToolCatalogItem[]> => {
     const result: unknown = await ipcRenderer.invoke('mcp-tools:get-catalog')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { McpToolCatalogItem } from '@shared/types'
+import type { McpInstalledPlugin, McpToolCatalogItem } from '@shared/types'
 import { NButton, NCheckbox, NEmpty, NPopconfirm, NSpin, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import IconCarbonAdd from '~icons/carbon/add'
@@ -11,6 +11,7 @@ const message = useMessage()
 
 /** 服务端 catalog */
 const catalog = ref<McpToolCatalogItem[]>([])
+const installedPlugins = ref<McpInstalledPlugin[]>([])
 /** 本地开关状态：toolName → enabled（true=启用） */
 const localEnabled = ref<Record<string, boolean>>({})
 /** 上次保存的禁用集合，用于 dirty 判断 */
@@ -69,13 +70,12 @@ function isGroupAllEnabled(group: ToolGroup): boolean {
   return group.tools.length > 0 && group.tools.every(t => isEnabled(t.name))
 }
 
-/** 外挂组：取该组 pluginId（同组工具应一致） */
-function groupPluginId(group: ToolGroup): string | undefined {
-  return group.tools.find(t => t.source === 'plugin' && t.pluginId)?.pluginId
+async function loadInstalledPlugins() {
+  installedPlugins.value = await window.api.mcpToolsGetInstalled()
 }
 
-function isPluginGroup(group: ToolGroup): boolean {
-  return group.tools.some(t => t.source === 'plugin')
+function pluginStatusLabel(plugin: McpInstalledPlugin): string {
+  return plugin.status === 'loaded' ? `已加载 · ${plugin.toolCount} 个工具` : plugin.status === 'skipped' ? '未加载' : '加载失败'
 }
 
 function applyCatalog(items: McpToolCatalogItem[]) {
@@ -101,6 +101,7 @@ async function loadCatalog() {
       items = await window.api.mcpToolsGetCatalog()
     }
     applyCatalog(items)
+    await loadInstalledPlugins()
 
     try {
       const cfg = await window.api.mcpToolsGetPluginsConfig()
@@ -140,6 +141,7 @@ async function handleMediaPlayerAllow(enabled: boolean) {
     const items = await window.api.mcpToolsGetCatalog()
     const prev = { ...localEnabled.value }
     applyCatalog(items)
+    await loadInstalledPlugins()
     const merged = { ...localEnabled.value }
     for (const [k, v] of Object.entries(prev)) {
       if (k in merged)
@@ -170,6 +172,7 @@ async function handleSubtitleAllow(enabled: boolean) {
     if (enabled)
       allowHostGet.push('subtitle')
     const next = await window.api.mcpToolsSetPluginsConfig({ allowHostGet })
+    await loadInstalledPlugins()
     subtitleAllowed.value = next.allowHostGet.includes('subtitle')
     message.success(enabled ? '已允许外挂显示字幕' : '已关闭外挂字幕权限')
   }
@@ -217,6 +220,7 @@ async function handleImport() {
     // 保留本地未保存的开关；新工具默认跟随服务端 enabled
     const prev = { ...localEnabled.value }
     applyCatalog(items)
+    await loadInstalledPlugins()
     // 合并：已有本地键优先
     const merged = { ...localEnabled.value }
     for (const [k, v] of Object.entries(prev)) {
@@ -247,7 +251,12 @@ async function handleRefresh() {
   try {
     const items = await window.api.mcpToolsRefresh()
     applyCatalog(items)
-    message.success('已刷新工具列表')
+    await loadInstalledPlugins()
+    const failures = installedPlugins.value.filter(plugin => plugin.status === 'failed').length
+    if (failures)
+      message.warning(`已刷新，${failures} 个插件加载失败，请查看插件状态`)
+    else
+      message.success('已刷新工具列表')
   }
   catch (error) {
     message.error(error instanceof Error ? error.message : '刷新失败')
@@ -262,13 +271,14 @@ const deletingPluginId = ref<string | null>(null)
 /**
  * 删除已导入外挂：卸工具 + 删目录，刷新 catalog
  */
-async function handleDeletePlugin(pluginId: string) {
+async function handleDeletePlugin(directoryName: string) {
   try {
-    deletingPluginId.value = pluginId
-    const items = await window.api.mcpToolsDeletePlugin(pluginId)
+    deletingPluginId.value = directoryName
+    const items = await window.api.mcpToolsDeletePlugin(directoryName)
     // 保留其它工具的本地未保存开关
     const prev = { ...localEnabled.value }
     applyCatalog(items)
+    await loadInstalledPlugins()
     const merged = { ...localEnabled.value }
     for (const [k, v] of Object.entries(prev)) {
       if (k in merged)
@@ -384,6 +394,36 @@ defineExpose({
       <NSwitch :value="subtitleAllowed" :loading="subtitleSaving" :disabled="mediaPlayerSaving" size="small" class="shrink-0" @update:value="handleSubtitleAllow" />
     </div>
 
+    <div v-if="installedPlugins.length" class="mb-4">
+      <div class="section-title subsection">
+        已安装插件
+      </div>
+      <div v-for="plugin in installedPlugins" :key="plugin.directoryName" class="media-card mb-2">
+        <div class="min-w-0 flex-1">
+          <div class="media-card-title">
+            {{ plugin.name }} <span class="text-sm">{{ plugin.version ? `v${plugin.version}` : '' }}</span>
+          </div>
+          <div class="media-card-desc">
+            {{ pluginStatusLabel(plugin) }}
+          </div>
+          <div v-if="plugin.reason" class="text-sm break-all" :class="plugin.status === 'failed' ? 'text-red-500' : 'text-gray-500'">
+            {{ plugin.reason }}
+          </div>
+        </div>
+        <NPopconfirm positive-text="删除" negative-text="取消" @positive-click="handleDeletePlugin(plugin.directoryName)">
+          <template #trigger>
+            <NButton text type="error" size="small" :loading="deletingPluginId === plugin.directoryName">
+              <template #icon>
+                <IconCarbonTrashCan class="w-4 h-4" />
+              </template>
+              删除
+            </NButton>
+          </template>
+          确定删除插件「{{ plugin.name }}」？将卸载工具并删除本地插件目录。
+        </NPopconfirm>
+      </div>
+    </div>
+
     <div class="section-title subsection">
       工具列表
     </div>
@@ -408,27 +448,6 @@ defineExpose({
                 size="small"
                 @update:value="(v: boolean) => setGroupEnabled(group, v)"
               />
-              <NPopconfirm
-                v-if="isPluginGroup(group) && groupPluginId(group)"
-                positive-text="删除"
-                negative-text="取消"
-                @positive-click="handleDeletePlugin(groupPluginId(group)!)"
-              >
-                <template #trigger>
-                  <NButton
-                    text
-                    type="error"
-                    size="tiny"
-                    :loading="deletingPluginId === groupPluginId(group)"
-                  >
-                    <template #icon>
-                      <IconCarbonTrashCan class="w-3.5 h-3.5" />
-                    </template>
-                    删除
-                  </NButton>
-                </template>
-                确定删除外挂「{{ group.name }}」？将卸载其工具并删除本地插件目录。
-              </NPopconfirm>
             </div>
           </div>
 
