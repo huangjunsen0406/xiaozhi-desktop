@@ -24,3 +24,15 @@ export function mergeMcpDisabledTools(previous: string[], visibleNames: string[]
 export function isMcpToolDraftDirty(local: Record<string, boolean>, savedDisabled: Set<string>): boolean {
   return Object.entries(local).some(([name, enabled]) => enabled !== !savedDisabled.has(name))
 }
+
+/** A save response acknowledges the submitted snapshot, not edits made while awaiting it. */
+export function mergeMcpToolSaveResult(
+  current: Record<string, boolean>,
+  submitted: Record<string, boolean>,
+  savedDisabled: Set<string>,
+): Record<string, boolean> {
+  return Object.fromEntries(Object.entries(current).map(([name, enabled]) => [
+    name,
+    name in submitted && enabled === submitted[name] ? !savedDisabled.has(name) : enabled,
+  ]))
+}

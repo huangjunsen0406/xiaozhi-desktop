@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { McpInstalledPlugin, McpToolCatalogItem, McpToolsSyncResult } from '@shared/types'
-import { isMcpToolDraftDirty, mergeMcpToolDraft } from '@shared/mcpToolState'
+import { isMcpToolDraftDirty, mergeMcpToolDraft, mergeMcpToolSaveResult } from '@shared/mcpToolState'
 import { NButton, NCheckbox, NEmpty, NPopconfirm, NSpin, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import IconCarbonAdd from '~icons/carbon/add'
@@ -306,16 +306,12 @@ async function handleCustomButton() {
  * 保存：DISABLED 落盘 + reconnectKeepingIdle
  */
 async function handleSave() {
+  const submitted = { ...localEnabled.value }
   const disabled = getDisabledNames()
   // 错误由 SettingsView 底栏统一 toast，避免双重提示
   const result = await window.api.mcpToolsSaveDisabled(disabled, catalog.value.map(item => item.name))
   savedDisabled.value = new Set(result.disabled)
-  // 同步 local 与 saved
-  const next: Record<string, boolean> = {}
-  for (const item of catalog.value) {
-    next[item.name] = !result.disabled.includes(item.name)
-  }
-  localEnabled.value = next
+  localEnabled.value = mergeMcpToolSaveResult(localEnabled.value, submitted, savedDisabled.value)
   showSyncResult(result.sync)
   if (result.sync.status === 'failed')
     return
