@@ -11,6 +11,7 @@ import type {
 } from './types'
 import path from 'node:path'
 import fs from 'fs-extra'
+import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
 import { getConfigManager } from '../services/configManagerDB'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -366,11 +367,6 @@ export class McpServer {
    */
   async loadExternalPlugins(): Promise<void> {
     try {
-      const VALID_HOST_GET = new Set<McpHostGetKey>([
-        'logger',
-        'config_readonly',
-        'media_player',
-      ])
       let pluginsConfig = {
         enabled: true,
         disabledIds: [] as string[],
@@ -384,9 +380,7 @@ export class McpServer {
           enabled: dbCfg.enabled,
           disabledIds: dbCfg.disabledIds,
           enabledIds: dbCfg.enabledIds,
-          allowHostGet: dbCfg.allowHostGet.filter(
-            (k): k is McpHostGetKey => VALID_HOST_GET.has(k as McpHostGetKey),
-          ),
+          allowHostGet: normalizeMcpHostCapabilities(dbCfg.allowHostGet),
           enforcePrefix: dbCfg.enforcePrefix,
         }
       }
@@ -403,8 +397,7 @@ export class McpServer {
         logger.debug('MusicPlayer 未注入，外挂 media_player 能力不可用')
       }
       // 字幕/消息条 SDK：复用关怀气泡通道（bubble:show-local），无额外依赖
-      capabilities.bubble = createBubbleFacade()
-      capabilities.subtitle = capabilities.bubble
+      capabilities.subtitle = createBubbleFacade()
 
       const result = await loadMcpPluginsFromConfig({
         registry: this.pluginRegistry,

@@ -4,6 +4,7 @@
  * 运行时仅支持 node-inprocess；其它 runtime 由 loader 跳过并告警。
  */
 
+import type { McpHostCapability } from '../../../shared/mcpCapabilities'
 import type { McpTool, PropertyList, ToolCallback } from '../types'
 
 /** 支持的 Host API 版本 */
@@ -45,10 +46,9 @@ export interface LoadedMcpPlugin {
  * host.get 白名单键
  * - logger / config_readonly：默认开放
  * - media_player：应用内媒体播放 SDK（需配置显式加入；支持本地文件 / http(s) / HLS(m3u8)）
- * - bubble：字幕/消息条展示 SDK（需配置显式加入；复用关怀气泡通道，不进聊天历史）
- * - subtitle：bubble 别名（语义化命名，跨端插件兼容）
+ * - subtitle：字幕/消息条展示 SDK（显式授权；复用精灵和 Live2D 消息条）
  */
-export type McpHostGetKey = 'logger' | 'config_readonly' | 'media_player' | 'bubble' | 'subtitle'
+export type McpHostGetKey = McpHostCapability
 
 /** 媒体播放 SDK 操作结果 */
 export interface MediaPlayerResult {
@@ -99,7 +99,7 @@ export interface BubbleShowOptions {
 }
 
 /**
- * 外挂可用的字幕/消息条展示 SDK（Host capability: bubble / subtitle）
+ * 外挂可用的字幕/消息条展示 SDK（Host capability: subtitle）
  * 复用关怀气泡通道（bubble:show-local → BubbleView），不进聊天历史、只做展示；
  * 依赖 pets / live2d 模式（桌宠 surface），无 surface 时返回明确错误。
  */

@@ -78,17 +78,17 @@ describe('createMcpHost capabilities', () => {
     assert.equal(host.get('music_player'), undefined)
   })
 
-  it('returns bubble facade via subtitle alias when allowed and injected', () => {
+  it('exposes subtitle while keeping bubble private', () => {
     const bubble = { show: async () => ({ success: true }), hide: async () => ({ success: true }) }
     const host = createMcpHost({
       pluginId: 'test',
-      allowHostGet: ['logger', 'config_readonly', 'bubble', 'subtitle'],
+      allowHostGet: ['logger', 'config_readonly', 'subtitle'],
       enforcePrefix: false,
       callTimeoutMs: 1000,
       onAddTool: noopAdd,
       capabilities: { bubble, subtitle: bubble },
     })
-    assert.equal(host.get('bubble'), bubble)
+    assert.equal(host.get('bubble'), undefined)
     assert.equal(host.get('subtitle'), bubble)
   })
 

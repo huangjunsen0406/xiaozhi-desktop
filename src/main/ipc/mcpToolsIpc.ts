@@ -16,6 +16,7 @@ import type {
 import path from 'node:path'
 import { dialog, shell } from 'electron'
 import fs from 'fs-extra'
+import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
 import { getServiceContainer } from '../core/ServiceContainer'
 import { readPluginManifest } from '../mcp/plugins'
 import { getDatabase } from '../services/database'
@@ -257,14 +258,6 @@ export function registerMcpToolsIpc(): void {
         return failure('无效的配置')
       }
 
-      const ALLOWED_HOST_GET = new Set([
-        'logger',
-        'config_readonly',
-        'media_player',
-        'bubble',
-        'subtitle',
-      ])
-
       const toSave: Parameters<ReturnType<typeof getDatabase>['setMcpPluginsConfig']>[0] = {}
       if (typeof partial.enabled === 'boolean')
         toSave.enabled = partial.enabled
@@ -275,14 +268,7 @@ export function registerMcpToolsIpc(): void {
       if (typeof partial.enforcePrefix === 'boolean')
         toSave.enforcePrefix = partial.enforcePrefix
       if (Array.isArray(partial.allowHostGet)) {
-        const filtered = partial.allowHostGet.filter(
-          (x): x is string => typeof x === 'string' && ALLOWED_HOST_GET.has(x),
-        )
-        // 始终保留基础能力
-        const set = new Set(filtered)
-        set.add('logger')
-        set.add('config_readonly')
-        toSave.allowHostGet = Array.from(set)
+        toSave.allowHostGet = normalizeMcpHostCapabilities(partial.allowHostGet)
       }
 
       getDatabase().setMcpPluginsConfig(toSave)

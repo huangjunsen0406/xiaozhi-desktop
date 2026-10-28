@@ -22,6 +22,8 @@ const refreshing = ref(false)
 /** 外挂是否可使用应用内媒体播放 SDK */
 const mediaPlayerAllowed = ref(false)
 const mediaPlayerSaving = ref(false)
+const subtitleAllowed = ref(false)
+const subtitleSaving = ref(false)
 
 interface ToolGroup {
   /** 稳定 key（pluginId 或 builtin domain） */
@@ -103,7 +105,7 @@ async function loadCatalog() {
     try {
       const cfg = await window.api.mcpToolsGetPluginsConfig()
       mediaPlayerAllowed.value = cfg.allowHostGet.includes('media_player')
-        || cfg.allowHostGet.includes('music_player')
+      subtitleAllowed.value = cfg.allowHostGet.includes('subtitle')
     }
     catch (cfgErr) {
       console.warn('读取外挂 Host 配置失败', cfgErr)
@@ -124,18 +126,16 @@ async function handleMediaPlayerAllow(enabled: boolean) {
   mediaPlayerSaving.value = true
   try {
     const cfg = await window.api.mcpToolsGetPluginsConfig()
-    const set = new Set(cfg.allowHostGet.filter(k => k !== 'media_player' && k !== 'music_player'))
+    const set = new Set(cfg.allowHostGet.filter(k => k !== 'media_player'))
     set.add('logger')
     set.add('config_readonly')
     if (enabled) {
       set.add('media_player')
-      set.add('music_player')
     }
     const next = await window.api.mcpToolsSetPluginsConfig({
       allowHostGet: Array.from(set),
     })
     mediaPlayerAllowed.value = next.allowHostGet.includes('media_player')
-      || next.allowHostGet.includes('music_player')
     // 重载后刷新 catalog（新工具可能出现）
     const items = await window.api.mcpToolsGetCatalog()
     const prev = { ...localEnabled.value }
@@ -159,6 +159,29 @@ async function handleMediaPlayerAllow(enabled: boolean) {
   }
   finally {
     mediaPlayerSaving.value = false
+  }
+}
+
+async function handleSubtitleAllow(enabled: boolean) {
+  subtitleSaving.value = true
+  try {
+    const cfg = await window.api.mcpToolsGetPluginsConfig()
+    const allowHostGet = cfg.allowHostGet.filter(k => k !== 'subtitle')
+    if (enabled)
+      allowHostGet.push('subtitle')
+    const next = await window.api.mcpToolsSetPluginsConfig({ allowHostGet })
+    subtitleAllowed.value = next.allowHostGet.includes('subtitle')
+    message.success(enabled ? '已允许外挂显示字幕' : '已关闭外挂字幕权限')
+  }
+  catch (error) {
+    message.error(error instanceof Error ? error.message : '保存字幕权限失败')
+    // 配置可能已经保存：重新读取实际状态，避免显示错误授权状态。
+    const cfg = await window.api.mcpToolsGetPluginsConfig().catch(() => null)
+    if (cfg)
+      subtitleAllowed.value = cfg.allowHostGet.includes('subtitle')
+  }
+  finally {
+    subtitleSaving.value = false
   }
 }
 
@@ -342,10 +365,23 @@ defineExpose({
       <NSwitch
         :value="mediaPlayerAllowed"
         :loading="mediaPlayerSaving"
+        :disabled="subtitleSaving"
         size="small"
         class="shrink-0"
         @update:value="handleMediaPlayerAllow"
       />
+    </div>
+
+    <div class="media-card mb-4">
+      <div class="media-card-text min-w-0 flex-1">
+        <div class="media-card-title">
+          允许外挂显示字幕
+        </div>
+        <div class="media-card-desc">
+          在精灵宠物或 Live2D 旁显示字幕和消息，不保存到聊天记录。更改后立即生效。
+        </div>
+      </div>
+      <NSwitch :value="subtitleAllowed" :loading="subtitleSaving" :disabled="mediaPlayerSaving" size="small" class="shrink-0" @update:value="handleSubtitleAllow" />
     </div>
 
     <div class="section-title subsection">

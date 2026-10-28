@@ -16,6 +16,7 @@ import type {
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
+import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
 import { getLogger } from '../utils/logger'
 import { getDatabasePath } from '../utils/paths'
 
@@ -377,11 +378,17 @@ export class DatabaseManager {
     const enforceRaw = this.getSchemaMeta('mcp_plugins_enforce_prefix')
     const enforcePrefix = enforceRaw === '1' || enforceRaw === 'true'
 
+    const savedCapabilities = parseJsonArray('mcp_plugins_allow_host_get', ['logger', 'config_readonly'])
+    const allowHostGet = normalizeMcpHostCapabilities(savedCapabilities, true)
+    if (JSON.stringify(savedCapabilities) !== JSON.stringify(allowHostGet)) {
+      this.setSchemaMeta('mcp_plugins_allow_host_get', JSON.stringify(allowHostGet))
+    }
+
     return {
       enabled,
       disabledIds: parseJsonArray('mcp_plugins_disabled_ids', []),
       enabledIds: parseJsonArray('mcp_plugins_enabled_ids', []),
-      allowHostGet: parseJsonArray('mcp_plugins_allow_host_get', ['logger', 'config_readonly']),
+      allowHostGet,
       enforcePrefix,
     }
   }
