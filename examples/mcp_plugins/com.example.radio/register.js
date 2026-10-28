@@ -3,10 +3,9 @@
  *
  * 演示应用内 HLS 播放 + 字幕条：
  *   media_player.playUrl(m3u8)  → 后台音频窗 hls.js 播放（m3u8 自动识别）
- *   bubble.show(text)           → 桌宠旁字幕条（复用关怀气泡通道，不进聊天历史）
+ *   subtitle.show(text)         → 精灵宠物 / Live2D 消息条（不进聊天历史）
  *
- * 授权：设置 → MCP 工具 开启 allowHostGet 含 media_player 与 bubble
- * （或直接使用别名 subtitle）。
+ * 授权：设置 → MCP 工具 开启应用内播放与字幕权限。
  *
  * 播放 HLS 说明：playUrl 传 .m3u8 URL 即可，应用内自动走 hls.js；
  * 本地文件 / 普通 http(s) 音频也支持，无需区分。
@@ -38,27 +37,26 @@ function resolveStation(query) {
 function register(host) {
   const logger = host.get('logger')
   const media = host.get('media_player')
-  // bubble 与 subtitle 是同一 SDK 的两个键，取其一即可
-  const bubble = host.get('bubble') || host.get('subtitle')
+  const subtitle = host.get('subtitle')
 
   function needMedia() {
     if (media)
       return null
     return (
-      '播放能力未授权：请在设置 → MCP 工具 的 allowHostGet 中加入 media_player 后重载。'
+      '播放能力未授权：请在设置 → MCP 工具 开启“允许外挂使用应用内播放”。'
     )
   }
 
-  function needBubble() {
-    if (bubble)
+  function needSubtitle() {
+    if (subtitle)
       return null
-    return '字幕能力未授权：请在 allowHostGet 中加入 bubble（或 subtitle）后重载。'
+    return '字幕能力未授权：请在设置 → MCP 工具 开启“允许外挂显示字幕”。'
   }
 
   // —— 播放：AI 传频道名或直接传 m3u8 URL，应用内 HLS 播放 + 字幕提示 ——
   host.tool(
     'example.radio_play',
-    `Play a HLS (m3u8) stream via in-app player, with a subtitle bubble.
+    `Play a HLS (m3u8) stream via in-app player, with a subtitle message.
 
 中文：播放电台/有声 HLS 流。支持两种方式：
 1. 传 station 频道名（内置表）
@@ -86,7 +84,8 @@ Examples:
         defaultValue: '',
       },
     ],
-  )(async (args) => {
+  )(async (args, signal) => {
+    signal?.throwIfAborted()
     const denied = needMedia()
     if (denied)
       return denied
@@ -111,17 +110,19 @@ Examples:
       logger.info('example.radio_play', { target, title })
     }
 
+    signal?.throwIfAborted()
     const result = await media.playUrl(target, { title })
+    signal?.throwIfAborted()
     if (!result.success) {
       return result.message || '播放失败'
     }
 
-    // 播放成功后弹字幕（未授权时静默跳过，不阻塞播放）
-    const subtitle = `正在播放：${title}`
-    if (bubble) {
-      const bubbleResult = await bubble.show(subtitle, { durationMs: 5000 })
-      if (!bubbleResult.success && logger) {
-        logger.warn('example.radio bubble.show 未成功', { message: bubbleResult.message })
+    // 播放成功后显示字幕；未授权时跳过，不阻塞播放。
+    const subtitleText = `正在播放：${title}`
+    if (subtitle) {
+      const subtitleResult = await subtitle.show(subtitleText, { durationMs: 5000 })
+      if (!subtitleResult.success && logger) {
+        logger.warn('example.radio subtitle.show 未成功', { message: subtitleResult.message })
       }
     }
     return `正在播放: ${title}（HLS 流，应用内 hls.js 播放）`
@@ -130,7 +131,7 @@ Examples:
   // —— 字幕：单独弹字幕条（说书场景：逐句显示台词）——
   host.tool(
     'example.radio_subtitle',
-    `Show a subtitle bubble near the desktop pet (not saved to chat history).
+    `Show a subtitle message near the desktop pet (not saved to chat history).
 
 中文：在桌宠旁弹字幕条（如说书台词/电台节目信息），不进聊天历史。
 依赖 pets / live2d 模式（无桌宠时返回错误提示）。
@@ -147,8 +148,9 @@ Use when plugin playback needs synchronized subtitles.`,
         defaultValue: 5000,
       },
     ],
-  )(async (args) => {
-    const denied = needBubble()
+  )(async (args, signal) => {
+    signal?.throwIfAborted()
+    const denied = needSubtitle()
     if (denied)
       return denied
 
@@ -161,14 +163,14 @@ Use when plugin playback needs synchronized subtitles.`,
       durationMs = Math.floor(args.duration_ms)
     }
 
-    const result = await bubble.show(text, { durationMs })
+    const result = await subtitle.show(text, { durationMs })
     return result.success ? '字幕已展示' : (result.message || '字幕展示失败')
   })
 
   // —— 停止：停止播放并隐藏字幕 ——
   host.tool(
     'example.radio_stop',
-    'Stop HLS playback and hide the subtitle bubble. 中文：停止播放并隐藏字幕。',
+    'Stop HLS playback and hide the subtitle message. 中文：停止播放并隐藏字幕。',
     [],
   )(async () => {
     let output = '已停止'
@@ -177,8 +179,8 @@ Use when plugin playback needs synchronized subtitles.`,
       if (!result.success)
         output = result.message || '停止失败'
     }
-    if (bubble)
-      await bubble.hide()
+    if (subtitle)
+      await subtitle.hide()
     return output
   })
 

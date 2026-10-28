@@ -42,7 +42,11 @@ export function register(host: McpHost) {
 
 - `host.addTool({ name, description, properties, callback })`
 - `host.tool(name, description, props?)(callback)`
-- `host.get('logger' | 'config_readonly')`（白名单）
+- `host.get('logger' | 'config_readonly')`（默认开放）
+- `host.get('media_player' | 'subtitle')`（需在设置中分别授权）
+- `host.signal`、`host.onDispose(cleanup)`；回调可接收 `(args, signal?)`
+
+完整的取消信号、可选 `dispose` / 返回清理函数、超时、运行目录和更新回滚规则，见 [MCP 插件安装与开发](../README.md)。本例没有后台资源，不需要空清理函数。
 
 ## 安全
 

@@ -43,4 +43,6 @@ com.example.dayjs-bundle/
 
 物联网/天气等纯 JS SDK 同理：开发时 npm i，发布前 esbuild bundle。
 
+Host 权限、生命周期、运行目录与更新规则，见 [MCP 插件安装与开发](../README.md)。
+
 > 本目录为**仅投放文件**（无 node_modules）。开发/重建见同级 `com.example.dayjs-bundle/`。

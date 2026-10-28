@@ -39,3 +39,7 @@ const media = host.get('media_player')
 - 推荐音频：**mp3 / m4a(aac)** 整段 http(s)
 - 与内置音乐 **同一播放通路**，会互相打断
 - `node-inprocess` + 媒体权限 = 可控制扬声器，只装可信插件
+
+查书请求应接收工具回调的第二个参数 `signal`，传入 `fetch(url, { signal })`，并在请求结束后调用 `signal?.throwIfAborted()` 再开始播放，避免超时或卸载后继续产生副作用。媒体播放已经开始时，取消信号不会自动停止播放。
+
+超时、清理、运行目录、持久数据和安装回滚规则，见 [MCP 插件安装与开发](../README.md)。

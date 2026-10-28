@@ -33,6 +33,12 @@ $ pnpm build:mac
 $ pnpm build:linux
 ```
 
+## MCP 插件
+
+安装后的桌面客户端自带 JavaScript 运行环境，无需用户另装 Node.js。进入设置 → **MCP 工具** → **导入插件**，选择已解压且包含清单和 JS 入口的文件夹。
+
+插件格式、`media_player` / `subtitle` 授权、取消与清理契约、运行目录限制，以及更新回滚和云端同步行为，见 [MCP 插件安装与开发](examples/mcp_plugins/README.md)。
+
 ## 使用数据配置（OpenPanel）
 
 OpenPanel 配置在开发启动或构建时读取，并在编译时替换进主进程代码。三个值全部为空时禁用统计；只填写部分字段会报错并停止构建。修改配置后需重新启动开发进程或重新构建，已生成的安装包不会随环境变量变化。
