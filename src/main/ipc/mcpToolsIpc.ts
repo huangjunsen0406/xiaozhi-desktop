@@ -17,6 +17,7 @@ import type {
 import { dialog, shell } from 'electron'
 import fs from 'fs-extra'
 import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
+import { mergeMcpDisabledTools } from '../../shared/mcpToolState'
 import { getServiceContainer } from '../core/ServiceContainer'
 import { installMcpPlugin } from '../mcp/plugins/installer'
 import { runMcpPluginOperation } from '../mcp/plugins/operations'
@@ -74,14 +75,19 @@ export function registerMcpToolsIpc(): void {
     schema: {
       disabledNames: { type: 'array', required: true },
     },
-    handler: async (_event, disabledNamesUnknown: unknown) => runMcpPluginOperation(async () => {
-      if (!Array.isArray(disabledNamesUnknown)) {
-        return failure('disabledNames 必须是数组')
+    handler: async (_event, disabledNamesUnknown: unknown, visibleNamesUnknown: unknown) => runMcpPluginOperation(async () => {
+      if (!Array.isArray(disabledNamesUnknown) || disabledNamesUnknown.some(name => typeof name !== 'string')) {
+        return failure('disabledNames 必须是字符串数组')
       }
       const disabledNames = disabledNamesUnknown as string[]
 
       const server = getMcpServerOrThrow()
-      server.setDisabledTools(disabledNames)
+      if (visibleNamesUnknown !== undefined && (!Array.isArray(visibleNamesUnknown) || visibleNamesUnknown.some(name => typeof name !== 'string')))
+        return failure('visibleNames 必须是字符串数组')
+      const available = server.getToolCatalog().map(item => item.name)
+      const requested = new Set((visibleNamesUnknown as string[] | undefined) ?? available)
+      const visible = available.filter(name => requested.has(name))
+      server.setDisabledTools(mergeMcpDisabledTools(getDatabase().getMcpDisabledTools(), visible, disabledNames))
 
       const sync = await syncMcpTools()
       const result: McpToolsSaveResult = {
@@ -144,7 +150,9 @@ export function registerMcpToolsIpc(): void {
     handler: async () => {
       const folderPath = getMcpPluginsDir()
       await fs.ensureDir(folderPath)
-      await shell.openPath(folderPath)
+      const openError = await shell.openPath(folderPath)
+      if (openError)
+        return failure(`打开插件目录失败：${openError}`)
       return success()
     },
   })
@@ -166,8 +174,7 @@ export function registerMcpToolsIpc(): void {
     channel: 'mcp-tools:get-plugins-config',
     handler: async () => {
       const cfg = getDatabase().getMcpPluginsConfig()
-      const data: McpPluginsConfigResult = {
-        sync: await syncMcpTools(),
+      const data: McpPluginsHostConfig = {
         enabled: cfg.enabled,
         disabledIds: cfg.disabledIds,
         enabledIds: cfg.enabledIds,

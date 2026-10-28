@@ -32,8 +32,8 @@ export const mcpToolsApi = {
   },
 
   /** 保存禁用列表 + 重连 */
-  saveDisabled: async (disabledNames: string[]): Promise<McpToolsSaveResult> => {
-    const result: unknown = await ipcRenderer.invoke('mcp-tools:save-disabled', disabledNames)
+  saveDisabled: async (disabledNames: string[], visibleNames?: string[]): Promise<McpToolsSaveResult> => {
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:save-disabled', disabledNames, visibleNames)
     return unwrapIpcResult<McpToolsSaveResult>(result, '保存 MCP 工具设置失败')
   },
 

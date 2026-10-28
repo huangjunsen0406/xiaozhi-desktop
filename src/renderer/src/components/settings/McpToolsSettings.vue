@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { McpInstalledPlugin, McpToolCatalogItem, McpToolsSyncResult } from '@shared/types'
+import { isMcpToolDraftDirty, mergeMcpToolDraft } from '@shared/mcpToolState'
 import { NButton, NCheckbox, NEmpty, NPopconfirm, NSpin, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import IconCarbonAdd from '~icons/carbon/add'
@@ -83,17 +84,23 @@ function pluginStatusLabel(plugin: McpInstalledPlugin): string {
   return plugin.status === 'loaded' ? `已加载 · ${plugin.toolCount} 个工具` : plugin.status === 'skipped' ? '未加载' : '加载失败'
 }
 
+const isDirty = computed(() => isMcpToolDraftDirty(localEnabled.value, savedDisabled.value))
+
 function applyCatalog(items: McpToolCatalogItem[]) {
+  localEnabled.value = mergeMcpToolDraft(items, localEnabled.value, savedDisabled.value)
+  savedDisabled.value = new Set(items.filter(item => !item.enabled).map(item => item.name))
   catalog.value = items
-  const enabledMap: Record<string, boolean> = {}
-  const disabled = new Set<string>()
-  for (const item of items) {
-    enabledMap[item.name] = item.enabled
-    if (!item.enabled)
-      disabled.add(item.name)
-  }
-  localEnabled.value = enabledMap
-  savedDisabled.value = disabled
+}
+
+async function refreshLocalSnapshot() {
+  applyCatalog(await window.api.mcpToolsGetCatalog())
+  await loadInstalledPlugins()
+}
+
+async function rereadPermissions() {
+  const cfg = await window.api.mcpToolsGetPluginsConfig()
+  mediaPlayerAllowed.value = cfg.allowHostGet.includes('media_player')
+  subtitleAllowed.value = cfg.allowHostGet.includes('subtitle')
 }
 
 async function loadCatalog() {
@@ -145,15 +152,8 @@ async function handleMediaPlayerAllow(enabled: boolean) {
     mediaPlayerAllowed.value = next.allowHostGet.includes('media_player')
     // 重载后刷新 catalog（新工具可能出现）
     const items = await window.api.mcpToolsGetCatalog()
-    const prev = { ...localEnabled.value }
     applyCatalog(items)
     await loadInstalledPlugins()
-    const merged = { ...localEnabled.value }
-    for (const [k, v] of Object.entries(prev)) {
-      if (k in merged)
-        merged[k] = v
-    }
-    localEnabled.value = merged
     message.success(
       enabled
         ? '已允许外挂使用应用内播放（media_player）'
@@ -162,8 +162,7 @@ async function handleMediaPlayerAllow(enabled: boolean) {
   }
   catch (error) {
     message.error(error instanceof Error ? error.message : '保存失败')
-    // 回滚 UI
-    mediaPlayerAllowed.value = !enabled
+    await rereadPermissions().catch(() => {})
   }
   finally {
     mediaPlayerSaving.value = false
@@ -178,7 +177,7 @@ async function handleSubtitleAllow(enabled: boolean) {
     if (enabled)
       allowHostGet.push('subtitle')
     const next = await window.api.mcpToolsSetPluginsConfig({ allowHostGet })
-    await loadInstalledPlugins()
+    await refreshLocalSnapshot()
     showSyncResult(next.sync)
     subtitleAllowed.value = next.allowHostGet.includes('subtitle')
     message.success(enabled ? '已允许外挂显示字幕' : '已关闭外挂字幕权限')
@@ -186,9 +185,7 @@ async function handleSubtitleAllow(enabled: boolean) {
   catch (error) {
     message.error(error instanceof Error ? error.message : '保存字幕权限失败')
     // 配置可能已经保存：重新读取实际状态，避免显示错误授权状态。
-    const cfg = await window.api.mcpToolsGetPluginsConfig().catch(() => null)
-    if (cfg)
-      subtitleAllowed.value = cfg.allowHostGet.includes('subtitle')
+    await rereadPermissions().catch(() => {})
   }
   finally {
     subtitleSaving.value = false
@@ -226,19 +223,12 @@ async function handleImport() {
     // 导入后刷新 catalog（服务端已 reload）
     const items = await window.api.mcpToolsGetCatalog()
     // 保留本地未保存的开关；新工具默认跟随服务端 enabled
-    const prev = { ...localEnabled.value }
     applyCatalog(items)
     await loadInstalledPlugins()
-    // 合并：已有本地键优先
-    const merged = { ...localEnabled.value }
-    for (const [k, v] of Object.entries(prev)) {
-      if (k in merged)
-        merged[k] = v
-    }
-    localEnabled.value = merged
   }
   catch (error) {
     message.error(error instanceof Error ? error.message : '导入插件失败')
+    await refreshLocalSnapshot().catch(() => {})
   }
   finally {
     importing.value = false
@@ -288,15 +278,8 @@ async function handleDeletePlugin(directoryName: string) {
     showSyncResult(result.sync)
     const items = result.catalog
     // 保留其它工具的本地未保存开关
-    const prev = { ...localEnabled.value }
     applyCatalog(items)
     await loadInstalledPlugins()
-    const merged = { ...localEnabled.value }
-    for (const [k, v] of Object.entries(prev)) {
-      if (k in merged)
-        merged[k] = v
-    }
-    localEnabled.value = merged
     message.success('插件已删除')
   }
   catch (error) {
@@ -325,7 +308,7 @@ async function handleCustomButton() {
 async function handleSave() {
   const disabled = getDisabledNames()
   // 错误由 SettingsView 底栏统一 toast，避免双重提示
-  const result = await window.api.mcpToolsSaveDisabled(disabled)
+  const result = await window.api.mcpToolsSaveDisabled(disabled, catalog.value.map(item => item.name))
   savedDisabled.value = new Set(result.disabled)
   // 同步 local 与 saved
   const next: Record<string, boolean> = {}
@@ -350,6 +333,7 @@ onMounted(() => {
 defineExpose({
   handleSave,
   handleCustomButton,
+  isDirty,
 })
 </script>
 
@@ -439,6 +423,9 @@ defineExpose({
       </div>
     </div>
 
+    <div v-if="isDirty" class="mb-3 text-sm text-amber-600">
+      工具开关有未保存的修改，请点击保存生效。
+    </div>
     <div class="section-title subsection">
       工具列表
     </div>

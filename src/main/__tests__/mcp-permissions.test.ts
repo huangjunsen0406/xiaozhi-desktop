@@ -23,13 +23,16 @@ it('passes saved subtitle permission through real IPC, server loading and host a
   const server = McpServer.create()
   let config: McpPluginsHostConfig = { enabled: true, enabledIds: [], disabledIds: [], allowHostGet: ['logger', 'config_readonly'], enforcePrefix: false }
   const handlers = new Map<string, (...args: unknown[]) => Promise<IpcResponse>>()
+  let disabled = ['temporarily.unloaded']
+  let reconnects = 0
   runtimeGlobal.__mcpRuntime = {
-    container: { mcpServer: server },
+    container: { mcpServer: server, isAudioChannelOpened: () => false, reconnectProtocol: async () => { reconnects++ } },
     handlers,
     database: {
       getMcpPluginsConfig: () => config,
       setMcpPluginsConfig: (partial: Partial<McpPluginsHostConfig>) => { config = { ...config, ...partial } },
-      getMcpDisabledTools: () => [],
+      getMcpDisabledTools: () => disabled,
+      setMcpDisabledTools: (next: string[]) => { disabled = next },
     },
   }
   try {
@@ -50,6 +53,18 @@ it('passes saved subtitle permission through real IPC, server loading and host a
     assert.deepEqual(JSON.parse(await server.findTool('test.permissions')!.callback({})), { subtitle: true, bubble: false })
     await handler({}, { allowHostGet: [] })
     assert.deepEqual(JSON.parse(await server.findTool('test.permissions')!.callback({})), { subtitle: false, bubble: false })
+    const beforeRead = reconnects
+    await handlers.get('mcp-tools:get-plugins-config')!({})
+    assert.equal(reconnects, beforeRead)
+    const saveDisabled = handlers.get('mcp-tools:save-disabled')!
+    assert.equal((await saveDisabled({}, ['test.permissions'], ['test.permissions'])).success, true)
+    assert.deepEqual(disabled, ['temporarily.unloaded', 'test.permissions'])
+    await saveDisabled({}, [], ['test.permissions'])
+    assert.deepEqual(disabled, ['temporarily.unloaded'])
+    assert.equal((await saveDisabled({}, [123])).success, false)
+    const refresh = await handlers.get('mcp-tools:refresh')!({})
+    assert.equal(refresh.success, true)
+    assert.equal(reconnects, beforeRead + 3)
   }
   finally {
     await server.detach()
