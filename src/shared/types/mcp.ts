@@ -26,12 +26,14 @@ export interface McpToolCatalogItem {
 export interface McpToolsSaveResult {
   disabled: string[]
   reconnected: boolean
+  sync: McpToolsSyncResult
 }
 
 /** 导入插件结果 */
 export interface McpPluginImportResult {
   pluginId: string
   name: string
+  sync: McpToolsSyncResult
 }
 
 /** 外挂插件加载配置（设置页 / Host 白名单） */
@@ -53,4 +55,18 @@ export interface McpInstalledPlugin {
   status: 'loaded' | 'skipped' | 'failed'
   toolCount: number
   reason?: string
+}
+
+export interface McpToolsSyncResult {
+  status: 'synced' | 'deferred' | 'failed'
+  error?: string
+}
+
+export interface McpToolsMutationResult {
+  catalog: McpToolCatalogItem[]
+  sync: McpToolsSyncResult
+}
+
+export interface McpPluginsConfigResult extends McpPluginsHostConfig {
+  sync: McpToolsSyncResult
 }

@@ -11,7 +11,6 @@ import { build } from 'esbuild'
 const stubs = {
   '/utils/logger': 'export const getLogger = () => ({ info() {}, warn() {}, error() {}, debug() {} })',
   '/services/configManagerDB': 'export const getConfigManager = () => ({ getAll: () => ({}) })',
-  '/services/settingsApply': 'export const reconnectIfConnectedKeepingIdle = async () => false',
   '/services/database': 'export const getDatabase = () => globalThis.__mcpRuntime.database',
   '/core/ServiceContainer': 'export const getServiceContainer = () => globalThis.__mcpRuntime.container',
   '/windows/windowManager': 'export const ensureBubbleWindow = () => {}; export const hideBubbleWindow = () => {}',

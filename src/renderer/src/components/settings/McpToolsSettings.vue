@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { McpInstalledPlugin, McpToolCatalogItem } from '@shared/types'
+import type { McpInstalledPlugin, McpToolCatalogItem, McpToolsSyncResult } from '@shared/types'
 import { NButton, NCheckbox, NEmpty, NPopconfirm, NSpin, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import IconCarbonAdd from '~icons/carbon/add'
@@ -74,6 +74,11 @@ async function loadInstalledPlugins() {
   installedPlugins.value = await window.api.mcpToolsGetInstalled()
 }
 
+function showSyncResult(sync: McpToolsSyncResult) {
+  if (sync.status === 'failed')
+    message.warning(`已在本地生效，云端同步失败：${sync.error || '请重试刷新'}`)
+}
+
 function pluginStatusLabel(plugin: McpInstalledPlugin): string {
   return plugin.status === 'loaded' ? `已加载 · ${plugin.toolCount} 个工具` : plugin.status === 'skipped' ? '未加载' : '加载失败'
 }
@@ -136,6 +141,7 @@ async function handleMediaPlayerAllow(enabled: boolean) {
     const next = await window.api.mcpToolsSetPluginsConfig({
       allowHostGet: Array.from(set),
     })
+    showSyncResult(next.sync)
     mediaPlayerAllowed.value = next.allowHostGet.includes('media_player')
     // 重载后刷新 catalog（新工具可能出现）
     const items = await window.api.mcpToolsGetCatalog()
@@ -173,6 +179,7 @@ async function handleSubtitleAllow(enabled: boolean) {
       allowHostGet.push('subtitle')
     const next = await window.api.mcpToolsSetPluginsConfig({ allowHostGet })
     await loadInstalledPlugins()
+    showSyncResult(next.sync)
     subtitleAllowed.value = next.allowHostGet.includes('subtitle')
     message.success(enabled ? '已允许外挂显示字幕' : '已关闭外挂字幕权限')
   }
@@ -215,6 +222,7 @@ async function handleImport() {
     importing.value = true
     const imported = await window.api.mcpToolsImportPlugin(result.filePaths[0])
     message.success(`已导入插件：${imported.name}`)
+    showSyncResult(imported.sync)
     // 导入后刷新 catalog（服务端已 reload）
     const items = await window.api.mcpToolsGetCatalog()
     // 保留本地未保存的开关；新工具默认跟随服务端 enabled
@@ -249,7 +257,9 @@ async function handleOpenFolder() {
 async function handleRefresh() {
   refreshing.value = true
   try {
-    const items = await window.api.mcpToolsRefresh()
+    const result = await window.api.mcpToolsRefresh()
+    showSyncResult(result.sync)
+    const items = result.catalog
     applyCatalog(items)
     await loadInstalledPlugins()
     const failures = installedPlugins.value.filter(plugin => plugin.status === 'failed').length
@@ -274,7 +284,9 @@ const deletingPluginId = ref<string | null>(null)
 async function handleDeletePlugin(directoryName: string) {
   try {
     deletingPluginId.value = directoryName
-    const items = await window.api.mcpToolsDeletePlugin(directoryName)
+    const result = await window.api.mcpToolsDeletePlugin(directoryName)
+    showSyncResult(result.sync)
+    const items = result.catalog
     // 保留其它工具的本地未保存开关
     const prev = { ...localEnabled.value }
     applyCatalog(items)
@@ -321,6 +333,9 @@ async function handleSave() {
     next[item.name] = !result.disabled.includes(item.name)
   }
   localEnabled.value = next
+  showSyncResult(result.sync)
+  if (result.sync.status === 'failed')
+    return
   message.success(
     result.reconnected
       ? '已保存，工具列表将在重连后对云端生效'
@@ -369,7 +384,7 @@ defineExpose({
           允许外挂使用应用内播放
         </div>
         <div class="media-card-desc">
-          开启后，可信 in-process 插件可通过 host.get('media_player') 播放 URL（与内置音乐同一通路）。仅安装可信插件。
+          允许插件通过应用播放器播放音频，与内置音乐共用播放通道。
         </div>
       </div>
       <NSwitch

@@ -5,8 +5,10 @@ import type {
   FileDialogResult,
   McpInstalledPlugin,
   McpPluginImportResult,
+  McpPluginsConfigResult,
   McpPluginsHostConfig,
   McpToolCatalogItem,
+  McpToolsMutationResult,
   McpToolsSaveResult,
 } from '@shared/types'
 import { ipcRenderer } from 'electron'
@@ -60,16 +62,15 @@ export const mcpToolsApi = {
   },
 
   /** 刷新（重载外挂 + catalog） */
-  refresh: async (): Promise<McpToolCatalogItem[]> => {
+  refresh: async (): Promise<McpToolsMutationResult> => {
     const result: unknown = await ipcRenderer.invoke('mcp-tools:refresh')
-    return unwrapIpcResult<McpToolCatalogItem[]>(result, '刷新 MCP 工具失败')
+    return unwrapIpcResult<McpToolsMutationResult>(result, '刷新 MCP 工具失败')
   },
 
   /** 删除已导入外挂（卸工具 + 删目录），返回最新 catalog */
-  deletePlugin: async (pluginId: string): Promise<McpToolCatalogItem[]> => {
-    const result: unknown = await ipcRenderer.invoke('mcp-tools:delete-plugin', pluginId)
-    const data = unwrapIpcResult<{ catalog: McpToolCatalogItem[] }>(result, '删除 MCP 插件失败')
-    return data.catalog
+  deletePlugin: async (directoryName: string): Promise<McpToolsMutationResult> => {
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:delete-plugin', directoryName)
+    return unwrapIpcResult<McpToolsMutationResult>(result, '删除 MCP 插件失败')
   },
 
   /** 读取外挂 Host 配置（allowHostGet 等） */
@@ -84,8 +85,8 @@ export const mcpToolsApi = {
    */
   setPluginsConfig: async (
     partial: Partial<McpPluginsHostConfig>,
-  ): Promise<McpPluginsHostConfig> => {
+  ): Promise<McpPluginsConfigResult> => {
     const result: unknown = await ipcRenderer.invoke('mcp-tools:set-plugins-config', partial)
-    return unwrapIpcResult<McpPluginsHostConfig>(result, '保存外挂配置失败')
+    return unwrapIpcResult<McpPluginsConfigResult>(result, '保存外挂配置失败')
   },
 }

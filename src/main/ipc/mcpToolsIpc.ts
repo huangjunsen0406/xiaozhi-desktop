@@ -9,6 +9,7 @@
 
 import type {
   McpPluginImportResult,
+  McpPluginsConfigResult,
   McpPluginsHostConfig,
   McpToolCatalogItem,
   McpToolsSaveResult,
@@ -20,7 +21,7 @@ import { getServiceContainer } from '../core/ServiceContainer'
 import { installMcpPlugin } from '../mcp/plugins/installer'
 import { runMcpPluginOperation } from '../mcp/plugins/operations'
 import { getDatabase } from '../services/database'
-import { reconnectIfConnectedKeepingIdle } from '../services/settingsApply'
+import { syncMcpTools } from '../services/mcpToolsSync'
 import { getLogger } from '../utils/logger'
 import { getMcpPluginsDir } from '../utils/paths'
 import { createIpcHandler, failure, success } from './middleware'
@@ -82,19 +83,11 @@ export function registerMcpToolsIpc(): void {
       const server = getMcpServerOrThrow()
       server.setDisabledTools(disabledNames)
 
-      let reconnected = false
-      try {
-        // 工具集进 hello：已连接时 idle 重连；未连接仅 reload 配置
-        reconnected = await reconnectIfConnectedKeepingIdle()
-      }
-      catch (reconnectError) {
-        logger.warn('保存后重连失败（禁用列表已落盘）', reconnectError)
-        reconnected = false
-      }
-
+      const sync = await syncMcpTools()
       const result: McpToolsSaveResult = {
         disabled: server.getDisabledTools(),
-        reconnected,
+        reconnected: sync.status === 'synced',
+        sync,
       }
       logger.info('MCP 工具禁用列表已保存', result)
       return success(result)
@@ -130,13 +123,14 @@ export function registerMcpToolsIpc(): void {
       }
 
       const server = getMcpServerOrThrow()
-      const data: McpPluginImportResult = await installMcpPlugin({
+      const installed = await installMcpPlugin({
         sourcePath,
         pluginsDir: getMcpPluginsDir(),
         unload: () => server.unloadAllExternalPlugins(),
         reload: () => server.reloadExternalPlugins(),
         isLoaded: (id, rootDir) => server.getPluginRegistry().getPlugin(id)?.rootDir === rootDir,
       })
+      const data: McpPluginImportResult = { ...installed, sync: await syncMcpTools() }
       logger.info('MCP 插件导入成功', data)
       return success(data)
     }),
@@ -172,7 +166,8 @@ export function registerMcpToolsIpc(): void {
     channel: 'mcp-tools:get-plugins-config',
     handler: async () => {
       const cfg = getDatabase().getMcpPluginsConfig()
-      const data: McpPluginsHostConfig = {
+      const data: McpPluginsConfigResult = {
+        sync: await syncMcpTools(),
         enabled: cfg.enabled,
         disabledIds: cfg.disabledIds,
         enabledIds: cfg.enabledIds,
@@ -216,7 +211,8 @@ export function registerMcpToolsIpc(): void {
       const server = getMcpServerOrThrow()
       await server.reloadExternalPlugins()
       const cfg = getDatabase().getMcpPluginsConfig()
-      const data: McpPluginsHostConfig = {
+      const data: McpPluginsConfigResult = {
+        sync: await syncMcpTools(),
         enabled: cfg.enabled,
         disabledIds: cfg.disabledIds,
         enabledIds: cfg.enabledIds,
@@ -239,7 +235,7 @@ export function registerMcpToolsIpc(): void {
       const server = getMcpServerOrThrow()
       await server.reloadExternalPlugins()
       const catalog: McpToolCatalogItem[] = server.getToolCatalog()
-      return success(catalog)
+      return success({ catalog, sync: await syncMcpTools() })
     }),
   })
 
@@ -264,6 +260,7 @@ export function registerMcpToolsIpc(): void {
         removedTools: result.removedTools,
         deletedDir: result.deletedDir,
         catalog,
+        sync: await syncMcpTools(),
       })
     }),
   })

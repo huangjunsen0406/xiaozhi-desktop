@@ -30,6 +30,7 @@ import type {
   McpPluginImportResult,
   McpPluginsHostConfig,
   McpToolCatalogItem,
+  McpToolsMutationResult,
   McpToolsSaveResult,
   ModelInfo,
   MusicConfig,
@@ -280,13 +281,13 @@ export interface RendererApi {
   mcpToolsImportPlugin: (sourcePath: string) => Promise<McpPluginImportResult>
   mcpToolsOpenFolder: () => Promise<void>
   mcpToolsGetFolderPath: () => Promise<string>
-  mcpToolsRefresh: () => Promise<McpToolCatalogItem[]>
+  mcpToolsRefresh: () => Promise<McpToolsMutationResult>
   /** 删除已导入外挂，返回最新 catalog */
-  mcpToolsDeletePlugin: (pluginId: string) => Promise<McpToolCatalogItem[]>
+  mcpToolsDeletePlugin: (directoryName: string) => Promise<McpToolsMutationResult>
   mcpToolsGetPluginsConfig: () => Promise<McpPluginsHostConfig>
   mcpToolsSetPluginsConfig: (
     partial: Partial<McpPluginsHostConfig>,
-  ) => Promise<McpPluginsHostConfig>
+  ) => Promise<McpPluginsConfigResult>
 
   // 应用内更新
   updateGetStatus: () => Promise<UpdateStatusSnapshot>
