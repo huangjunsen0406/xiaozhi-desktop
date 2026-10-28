@@ -115,6 +115,21 @@ export function registerMcpToolsIpc(): void {
   })
 
   /**
+   * 选择插件 ZIP；与目录选择分开，兼容 Windows 原生对话框。
+   */
+  createIpcHandler({
+    channel: 'mcp-tools:select-zip',
+    handler: async () => {
+      const dialogResult = await dialog.showOpenDialog({
+        title: '选择 MCP 插件 ZIP',
+        properties: ['openFile'],
+        filters: [{ name: 'ZIP 插件包', extensions: ['zip'] }],
+      })
+      return success(dialogResult)
+    },
+  })
+
+  /**
    * 导入插件：校验 manifest 后复制到 mcp_plugins/<id>/
    */
   createIpcHandler({

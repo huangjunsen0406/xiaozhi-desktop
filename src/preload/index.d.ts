@@ -278,6 +278,7 @@ export interface RendererApi {
   mcpToolsGetDisabled: () => Promise<string[]>
   mcpToolsSaveDisabled: (disabledNames: string[], visibleNames?: string[]) => Promise<McpToolsSaveResult>
   mcpToolsSelectFolder: () => Promise<FileDialogResult>
+  mcpToolsSelectZip: () => Promise<FileDialogResult>
   mcpToolsImportPlugin: (sourcePath: string) => Promise<McpPluginImportResult>
   mcpToolsOpenFolder: () => Promise<void>
   mcpToolsGetFolderPath: () => Promise<string>

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import fs from 'fs-extra'
 import { isPathInside } from '../../utils/paths'
+import { withMcpPluginSource } from './archive'
 import { readPluginManifest } from './loader'
 import { validatePackageTree } from './packagePaths'
 
@@ -13,6 +14,10 @@ export interface InstallPluginOptions {
 }
 
 export async function installMcpPlugin(options: InstallPluginOptions): Promise<{ pluginId: string, name: string }> {
+  return withMcpPluginSource(options.sourcePath, sourcePath => installPluginDirectory({ ...options, sourcePath }))
+}
+
+async function installPluginDirectory(options: InstallPluginOptions): Promise<{ pluginId: string, name: string }> {
   await fs.ensureDir(options.pluginsDir)
   const pluginsDir = await fs.realpath(options.pluginsDir)
   const source = await fs.realpath(path.resolve(options.sourcePath))

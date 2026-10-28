@@ -186,6 +186,7 @@ const api = {
   mcpToolsGetDisabled: mcpToolsApi.getDisabled,
   mcpToolsSaveDisabled: mcpToolsApi.saveDisabled,
   mcpToolsSelectFolder: mcpToolsApi.selectFolder,
+  mcpToolsSelectZip: mcpToolsApi.selectZip,
   mcpToolsImportPlugin: mcpToolsApi.importPlugin,
   mcpToolsOpenFolder: mcpToolsApi.openFolder,
   mcpToolsGetFolderPath: mcpToolsApi.getFolderPath,

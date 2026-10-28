@@ -4,7 +4,7 @@
 
 ## 用户怎么用
 
-设置 → **MCP 工具** → **导入插件**，选择本目录（含 `manifest.json` + `register.js`）。
+设置 → **MCP 工具** → **导入文件夹**，选择本目录（含 `manifest.json` + `register.js`）；也可将本目录打成 ZIP，通过 **导入 ZIP** 直接安装。包结构与大小限制见 [安装指引](../README.md#安装和更新)。
 
 应出现工具：
 

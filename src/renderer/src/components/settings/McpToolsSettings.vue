@@ -210,13 +210,17 @@ function getDisabledNames(): string[] {
     .map(t => t.name)
 }
 
-async function handleImport() {
+async function handleImport(kind: 'zip' | 'folder') {
+  if (importing.value)
+    return
+  importing.value = true
   try {
-    const result = await window.api.mcpToolsSelectFolder()
+    const result = kind === 'zip'
+      ? await window.api.mcpToolsSelectZip()
+      : await window.api.mcpToolsSelectFolder()
     if (result.canceled || !result.filePaths.length)
       return
 
-    importing.value = true
     const imported = await window.api.mcpToolsImportPlugin(result.filePaths[0])
     message.success(`已导入插件：${imported.name}`)
     showSyncResult(imported.sync)
@@ -335,13 +339,19 @@ defineExpose({
 
 <template>
   <div class="mcp-tools-settings min-h-0">
-    <!-- 顶栏：导入 / 打开目录 / 刷新（改回修改前布局） -->
+    <!-- 顶栏：ZIP / 文件夹导入 / 打开目录 / 刷新 -->
     <div class="toolbar mb-4">
-      <NButton type="primary" size="small" :loading="importing" @click="handleImport">
+      <NButton type="primary" size="small" :loading="importing" @click="handleImport('zip')">
         <template #icon>
           <IconCarbonAdd class="w-4 h-4" />
         </template>
-        {{ importing ? '导入中...' : '导入插件' }}
+        导入 ZIP
+      </NButton>
+      <NButton size="small" :disabled="importing" @click="handleImport('folder')">
+        <template #icon>
+          <IconCarbonFolder class="w-4 h-4" />
+        </template>
+        导入文件夹
       </NButton>
       <NButton quaternary size="small" @click="handleOpenFolder">
         <template #icon>

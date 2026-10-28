@@ -43,6 +43,12 @@ export const mcpToolsApi = {
     return unwrapIpcResult<FileDialogResult>(result, '选择插件文件夹失败')
   },
 
+  /** 选择插件 ZIP */
+  selectZip: async (): Promise<FileDialogResult> => {
+    const result: unknown = await ipcRenderer.invoke('mcp-tools:select-zip')
+    return unwrapIpcResult<FileDialogResult>(result, '选择插件 ZIP 失败')
+  },
+
   /** 导入插件 */
   importPlugin: async (sourcePath: string): Promise<McpPluginImportResult> => {
     const result: unknown = await ipcRenderer.invoke('mcp-tools:import-plugin', sourcePath)

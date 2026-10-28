@@ -17,7 +17,7 @@ com.example.hello/
 {userData}/mcp_plugins/com.example.hello/
 ```
 
-或在设置 → **MCP 工具** → **导入插件** 选择本目录。
+或在设置 → **MCP 工具** → **导入文件夹** 选择本目录。也可将本目录打成 ZIP 后，使用 **导入 ZIP** 直接安装；支持的布局与限制见 [安装指引](../README.md#安装和更新)。
 
 ## 开发（可选 TS）
 

@@ -15,7 +15,7 @@ AI 只传书名 title
 ## 启用
 
 1. 设置 → **MCP 工具** → 打开 **允许外挂使用应用内播放**
-2. **导入插件** 选择本目录（或拷到 `{userData}/mcp_plugins/com.example.story/`）
+2. **导入文件夹** 选择本目录，或把本目录打成 ZIP 后使用 **导入 ZIP**（也可拷到 `{userData}/mcp_plugins/com.example.story/`）
 3. 对模型说「播放示例有声」→ 应调 `example.story_play`，`title` 如 `示例` / `demo`
 
 ## 面向 AI 的工具

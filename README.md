@@ -35,7 +35,7 @@ $ pnpm build:linux
 
 ## MCP 插件
 
-安装后的桌面客户端自带 JavaScript 运行环境，无需用户另装 Node.js。进入设置 → **MCP 工具** → **导入插件**，选择已解压且包含清单和 JS 入口的文件夹。
+安装后的桌面客户端自带 JavaScript 运行环境，无需用户另装 Node.js。进入设置 → **MCP 工具** → **导入 ZIP**，直接选择插件 ZIP 包；也可用 **导入文件夹** 选择包含清单和 JS 入口的目录。
 
 插件格式、`media_player` / `subtitle` 授权、取消与清理契约、运行目录限制，以及更新回滚和云端同步行为，见 [MCP 插件安装与开发](examples/mcp_plugins/README.md)。
 
