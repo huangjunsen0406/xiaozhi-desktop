@@ -13,16 +13,16 @@ import type {
   McpToolCatalogItem,
   McpToolsSaveResult,
 } from '@shared/types'
-import path from 'node:path'
 import { dialog, shell } from 'electron'
 import fs from 'fs-extra'
 import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
 import { getServiceContainer } from '../core/ServiceContainer'
-import { readPluginManifest } from '../mcp/plugins'
+import { installMcpPlugin } from '../mcp/plugins/installer'
+import { runMcpPluginOperation } from '../mcp/plugins/operations'
 import { getDatabase } from '../services/database'
 import { reconnectIfConnectedKeepingIdle } from '../services/settingsApply'
 import { getLogger } from '../utils/logger'
-import { getMcpPluginsDir, isPathInside } from '../utils/paths'
+import { getMcpPluginsDir } from '../utils/paths'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('McpToolsIpc')
@@ -68,7 +68,7 @@ export function registerMcpToolsIpc(): void {
     schema: {
       disabledNames: { type: 'array', required: true },
     },
-    handler: async (_event, disabledNamesUnknown: unknown) => {
+    handler: async (_event, disabledNamesUnknown: unknown) => runMcpPluginOperation(async () => {
       if (!Array.isArray(disabledNamesUnknown)) {
         return failure('disabledNames 必须是数组')
       }
@@ -93,7 +93,7 @@ export function registerMcpToolsIpc(): void {
       }
       logger.info('MCP 工具禁用列表已保存', result)
       return success(result)
-    },
+    }),
   })
 
   /**
@@ -118,89 +118,23 @@ export function registerMcpToolsIpc(): void {
     schema: {
       sourcePath: { type: 'string', required: true, minLength: 1 },
     },
-    handler: async (_event, sourcePathUnknown: unknown) => {
+    handler: async (_event, sourcePathUnknown: unknown) => runMcpPluginOperation(async () => {
       const sourcePath = String(sourcePathUnknown)
       if (!sourcePath) {
         return failure('无效的路径')
       }
 
-      const resolvedSource = path.resolve(sourcePath)
-      if (!(await fs.pathExists(resolvedSource))) {
-        return failure('源目录不存在')
-      }
-
-      const stat = await fs.stat(resolvedSource)
-      if (!stat.isDirectory()) {
-        return failure('请选择插件目录（含 manifest.json）')
-      }
-
-      const validated = await readPluginManifest(resolvedSource)
-      if (!validated.ok) {
-        return failure(validated.error)
-      }
-
-      const { manifest } = validated
-      if (manifest.runtime !== 'node-inprocess') {
-        return failure(`不支持的 runtime: ${manifest.runtime}（当前仅支持 node-inprocess）`)
-      }
-
-      // 插件 id 禁止路径分隔与相对段，避免奇怪目录布局
-      if (
-        manifest.id.includes('/')
-        || manifest.id.includes('\\')
-        || manifest.id.includes('..')
-        || path.isAbsolute(manifest.id)
-      ) {
-        return failure('插件 id 非法（不能包含路径分隔符或 ..）')
-      }
-
-      const pluginsDir = getMcpPluginsDir()
-      const destDir = path.join(pluginsDir, manifest.id)
-
-      // 安全：目标必须在 pluginsDir 内
-      if (!isPathInside(pluginsDir, destDir) || path.resolve(destDir) === path.resolve(pluginsDir)) {
-        return failure('插件 id 导致路径逃逸')
-      }
-
-      // 若源已在目标目录内，视为已安装，仍触发 reload
-      if (path.resolve(resolvedSource) !== path.resolve(destDir)) {
-        await fs.ensureDir(pluginsDir)
-        if (await fs.pathExists(destDir)) {
-          // 覆盖更新：先删后拷（插件包整体替换）
-          await fs.remove(destDir)
-        }
-        await fs.copy(resolvedSource, destDir, {
-          overwrite: true,
-          errorOnExist: false,
-          filter: (src) => {
-            const base = path.basename(src)
-            // 跳过 VCS；保留 node_modules（插件可自带依赖）与源码目录
-            if (base === '.git' || base === '.svn' || base === '.hg')
-              return false
-            return true
-          },
-        })
-      }
-
-      // 重载外挂
       const server = getMcpServerOrThrow()
-      await server.reloadExternalPlugins()
-
-      // 导入后确认插件是否真正登记成功（拷贝成功 ≠ 加载成功）
-      const loaded = server.getPluginRegistry().getPlugin(manifest.id)
-      if (!loaded) {
-        return failure(
-          `插件已复制到目录，但加载失败（请检查 entry / register 导出，并查看日志）。目标: ${destDir}`,
-        )
-      }
-
-      const data: McpPluginImportResult = {
-        pluginId: manifest.id,
-        name: manifest.name,
-      }
+      const data: McpPluginImportResult = await installMcpPlugin({
+        sourcePath,
+        pluginsDir: getMcpPluginsDir(),
+        unload: () => server.unloadAllExternalPlugins(),
+        reload: () => server.reloadExternalPlugins(),
+        isLoaded: (id, rootDir) => server.getPluginRegistry().getPlugin(id)?.rootDir === rootDir,
+      })
       logger.info('MCP 插件导入成功', data)
       return success(data)
-    },
+    }),
   })
 
   /**
@@ -252,7 +186,7 @@ export function registerMcpToolsIpc(): void {
     schema: {
       partial: { type: 'object', required: true },
     },
-    handler: async (_event, partialUnknown: unknown) => {
+    handler: async (_event, partialUnknown: unknown) => runMcpPluginOperation(async () => {
       const partial = partialUnknown as Partial<McpPluginsHostConfig>
       if (!partial || typeof partial !== 'object') {
         return failure('无效的配置')
@@ -288,7 +222,7 @@ export function registerMcpToolsIpc(): void {
         allowHostGet: data.allowHostGet,
       })
       return success(data)
-    },
+    }),
   })
 
   /**
@@ -296,12 +230,12 @@ export function registerMcpToolsIpc(): void {
    */
   createIpcHandler({
     channel: 'mcp-tools:refresh',
-    handler: async () => {
+    handler: async () => runMcpPluginOperation(async () => {
       const server = getMcpServerOrThrow()
       await server.reloadExternalPlugins()
       const catalog: McpToolCatalogItem[] = server.getToolCatalog()
       return success(catalog)
-    },
+    }),
   })
 
   /**
@@ -312,7 +246,7 @@ export function registerMcpToolsIpc(): void {
     schema: {
       pluginId: { type: 'string', required: true, minLength: 1 },
     },
-    handler: async (_event, pluginIdUnknown: unknown) => {
+    handler: async (_event, pluginIdUnknown: unknown) => runMcpPluginOperation(async () => {
       const pluginId = String(pluginIdUnknown)
       if (!pluginId) {
         return failure('无效的插件 id')
@@ -326,7 +260,7 @@ export function registerMcpToolsIpc(): void {
         deletedDir: result.deletedDir,
         catalog,
       })
-    },
+    }),
   })
 
   logger.info('MCP 工具 IPC 处理器已注册')

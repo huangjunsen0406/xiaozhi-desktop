@@ -23,10 +23,11 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import fs from 'fs-extra'
 import { getLogger } from '../../utils/logger'
-import { getMcpPluginsDir } from '../../utils/paths'
+import { getMcpPluginsDir, isPathInside } from '../../utils/paths'
 import { createMcpHost } from './host'
 import { McpPluginLifecycle, runWithDeadline } from './lifecycle'
 import { isPlatformAllowed, validateManifest } from './manifest'
+import { validatePackageTree } from './packagePaths'
 import { DEFAULT_MCP_PLUGINS_LOAD_CONFIG } from './types'
 
 /** 用于 CJS require 解析（兼容打包后无 import.meta 的场景） */
@@ -104,11 +105,16 @@ function extractDispose(mod: unknown): McpPluginDispose | undefined {
  */
 async function loadRegisterFn(
   entryPath: string,
+  pluginRoot: string,
 ): Promise<{ register: McpPluginRegister, dispose?: McpPluginDispose }> {
   // CJS（示例与多数投放为 CJS）
   try {
     try {
       const resolved = nodeRequire.resolve(entryPath)
+      for (const key of Object.keys(nodeRequire.cache)) {
+        if (isPathInside(pluginRoot, key))
+          delete nodeRequire.cache[key]
+      }
       delete nodeRequire.cache[resolved]
     }
     catch {
@@ -193,8 +199,11 @@ async function loadOnePlugin(
     return
   }
 
-  if (!(await fs.pathExists(entryPath))) {
-    result.errors.push({ id, error: `entry 文件不存在: ${entryPath}` })
+  try {
+    await validatePluginEntry(pluginRoot, entryPath)
+  }
+  catch (error) {
+    result.errors.push({ id, error: String(error) })
     return
   }
 
@@ -205,7 +214,14 @@ async function loadOnePlugin(
 
   const registeredTools: string[] = []
   const lifecycle = new McpPluginLifecycle()
+  let runtimeDir: string | undefined
   try {
+    const realRoot = await fs.realpath(pluginRoot)
+    await validatePackageTree(realRoot)
+    runtimeDir = await fs.mkdtemp(path.join(path.dirname(realRoot), '.runtime-'))
+    const generationRoot = runtimeDir
+    await fs.copy(realRoot, runtimeDir, { dereference: true, filter: file => !['.git', '.svn', '.hg'].includes(path.basename(file)) })
+    const runtimeEntry = path.join(runtimeDir, path.relative(pluginRoot, entryPath))
     const host = createMcpHost({
       pluginId: id,
       lifecycle,
@@ -231,13 +247,18 @@ async function loadOnePlugin(
       toolNames: registeredTools,
       callTimeoutMs: manifest.call_timeout_ms ?? 30_000,
       toolNamePrefix: manifest.tool_name_prefix,
-      dispose: () => lifecycle.dispose(),
+      dispose: async () => {
+        await lifecycle.dispose()
+        if (path.dirname(generationRoot) !== path.dirname(realRoot) || !path.basename(generationRoot).startsWith('.runtime-'))
+          throw new Error('插件运行目录非法')
+        await fs.remove(generationRoot)
+      },
     }
     options.registry.registerPlugin(loaded)
 
     await runWithDeadline(
       async () => {
-        const module = await loadRegisterFn(entryPath)
+        const module = await loadRegisterFn(runtimeEntry, runtimeDir!)
         lifecycle.assertActive()
         if (module.dispose)
           lifecycle.onDispose(module.dispose)
@@ -275,6 +296,9 @@ async function loadOnePlugin(
     catch (disposeError) {
       logger.warn('失败插件清理异常', disposeError)
     }
+    if (runtimeDir && path.basename(runtimeDir).startsWith('.runtime-') && path.dirname(runtimeDir) === path.dirname(await fs.realpath(pluginRoot))) {
+      await fs.remove(runtimeDir)
+    }
     // 失败隔离：卸掉半成品登记 + 已 add 的工具
     const partialNames = options.registry.unloadPlugin(id)
     const toRemove = partialNames.length > 0 ? partialNames : registeredTools
@@ -309,8 +333,9 @@ export async function loadMcpPluginsFromConfig(
     return result
   }
 
-  const pluginsDir = options.pluginsDir ?? getMcpPluginsDir()
-  await fs.ensureDir(pluginsDir)
+  const configuredDir = options.pluginsDir ?? getMcpPluginsDir()
+  await fs.ensureDir(configuredDir)
+  const pluginsDir = await fs.realpath(configuredDir)
 
   let entries: string[]
   try {
@@ -349,6 +374,16 @@ export async function loadMcpPluginsFromConfig(
   return result
 }
 
+export async function validatePluginEntry(pluginRoot: string, entryPath: string): Promise<void> {
+  const root = await fs.realpath(pluginRoot)
+  const manifestPath = await fs.realpath(path.join(pluginRoot, 'manifest.json'))
+  const entry = await fs.realpath(entryPath)
+  if (!isPathInside(root, entry) || !isPathInside(root, manifestPath))
+    throw new Error('插件入口或清单的符号链接指向插件目录外')
+  if (!(await fs.stat(entry)).isFile())
+    throw new Error('插件入口必须是文件')
+}
+
 /**
  * 校验并读取某个目录的 manifest（导入前检查）
  */
@@ -363,7 +398,10 @@ export async function readPluginManifest(
   }
   try {
     const raw = await fs.readJson(manifestPath)
-    return validateManifest(raw, pluginRoot)
+    const validated = validateManifest(raw, pluginRoot)
+    if (validated.ok)
+      await validatePluginEntry(pluginRoot, validated.entryPath)
+    return validated
   }
   catch (error) {
     return { ok: false, error: `读取 manifest 失败: ${String(error)}` }

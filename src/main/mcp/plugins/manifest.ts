@@ -35,7 +35,7 @@ export function validateManifest(
 
   const m = raw as Record<string, unknown>
 
-  if (typeof m.id !== 'string' || !m.id.trim()) {
+  if (typeof m.id !== 'string' || !/^[a-z0-9][\w.-]*$/i.test(m.id.trim()) || m.id.includes('..')) {
     return { ok: false, error: 'manifest.id 无效' }
   }
   if (typeof m.name !== 'string' || !m.name.trim()) {
@@ -64,7 +64,7 @@ export function validateManifest(
   }
 
   // entry 路径安全：resolve 后必须在插件根内
-  const entryPath = path.resolve(pluginRoot, m.entry)
+  const entryPath = path.resolve(pluginRoot, m.entry.trim())
   if (!isPathInside(pluginRoot, entryPath)) {
     return {
       ok: false,
@@ -76,7 +76,7 @@ export function validateManifest(
     ? m.platforms.filter((p): p is string => typeof p === 'string')
     : undefined
 
-  const callTimeout = typeof m.call_timeout_ms === 'number' && m.call_timeout_ms > 0
+  const callTimeout = typeof m.call_timeout_ms === 'number' && Number.isFinite(m.call_timeout_ms) && m.call_timeout_ms > 0 && m.call_timeout_ms <= 2_147_483_647
     ? m.call_timeout_ms
     : 30_000
 
