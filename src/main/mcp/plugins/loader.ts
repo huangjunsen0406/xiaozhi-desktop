@@ -187,6 +187,11 @@ async function loadOnePlugin(
     return
   }
 
+  if (options.registry.getPlugin(id)) {
+    result.errors.push({ id, error: `插件 id 冲突: ${id}` })
+    return
+  }
+
   const registeredTools: string[] = []
   try {
     const host = createMcpHost({

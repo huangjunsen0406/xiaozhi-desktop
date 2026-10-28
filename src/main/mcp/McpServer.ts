@@ -164,8 +164,7 @@ export class McpServer {
 
     // 检查是否已存在
     if (this.tools.some(t => t.name === tool.name)) {
-      logger.warn('工具已存在', { name: tool.name })
-      return
+      throw new Error(`工具名称冲突: ${tool.name}`)
     }
 
     logger.info('添加工具', { name: tool.name })

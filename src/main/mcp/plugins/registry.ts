@@ -15,6 +15,8 @@ export class McpPluginRegistry {
   private plugins = new Map<string, LoadedMcpPlugin>()
 
   registerPlugin(plugin: LoadedMcpPlugin): void {
+    if (this.plugins.has(plugin.id))
+      throw new Error(`插件 id 冲突: ${plugin.id}`)
     this.plugins.set(plugin.id, plugin)
     for (const name of plugin.toolNames) {
       this.toolToPlugin.set(name, plugin.id)
@@ -26,6 +28,10 @@ export class McpPluginRegistry {
   }
 
   recordTool(toolName: string, pluginId: string): void {
+    if (!this.plugins.has(pluginId))
+      throw new Error(`插件未登记: ${pluginId}`)
+    if (this.toolToPlugin.has(toolName))
+      throw new Error(`工具归属冲突: ${toolName}`)
     this.toolToPlugin.set(toolName, pluginId)
     const plugin = this.plugins.get(pluginId)
     if (plugin && !plugin.toolNames.includes(toolName)) {
