@@ -9,3 +9,6 @@ LightDot
 .claude
 .trellis
 reports
+.env
+.env.*
+!.env.example

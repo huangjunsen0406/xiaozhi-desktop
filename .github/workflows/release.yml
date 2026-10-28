@@ -192,6 +192,9 @@ jobs:
       - name: Build
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder ${{ matrix.build_cmd }} --publish=never
         env:
+          OPENPANEL_API_URL: ${{ secrets.OPENPANEL_API_URL }}
+          OPENPANEL_CLIENT_ID: ${{ secrets.OPENPANEL_CLIENT_ID }}
+          OPENPANEL_CLIENT_SECRET: ${{ secrets.OPENPANEL_CLIENT_SECRET }}
           USE_SYSTEM_FPM: ${{ runner.os == 'Linux' && 'true' || 'false' }}
           # 与 install 一致，避免 electron-builder / rebuild 回到 host arch
           npm_config_arch: ${{ matrix.arch }}
@@ -332,6 +335,9 @@ jobs:
       - name: Build (mac x64)
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder --mac --x64 --publish=never
         env:
+          OPENPANEL_API_URL: ${{ secrets.OPENPANEL_API_URL }}
+          OPENPANEL_CLIENT_ID: ${{ secrets.OPENPANEL_CLIENT_ID }}
+          OPENPANEL_CLIENT_SECRET: ${{ secrets.OPENPANEL_CLIENT_SECRET }}
           npm_config_arch: x64
           npm_config_target_arch: x64
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -442,6 +448,9 @@ jobs:
       - name: Build (mac arm64)
         run: pnpm run clean && pnpm run build && pnpm exec electron-builder --mac --arm64 --publish=never
         env:
+          OPENPANEL_API_URL: ${{ secrets.OPENPANEL_API_URL }}
+          OPENPANEL_CLIENT_ID: ${{ secrets.OPENPANEL_CLIENT_ID }}
+          OPENPANEL_CLIENT_SECRET: ${{ secrets.OPENPANEL_CLIENT_SECRET }}
           npm_config_arch: arm64
           npm_config_target_arch: arm64
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

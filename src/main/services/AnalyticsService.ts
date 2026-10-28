@@ -16,17 +16,15 @@ import { getDatabase } from './database'
 
 const logger = getLogger('Analytics')
 
-/** 写入保护串 + 常量；生产构建由 bytecodePlugin 处理 */
-const OP_CLIENT_ID = 'a869e57d-7399-47bc-8e4f-15789fa0944c'
-const OP_CLIENT_SECRET = 'sec_8bf9867d7e355eba22d1'
-const OP_API_URL = 'https://openpanel.junsen.online/api'
+/** 编译时注入，缺少配置的源码构建不会初始化上报客户端。 */
+const OP_CONFIG = __OPENPANEL_CONFIG__
 
 const META_ENABLED = 'analytics_enabled'
 const META_INSTALL_ID = 'analytics_install_id'
 
 let client: OpenPanel | null = null
 let initialized = false
-let enabled = true
+let enabled = false
 let installId = ''
 let openedAtMs = 0
 let lastDisplayMode: DisplayMode | '' = ''
@@ -88,15 +86,20 @@ export function initAnalyticsService(): void {
     return
   initialized = true
 
+  if (!OP_CONFIG.apiUrl || !OP_CONFIG.clientId || !OP_CONFIG.clientSecret) {
+    logger.info('当前构建未配置 Analytics，跳过初始化')
+    return
+  }
+
   enabled = readEnabled()
   installId = ensureInstallId()
   openedAtMs = Date.now()
 
   try {
     client = new OpenPanel({
-      clientId: OP_CLIENT_ID,
-      clientSecret: OP_CLIENT_SECRET,
-      apiUrl: OP_API_URL,
+      clientId: OP_CONFIG.clientId,
+      clientSecret: OP_CONFIG.clientSecret,
+      apiUrl: OP_CONFIG.apiUrl,
       sdk: 'xiaozhi-desktop',
       sdkVersion: app.getVersion(),
       disabled: !enabled,
@@ -130,6 +133,7 @@ export function initAnalyticsService(): void {
   catch (error) {
     logger.error('Analytics 初始化失败', error)
     client = null
+    enabled = false
   }
 }
 
@@ -201,12 +205,12 @@ export function getAnalyticsInstallId(): string {
  * 设置页开关。关闭后不再 track；重新开启会 ready() 并放行后续事件。
  */
 export function setAnalyticsEnabled(next: boolean): boolean {
+  if (!client) {
+    return false
+  }
+
   enabled = next
   writeEnabled(next)
-
-  if (!client) {
-    return enabled
-  }
 
   if (next) {
     client.options.disabled = false
@@ -222,10 +226,12 @@ export function setAnalyticsEnabled(next: boolean): boolean {
 }
 
 export function getAnalyticsStatus(): {
+  available: boolean
   enabled: boolean
   installId: string
 } {
   return {
+    available: client !== null,
     enabled,
     installId,
   }

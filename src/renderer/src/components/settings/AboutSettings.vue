@@ -22,7 +22,8 @@ const updateError = ref('')
 const downloadPct = ref(0)
 const downloadLabel = ref('')
 const processVersions = ref<{ electron?: string, chrome?: string, node?: string }>({})
-const analyticsEnabled = ref(true)
+const analyticsAvailable = ref(false)
+const analyticsEnabled = ref(false)
 const releaseNotesText = computed(() => stripReleaseNotesHtml(updateInfo.value?.releaseNotes))
 
 let offProgress: (() => void) | null = null
@@ -55,6 +56,7 @@ async function loadUpdateState() {
 async function loadAnalyticsState() {
   try {
     const status = await window.api.analyticsGetStatus()
+    analyticsAvailable.value = status.available
     analyticsEnabled.value = status.enabled
   }
   catch (error) {
@@ -275,10 +277,14 @@ defineExpose({ handleSave })
         <div class="analytics-row">
           <NSwitch
             :value="analyticsEnabled"
+            :disabled="!analyticsAvailable"
             @update:value="toggleAnalyticsEnabled"
           />
-          <p class="hint">
+          <p v-if="analyticsAvailable" class="hint">
             仅统计启动/退出时长与显示模式等匿名使用情况，不含对话内容。用于改进产品。
+          </p>
+          <p v-else class="hint">
+            此版本未启用使用数据统计。
           </p>
         </div>
       </NFormItem>
