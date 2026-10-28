@@ -35,11 +35,11 @@ it('isolates builtin/tool/id collisions and rolls back only newly registered too
     assert.equal(server.getPluginRegistry().getPluginIdForTool('shared'), 'first')
     assert.equal(server.findTool('partial'), undefined)
     assert.equal(server.findTool('failed.partial'), undefined)
-    server.unloadPlugin('first')
+    await server.unloadPlugin('first')
     assert.deepEqual(server.getAllRegisteredTools().map(tool => tool.name), ['self.test'])
   }
   finally {
-    server.detach()
+    await server.detach()
     assert.equal(path.dirname(root), tempRoot)
     assert.ok(path.basename(root).startsWith('xiaozhi-mcp-conflicts-'))
     await fs.rm(root, { recursive: true, force: true })

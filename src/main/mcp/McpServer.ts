@@ -47,7 +47,10 @@ export class McpServer {
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
   private visionConfig: { url?: string, token?: string } = {} // 存储 vision 配置供截图工具使用
-  private imageBroadcastCallback: ((imageBase64: string, sourceType: ImageSourceType) => void) | null = null
+  private imageBroadcastCallback:
+    | ((imageBase64: string, sourceType: ImageSourceType) => void)
+    | null = null
+
   private themeBroadcastCallback: ((theme: 'light' | 'dark' | 'auto') => void) | null = null
   /** 容器注入的 MusicPlayer（addCommonTools 时使用） */
   private musicPlayer: MusicPlayer | null = null
@@ -75,7 +78,8 @@ export class McpServer {
   /**
    * 释放回调与工具列表（资源池 unbind 时调用）
    */
-  detach(): void {
+  async detach(): Promise<void> {
+    await this.unloadAllExternalPlugins()
     this.sendCallback = null
     this.imageBroadcastCallback = null
     this.themeBroadcastCallback = null
@@ -190,7 +194,14 @@ export class McpServer {
   /**
    * 卸载外挂插件及其工具
    */
-  unloadPlugin(pluginId: string): string[] {
+  async unloadPlugin(pluginId: string): Promise<string[]> {
+    const plugin = this.pluginRegistry.getPlugin(pluginId)
+    try {
+      await plugin?.dispose?.()
+    }
+    catch (error) {
+      logger.warn('插件清理异常，继续卸载', { pluginId, error: String(error) })
+    }
     const names = this.pluginRegistry.unloadPlugin(pluginId)
     this.removeToolsByNames(names)
     return names
@@ -199,10 +210,10 @@ export class McpServer {
   /**
    * 卸载全部外挂工具（保留内置）
    */
-  unloadAllExternalPlugins(): void {
+  async unloadAllExternalPlugins(): Promise<void> {
     const plugins = this.pluginRegistry.getAllPlugins()
     for (const p of plugins) {
-      this.unloadPlugin(p.id)
+      await this.unloadPlugin(p.id)
     }
   }
 
@@ -251,7 +262,7 @@ export class McpServer {
         groupKey,
         description: tool.description,
         enabled: !this.disabledTools.has(tool.name),
-        source: pluginId ? 'plugin' as const : 'builtin' as const,
+        source: pluginId ? ('plugin' as const) : ('builtin' as const),
         pluginId,
       }
     })
@@ -261,16 +272,19 @@ export class McpServer {
    * 仅返回未禁用的工具（供 list/call）；外挂优先排序
    */
   private getEnabledTools(): McpTool[] {
-    const list = this.disabledTools.size === 0
-      ? this.tools
-      : this.tools.filter(t => !this.disabledTools.has(t.name))
+    const list
+      = this.disabledTools.size === 0
+        ? this.tools
+        : this.tools.filter(t => !this.disabledTools.has(t.name))
     return this.sortToolsForPresentation(list)
   }
 
   /**
    * 删除已安装外挂：卸载工具 + 删除 mcp_plugins/<id> 目录
    */
-  async deleteInstalledPlugin(pluginId: string): Promise<{ removedTools: string[], deletedDir: boolean }> {
+  async deleteInstalledPlugin(
+    pluginId: string,
+  ): Promise<{ removedTools: string[], deletedDir: boolean }> {
     if (!pluginId || pluginId.includes('/') || pluginId.includes('\\') || pluginId.includes('..')) {
       throw new Error('插件 id 非法')
     }
@@ -280,7 +294,7 @@ export class McpServer {
       throw new Error(`插件未加载或不存在: ${pluginId}`)
     }
 
-    const removedTools = this.unloadPlugin(pluginId)
+    const removedTools = await this.unloadPlugin(pluginId)
 
     // 清理禁用名单中已删除工具，避免脏数据
     if (removedTools.length > 0) {
@@ -339,11 +353,7 @@ export class McpServer {
 
       // 注册系统工具（常用工具将被优先添加）；注入 MusicPlayer
       const systemManager = new SystemToolsManager(this.musicPlayer)
-      await systemManager.init(
-        this.addTool.bind(this),
-        PropertyList,
-        PropertyType,
-      )
+      await systemManager.init(this.addTool.bind(this), PropertyList, PropertyType)
 
       // 将原有工具恢复到列表末尾
       this.tools.push(...originalTools)
@@ -420,7 +430,7 @@ export class McpServer {
    */
   async reloadExternalPlugins(): Promise<void> {
     logger.info('重新加载外挂插件...')
-    this.unloadAllExternalPlugins()
+    await this.unloadAllExternalPlugins()
     await this.loadExternalPlugins()
     logger.info('外挂插件重载完成', { totalTools: this.tools.length })
   }
@@ -433,8 +443,8 @@ export class McpServer {
     try {
       const data: JsonRpcRequest
         = typeof message === 'string'
-          ? JSON.parse(message) as JsonRpcRequest
-          : message as unknown as JsonRpcRequest
+          ? (JSON.parse(message) as JsonRpcRequest)
+          : (message as unknown as JsonRpcRequest)
 
       logger.debug('解析消息', data)
 
@@ -696,7 +706,11 @@ export class McpServer {
         // 如果是 WebCamera，直接设置 URL 和 Token
         if ('setExplainUrl' in camera && typeof camera.setExplainUrl === 'function') {
           camera.setExplainUrl(url)
-          if (token && 'setExplainToken' in camera && typeof camera.setExplainToken === 'function') {
+          if (
+            token
+            && 'setExplainToken' in camera
+            && typeof camera.setExplainToken === 'function'
+          ) {
             camera.setExplainToken(token)
           }
           logger.info('Vision 服务已配置', { url })
@@ -757,7 +771,9 @@ export class McpServer {
    * 设置图片广播回调
    * 由 McpPlugin 在 setup 时注入，用于将图片数据发送到 UIPlugin
    */
-  setImageBroadcastCallback(callback: (imageBase64: string, sourceType: ImageSourceType) => void): void {
+  setImageBroadcastCallback(
+    callback: (imageBase64: string, sourceType: ImageSourceType) => void,
+  ): void {
     this.imageBroadcastCallback = callback
     logger.info('图片广播回调已设置')
   }

@@ -12,6 +12,7 @@ import type { McpTool } from '../types'
 import type { McpPluginRegistry } from './registry'
 import type {
   LoadedMcpPlugin,
+  McpPluginDispose,
   McpPluginManifest,
   McpPluginRegister,
   McpPluginsLoadConfig,
@@ -24,6 +25,7 @@ import fs from 'fs-extra'
 import { getLogger } from '../../utils/logger'
 import { getMcpPluginsDir } from '../../utils/paths'
 import { createMcpHost } from './host'
+import { McpPluginLifecycle, runWithDeadline } from './lifecycle'
 import { isPlatformAllowed, validateManifest } from './manifest'
 import { DEFAULT_MCP_PLUGINS_LOAD_CONFIG } from './types'
 
@@ -40,6 +42,7 @@ export interface LoadPluginsOptions {
   removeToolsByNames?: (names: string[]) => void
   config?: Partial<McpPluginsLoadConfig>
   pluginsDir?: string
+  registerTimeoutMs?: number
   /**
    * Host 额外能力（如 media_player facade）。
    * 仍受 allowHostGet 白名单约束。
@@ -89,11 +92,19 @@ function extractRegister(mod: unknown): McpPluginRegister | null {
   return null
 }
 
+function extractDispose(mod: unknown): McpPluginDispose | undefined {
+  const candidate = mod as { dispose?: unknown, default?: { dispose?: unknown } } | null
+  const dispose = candidate?.dispose ?? candidate?.default?.dispose
+  return typeof dispose === 'function' ? (dispose as McpPluginDispose) : undefined
+}
+
 /**
  * 动态加载 entry 模块，解析 register 导出
  * 优先 CJS require（userData 下常见），再 ESM import（pathToFileURL，兼容 Windows）
  */
-async function loadRegisterFn(entryPath: string): Promise<McpPluginRegister> {
+async function loadRegisterFn(
+  entryPath: string,
+): Promise<{ register: McpPluginRegister, dispose?: McpPluginDispose }> {
   // CJS（示例与多数投放为 CJS）
   try {
     try {
@@ -106,7 +117,7 @@ async function loadRegisterFn(entryPath: string): Promise<McpPluginRegister> {
     const cjsMod = nodeRequire(entryPath)
     const fromCjs = extractRegister(cjsMod)
     if (fromCjs)
-      return fromCjs
+      return { register: fromCjs, dispose: extractDispose(cjsMod) }
   }
   catch (cjsError) {
     logger.debug('CJS require 失败，尝试 ESM import', {
@@ -117,10 +128,10 @@ async function loadRegisterFn(entryPath: string): Promise<McpPluginRegister> {
 
   // ESM
   const url = pathToFileURL(entryPath).href
-  const mod = await import(`${url}?t=${Date.now()}`) as Record<string, unknown>
+  const mod = (await import(`${url}?t=${Date.now()}`)) as Record<string, unknown>
   const fromEsm = extractRegister(mod)
   if (fromEsm)
-    return fromEsm
+    return { register: fromEsm, dispose: extractDispose(mod) }
 
   throw new Error(`entry 未导出 register(host): ${entryPath}`)
 }
@@ -193,9 +204,11 @@ async function loadOnePlugin(
   }
 
   const registeredTools: string[] = []
+  const lifecycle = new McpPluginLifecycle()
   try {
     const host = createMcpHost({
       pluginId: id,
+      lifecycle,
       allowHostGet: config.allowHostGet,
       toolNamePrefix: manifest.tool_name_prefix,
       enforcePrefix: config.enforcePrefix,
@@ -218,11 +231,28 @@ async function loadOnePlugin(
       toolNames: registeredTools,
       callTimeoutMs: manifest.call_timeout_ms ?? 30_000,
       toolNamePrefix: manifest.tool_name_prefix,
+      dispose: () => lifecycle.dispose(),
     }
     options.registry.registerPlugin(loaded)
 
-    const register = await loadRegisterFn(entryPath)
-    await register(host)
+    await runWithDeadline(
+      async () => {
+        const module = await loadRegisterFn(entryPath)
+        lifecycle.assertActive()
+        if (module.dispose)
+          lifecycle.onDispose(module.dispose)
+        const cleanup = await module.register(host)
+        if (typeof cleanup === 'function') {
+          if (lifecycle.controller.signal.aborted)
+            await cleanup()
+          else lifecycle.onDispose(cleanup)
+        }
+        lifecycle.assertActive()
+        lifecycle.finishRegistration()
+      },
+      options.registerTimeoutMs ?? 10_000,
+      `插件注册超时: ${id}`,
+    )
 
     // 同步 toolNames（register 可能追加）
     loaded.toolNames = registeredTools.slice()
@@ -239,6 +269,12 @@ async function loadOnePlugin(
     })
   }
   catch (error) {
+    try {
+      await lifecycle.dispose()
+    }
+    catch (disposeError) {
+      logger.warn('失败插件清理异常', disposeError)
+    }
     // 失败隔离：卸掉半成品登记 + 已 add 的工具
     const partialNames = options.registry.unloadPlugin(id)
     const toRemove = partialNames.length > 0 ? partialNames : registeredTools
@@ -318,7 +354,9 @@ export async function loadMcpPluginsFromConfig(
  */
 export async function readPluginManifest(
   pluginRoot: string,
-): Promise<{ ok: true, manifest: McpPluginManifest, entryPath: string } | { ok: false, error: string }> {
+): Promise<
+  { ok: true, manifest: McpPluginManifest, entryPath: string } | { ok: false, error: string }
+> {
   const manifestPath = path.join(pluginRoot, 'manifest.json')
   if (!(await fs.pathExists(manifestPath))) {
     return { ok: false, error: '目录中缺少 manifest.json' }

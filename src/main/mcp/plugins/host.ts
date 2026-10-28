@@ -7,21 +7,18 @@
  */
 
 import type { McpTool, Property, ToolCallback } from '../types'
-import type {
-  McpHost,
-  McpHostGetKey,
-  PropDef,
-  ToolDefLike,
-} from './types'
+import type { McpHost, McpHostGetKey, PropDef, ToolDefLike } from './types'
 import { isMcpHostCapability } from '../../../shared/mcpCapabilities'
 import { getConfigManager } from '../../services/configManagerDB'
 import { getLogger } from '../../utils/logger'
 import { PropertyList, PropertyType } from '../types'
+import { McpPluginLifecycle } from './lifecycle'
 
 const baseLogger = getLogger('McpHost')
 
 export interface McpHostOptions {
   pluginId: string
+  lifecycle?: McpPluginLifecycle
   allowHostGet: McpHostGetKey[]
   /** 强制前缀（可选） */
   toolNamePrefix?: string
@@ -70,13 +67,11 @@ function propDefsToPropertyList(props?: PropDef[]): PropertyList {
 function isPropertyList(value: unknown): value is PropertyList {
   return (
     value instanceof PropertyList
-    || (
-      typeof value === 'object'
+    || (typeof value === 'object'
       && value !== null
       && !Array.isArray(value)
       && typeof (value as PropertyList).parseArguments === 'function'
-      && typeof (value as PropertyList).toJson === 'function'
-    )
+      && typeof (value as PropertyList).toJson === 'function')
   )
 }
 
@@ -97,26 +92,36 @@ function withTimeout(
   callback: ToolCallback,
   timeoutMs: number,
   toolName: string,
+  lifecycle: McpPluginLifecycle,
 ): ToolCallback {
   return async (args) => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    // 超时后仍可能继续跑的原 promise：挂空 catch，避免 unhandled rejection
-    const work = Promise.resolve().then(() => callback(args))
-    work.catch(() => {})
+    lifecycle.assertActive()
+    const controller = new AbortController()
+    const parent = lifecycle.controller.signal
+    const abort = () => controller.abort(parent.reason)
+    parent.addEventListener('abort', abort, { once: true })
+    const timer = setTimeout(
+      () => controller.abort(new Error(`工具调用超时 (${timeoutMs}ms): ${toolName}`)),
+      timeoutMs,
+    )
+    let rejectAbort: () => void = () => {}
+    const cancelled = new Promise<never>((_, reject) => {
+      rejectAbort = () => reject(controller.signal.reason)
+      controller.signal.addEventListener('abort', rejectAbort, { once: true })
+    })
     try {
-      const result = await Promise.race([
-        work,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error(`工具调用超时 (${timeoutMs}ms): ${toolName}`))
-          }, timeoutMs)
+      return await Promise.race([
+        Promise.resolve().then(() => {
+          controller.signal.throwIfAborted()
+          return callback(args, controller.signal)
         }),
+        cancelled,
       ])
-      return result
     }
     finally {
-      if (timer)
-        clearTimeout(timer)
+      clearTimeout(timer)
+      parent.removeEventListener('abort', abort)
+      controller.signal.removeEventListener('abort', rejectAbort)
     }
   }
 }
@@ -149,12 +154,14 @@ export function createMcpHost(options: McpHostOptions): McpHost {
     callTimeoutMs,
     onAddTool,
     capabilities = {},
+    lifecycle = new McpPluginLifecycle(),
   } = options
 
   const pluginLogger = {
     info: (msg: string, meta?: unknown) => baseLogger.info(`[${pluginId}] ${msg}`, meta),
     warn: (msg: string, meta?: unknown) => baseLogger.warn(`[${pluginId}] ${msg}`, meta),
-    error: (msg: string, err?: unknown, meta?: unknown) => baseLogger.error(`[${pluginId}] ${msg}`, err, meta),
+    error: (msg: string, err?: unknown, meta?: unknown) =>
+      baseLogger.error(`[${pluginId}] ${msg}`, err, meta),
     debug: (msg: string, meta?: unknown) => baseLogger.debug(`[${pluginId}] ${msg}`, meta),
   }
 
@@ -167,7 +174,13 @@ export function createMcpHost(options: McpHostOptions): McpHost {
   }
 
   function registerTool(tool: McpTool | ToolDefLike): void {
-    if (!tool || typeof tool !== 'object' || typeof tool.name !== 'string' || typeof tool.callback !== 'function') {
+    lifecycle.assertRegistering()
+    if (
+      !tool
+      || typeof tool !== 'object'
+      || typeof tool.name !== 'string'
+      || typeof tool.callback !== 'function'
+    ) {
       throw new Error('无效的工具定义')
     }
 
@@ -180,7 +193,7 @@ export function createMcpHost(options: McpHostOptions): McpHost {
       name,
       description: tool.description || '',
       properties,
-      callback: withTimeout(tool.callback, callTimeoutMs, name),
+      callback: withTimeout(tool.callback, callTimeoutMs, name, lifecycle),
     }
 
     onAddTool(mcpTool)
@@ -188,6 +201,8 @@ export function createMcpHost(options: McpHostOptions): McpHost {
 
   const host: McpHost = {
     pluginId,
+    signal: lifecycle.controller.signal,
+    onDispose: dispose => lifecycle.onDispose(dispose),
 
     addTool(tool: McpTool | ToolDefLike): void {
       registerTool(tool)
@@ -205,6 +220,7 @@ export function createMcpHost(options: McpHostOptions): McpHost {
     },
 
     get(name: string): unknown {
+      lifecycle.assertActive()
       if (!isMcpHostCapability(name) || !allowHostGet.includes(name)) {
         pluginLogger.warn(`host.get 拒绝非白名单键: ${name}`)
         return undefined
@@ -217,7 +233,23 @@ export function createMcpHost(options: McpHostOptions): McpHost {
         default:
           // media_player / subtitle 等由 capabilities 注入
           if (Object.prototype.hasOwnProperty.call(capabilities, name)) {
-            return capabilities[name]
+            const capability = capabilities[name]
+            // Cached SDK handles must become unusable after unload, too.
+            if (capability && typeof capability === 'object') {
+              return new Proxy(capability, {
+                get(target, key) {
+                  lifecycle.assertActive()
+                  const value = Reflect.get(target, key)
+                  return typeof value === 'function'
+                    ? (...args: unknown[]) => {
+                        lifecycle.assertActive()
+                        return value.apply(target, args)
+                      }
+                    : value
+                },
+              })
+            }
+            return capability
           }
           return undefined
       }

@@ -48,10 +48,10 @@ export function bindSharedServices(container: ServiceContainer): void {
 /**
  * 释放共享服务引用（资源池最后阶段调用）
  */
-export function unbindSharedServices(container: ServiceContainer): void {
+export async function unbindSharedServices(container: ServiceContainer): Promise<void> {
   if (container.mcpServer) {
     try {
-      container.mcpServer.detach()
+      await container.mcpServer.detach()
     }
     catch (error) {
       logger.debug('detach McpServer 失败', error)
@@ -135,8 +135,8 @@ export function registerCleanupResources(
     container.eventBus.clear()
   })
 
-  pool.register('shared_services', () => {
-    unbindSharedServices(container)
+  pool.register('shared_services', async () => {
+    await unbindSharedServices(container)
   })
 
   pool.register('tasks', async () => {

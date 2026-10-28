@@ -52,7 +52,7 @@ it('passes saved subtitle permission through real IPC, server loading and host a
     assert.deepEqual(JSON.parse(await server.findTool('test.permissions')!.callback({})), { subtitle: false, bubble: false })
   }
   finally {
-    server.detach()
+    await server.detach()
     if (previousDir === undefined)
       delete process.env.XIAOZHI_MCP_PLUGINS_DIR
     else

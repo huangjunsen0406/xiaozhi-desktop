@@ -74,7 +74,7 @@ describe('createMcpHost capabilities', () => {
       onAddTool: noopAdd,
       capabilities: { media_player: facade },
     })
-    assert.equal(host.get('media_player'), facade)
+    assert.equal(typeof (host.get('media_player') as typeof facade).playUrl, 'function')
     assert.equal(host.get('music_player'), undefined)
   })
 
@@ -89,7 +89,7 @@ describe('createMcpHost capabilities', () => {
       capabilities: { bubble, subtitle: bubble },
     })
     assert.equal(host.get('bubble'), undefined)
-    assert.equal(host.get('subtitle'), bubble)
+    assert.equal(typeof (host.get('subtitle') as typeof bubble).show, 'function')
   })
 
   it('returns undefined for allowed key without capability', () => {

@@ -105,7 +105,7 @@ export class PropertyList {
 }
 
 /** 工具回调函数类型 */
-export type ToolCallback = (args: Record<string, unknown>) => Promise<string> | string
+export type ToolCallback = (args: Record<string, unknown>, signal?: AbortSignal) => Promise<string> | string
 
 /** MCP 工具定义 */
 export interface McpTool {

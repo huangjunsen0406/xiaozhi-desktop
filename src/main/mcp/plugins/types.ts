@@ -40,6 +40,7 @@ export interface LoadedMcpPlugin {
   toolNames: string[]
   callTimeoutMs: number
   toolNamePrefix?: string
+  dispose?: McpPluginDispose
 }
 
 /**
@@ -128,6 +129,8 @@ export interface ToolDefLike {
 /** McpHost 稳定契约（插件 register 入参） */
 export interface McpHost {
   readonly pluginId: string
+  readonly signal: AbortSignal
+  onDispose: (dispose: McpPluginDispose) => void
   addTool: (tool: McpTool | ToolDefLike) => void
   tool: (
     name: string,
@@ -138,7 +141,8 @@ export interface McpHost {
 }
 
 /** register 函数签名 */
-export type McpPluginRegister = (host: McpHost) => void | Promise<void>
+export type McpPluginDispose = () => void | Promise<void>
+export type McpPluginRegister = (host: McpHost) => void | McpPluginDispose | Promise<void | McpPluginDispose>
 
 /** 外挂加载配置 */
 export interface McpPluginsLoadConfig {
