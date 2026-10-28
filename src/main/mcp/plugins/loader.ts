@@ -142,6 +142,22 @@ async function loadRegisterFn(
   throw new Error(`entry 未导出 register(host): ${entryPath}`)
 }
 
+async function removeRuntimeDirectory(directory: string, expectedParent: string): Promise<void> {
+  if (path.dirname(directory) !== expectedParent || !path.basename(directory).startsWith('.runtime-'))
+    throw new Error('插件运行目录非法')
+  for (const key of Object.keys(nodeRequire.cache)) {
+    if (isPathInside(directory, key))
+      delete nodeRequire.cache[key]
+  }
+  try {
+    await fs.remove(directory)
+  }
+  catch (error) {
+    // A failed filesystem cleanup must not prevent registry/tool rollback.
+    logger.warn('插件运行目录清理失败', { directory, error })
+  }
+}
+
 async function loadOnePlugin(
   pluginRoot: string,
   options: LoadPluginsOptions,
@@ -241,6 +257,7 @@ async function loadOnePlugin(
     })
 
     // 先占位登记，register 过程中 recordTool 会追加
+    let disposal: Promise<void> | undefined
     const loaded: LoadedMcpPlugin = {
       id,
       name: manifest.name,
@@ -250,25 +267,30 @@ async function loadOnePlugin(
       toolNames: registeredTools,
       callTimeoutMs: manifest.call_timeout_ms ?? 30_000,
       toolNamePrefix: manifest.tool_name_prefix,
-      dispose: async () => {
-        await lifecycle.dispose()
-        if (path.dirname(generationRoot) !== path.dirname(realRoot) || !path.basename(generationRoot).startsWith('.runtime-'))
-          throw new Error('插件运行目录非法')
-        await fs.remove(generationRoot)
-      },
+      dispose: () => disposal ??= (async () => {
+        try {
+          await lifecycle.dispose()
+        }
+        finally {
+          await removeRuntimeDirectory(generationRoot, path.dirname(realRoot))
+        }
+      })(),
     }
     options.registry.registerPlugin(loaded)
 
     await runWithDeadline(
       async () => {
         const module = await loadRegisterFn(runtimeEntry, runtimeDir!)
+        if (module.dispose) {
+          if (lifecycle.controller.signal.aborted)
+            await lifecycle.disposeResource(module.dispose)
+          else lifecycle.onDispose(module.dispose)
+        }
         lifecycle.assertActive()
-        if (module.dispose)
-          lifecycle.onDispose(module.dispose)
         const cleanup = await module.register(host)
         if (typeof cleanup === 'function') {
           if (lifecycle.controller.signal.aborted)
-            await cleanup()
+            await lifecycle.disposeResource(cleanup)
           else lifecycle.onDispose(cleanup)
         }
         lifecycle.assertActive()
@@ -299,9 +321,8 @@ async function loadOnePlugin(
     catch (disposeError) {
       logger.warn('失败插件清理异常', disposeError)
     }
-    if (runtimeDir && path.basename(runtimeDir).startsWith('.runtime-') && path.dirname(runtimeDir) === path.dirname(await fs.realpath(pluginRoot))) {
-      await fs.remove(runtimeDir)
-    }
+    if (runtimeDir)
+      await removeRuntimeDirectory(runtimeDir, path.dirname(pluginRoot))
     // 失败隔离：卸掉半成品登记 + 已 add 的工具
     const partialNames = options.registry.unloadPlugin(id)
     const toRemove = partialNames.length > 0 ? partialNames : registeredTools

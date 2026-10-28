@@ -7,7 +7,7 @@ import { validatePackageTree } from './packagePaths'
 export interface InstallPluginOptions {
   sourcePath: string
   pluginsDir: string
-  unload?: () => Promise<unknown>
+  unload: () => Promise<unknown>
   reload: () => Promise<unknown>
   isLoaded: (id: string, rootDir: string) => boolean
 }
@@ -45,6 +45,8 @@ export async function installMcpPlugin(options: InstallPluginOptions): Promise<{
   const transaction = await fs.mkdtemp(path.join(pluginsDir, '.install-'))
   const staged = path.join(transaction, 'new')
   const backup = path.join(transaction, 'previous')
+  const wasLoaded = options.isLoaded(manifest.id, destination)
+  let stopped = false
   let backedUp = false
   let replaced = false
   let keepBackup = false
@@ -53,7 +55,8 @@ export async function installMcpPlugin(options: InstallPluginOptions): Promise<{
     const stagedManifest = await readPluginManifest(staged)
     if (!stagedManifest.ok || stagedManifest.manifest.id !== manifest.id)
       throw new Error('复制后的插件校验失败')
-    await options.unload?.()
+    stopped = true
+    await options.unload()
     if (await fs.pathExists(destination)) {
       // Both paths are fixed children of the verified installation root.
       await fs.rename(destination, backup)
@@ -69,7 +72,7 @@ export async function installMcpPlugin(options: InstallPluginOptions): Promise<{
   catch (error) {
     try {
       if (replaced || backedUp)
-        await options.unload?.()
+        await options.unload()
       if (replaced) {
         if (path.dirname(destination) !== pluginsDir)
           throw new Error('恢复目标路径非法')
@@ -77,12 +80,15 @@ export async function installMcpPlugin(options: InstallPluginOptions): Promise<{
       }
       if (backedUp)
         await fs.rename(backup, destination)
-      if (replaced || backedUp)
+      if (stopped) {
         await options.reload()
+        if (wasLoaded && !options.isLoaded(manifest.id, destination))
+          throw new Error('原目录已恢复，但原插件未能重新加载')
+      }
     }
     catch (restoreError) {
       keepBackup = true
-      throw new Error(`安装失败: ${String(error)}；恢复失败: ${String(restoreError)}。备份保留于 ${transaction}`)
+      throw new Error(`安装失败: ${String(error)}；恢复失败: ${String(restoreError)}。恢复数据保留于 ${await fs.pathExists(backup) ? transaction : destination}`)
     }
     throw new Error(`安装失败，${backedUp ? '已恢复原插件' : '未替换原插件'}: ${String(error)}`)
   }

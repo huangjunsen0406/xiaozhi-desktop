@@ -17,7 +17,7 @@ it('updates complete packages, restores the previous plugin on load failure and 
     await server.unloadAllExternalPlugins()
     return loadMcpPluginsFromConfig({ registry: server.getPluginRegistry(), pluginsDir, addTool: tool => server.addTool(tool), removeToolsByNames: names => server.removeToolsByNames(names) })
   }
-  const install = () => installMcpPlugin({ sourcePath: source, pluginsDir, reload, isLoaded: (id, directory) => server.getPluginRegistry().getPlugin(id)?.rootDir === directory })
+  const install = () => installMcpPlugin({ sourcePath: source, pluginsDir, unload: () => server.unloadAllExternalPlugins(), reload, isLoaded: (id, directory) => server.getPluginRegistry().getPlugin(id)?.rootDir === directory })
   const destination = path.join(pluginsDir, 'test.install')
   try {
     await fs.mkdir(source)
@@ -51,12 +51,12 @@ it('updates complete packages, restores the previous plugin on load failure and 
     await fs.writeFile(path.join(source, 'register.mjs'), 'export function register() { throw new Error(\'broken esm\') }')
     await assert.rejects(installAlias(), /已恢复原插件/)
     assert.equal(await server.findTool('test.install')!.callback({}), 'esm new')
-    await assert.rejects(installMcpPlugin({ sourcePath: root, pluginsDir, reload, isLoaded: () => false }), /manifest|清单/)
+    await assert.rejects(installMcpPlugin({ sourcePath: root, pluginsDir, unload: () => server.unloadAllExternalPlugins(), reload, isLoaded: () => false }), /manifest|清单/)
     const nested = path.join(destination, 'nested')
     await fs.mkdir(nested)
     await fs.writeFile(path.join(nested, 'manifest.json'), await fs.readFile(path.join(source, 'manifest.json')))
     await fs.writeFile(path.join(nested, 'register.mjs'), 'exports.register = () => {}')
-    await assert.rejects(installMcpPlugin({ sourcePath: nested, pluginsDir, reload, isLoaded: () => false }), /相互包含/)
+    await assert.rejects(installMcpPlugin({ sourcePath: nested, pluginsDir, unload: () => server.unloadAllExternalPlugins(), reload, isLoaded: () => false }), /相互包含/)
     await fs.symlink(path.join(destination, 'register.cjs'), path.join(source, 'escape.cjs'))
     await assert.rejects(install(), /符号链接/)
     const entryLink = path.join(root, 'entry-link')

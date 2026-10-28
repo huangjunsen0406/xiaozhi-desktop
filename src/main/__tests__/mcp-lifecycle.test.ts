@@ -99,8 +99,10 @@ it('bounds registration, cleans partial loads and supports returned and exported
   try {
     await plugin(
       'slow',
-      `exports.register = async host => {
-      host.onDispose(() => globalThis.__lifecycleEvents.push('slow cleaned'));
+      `const cleanup = () => globalThis.__lifecycleEvents.push('slow cleaned');
+      exports.dispose = cleanup;
+      exports.register = async host => {
+      host.onDispose(cleanup);
       host.tool('partial', 'partial')(() => 'x');
       await new Promise(resolve => setTimeout(resolve, 50));
       try { host.tool('late', 'late')(() => 'x') } catch { globalThis.__lifecycleEvents.push('late rejected') }
@@ -109,7 +111,7 @@ it('bounds registration, cleans partial loads and supports returned and exported
     await plugin(
       'good',
       `exports.register = host => () => { globalThis.__lifecycleEvents.push('returned') };
-      exports.dispose = () => { globalThis.__lifecycleEvents.push('exported') }`,
+      exports.dispose = () => { globalThis.__lifecycleEvents.push('exported'); throw new Error('cleanup failed') }`,
     )
     const result = await loadMcpPluginsFromConfig({
       registry,
@@ -121,7 +123,8 @@ it('bounds registration, cleans partial loads and supports returned and exported
     assert.equal(result.errors.length, 1)
     assert.match(result.errors[0].error, /注册超时/)
     assert.equal(registry.getPlugin('slow'), undefined)
-    await registry.getPlugin('good')!.dispose!()
+    await assert.rejects(Promise.resolve(registry.getPlugin('good')!.dispose!()), /资源清理失败/)
+    assert.deepEqual((await fs.readdir(root)).filter(name => name.startsWith('.runtime-')), [])
     await new Promise(resolve => setTimeout(resolve, 60))
     assert.equal(tools.size, 0)
     assert.deepEqual(events.__lifecycleEvents, [

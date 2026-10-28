@@ -11,6 +11,7 @@ import type { ServiceContainer } from '../core/ServiceContainer'
 import type { PluginSetupResult } from './health'
 import { setMcpToolRuntime } from '../mcp/McpContext'
 import { McpServer } from '../mcp/McpServer'
+import { runMcpPluginOperation } from '../mcp/plugins/operations'
 import { MusicPlayer } from '../mcp/tools/music/MusicPlayer'
 import { AudioPlugin } from '../plugins/AudioPlugin'
 import { ChatPlugin } from '../plugins/ChatPlugin'
@@ -51,7 +52,8 @@ export function bindSharedServices(container: ServiceContainer): void {
 export async function unbindSharedServices(container: ServiceContainer): Promise<void> {
   if (container.mcpServer) {
     try {
-      await container.mcpServer.detach()
+      const server = container.mcpServer
+      await runMcpPluginOperation(() => server.detach())
     }
     catch (error) {
       logger.debug('detach McpServer 失败', error)

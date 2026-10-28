@@ -4,6 +4,7 @@ import type { McpPluginDispose } from './types'
 export class McpPluginLifecycle {
   readonly controller = new AbortController()
   private disposers = new Set<McpPluginDispose>()
+  private disposedResources = new Map<McpPluginDispose, Promise<void>>()
   private disposal: Promise<void> | null = null
   private registering = true
 
@@ -26,6 +27,15 @@ export class McpPluginLifecycle {
     this.disposers.add(dispose)
   }
 
+  disposeResource(dispose: McpPluginDispose): Promise<void> {
+    const existing = this.disposedResources.get(dispose)
+    if (existing)
+      return existing
+    const result = Promise.resolve().then(dispose)
+    this.disposedResources.set(dispose, result)
+    return result
+  }
+
   dispose(timeoutMs = 3000): Promise<void> {
     if (this.disposal)
       return this.disposal
@@ -34,7 +44,7 @@ export class McpPluginLifecycle {
     this.disposal = runWithDeadline(
       async () => {
         const results = await Promise.allSettled(
-          Array.from(this.disposers).reverse().map(dispose => Promise.resolve().then(dispose)),
+          Array.from(this.disposers).reverse().map(dispose => this.disposeResource(dispose)),
         )
         this.disposers.clear()
         const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
