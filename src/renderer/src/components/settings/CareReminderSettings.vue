@@ -102,7 +102,7 @@ defineExpose(panel)
   <div class="care-reminder-settings">
     <NForm label-placement="left" label-width="140" :disabled="loading">
       <div class="section-title">
-        桌宠提醒
+        关怀提醒
       </div>
 
       <NFormItem label="开启关怀提醒">
@@ -114,13 +114,13 @@ defineExpose(panel)
           size="small"
           secondary
           :loading="demoLoading"
-          :disabled="loading"
+          :disabled="loading || demoLoading"
           @click="handleDemo"
         >
           演示一轮
         </NButton>
         <p class="hint demo-hint">
-          依次预览四类提醒文案，各约 5 秒
+          每隔约 5 秒预览一类；气泡约 5 秒，系统通知展示时间由系统控制
         </p>
       </div>
 
@@ -142,7 +142,7 @@ defineExpose(panel)
       </NFormItem>
 
       <p class="hint">
-        仅桌宠模式展示，不写入对话、无声音
+        可见桌宠使用气泡；其他模式、桌宠隐藏或最小化时使用静默系统通知。不写入对话、无语音；系统通知受系统权限和勿扰设置控制。
       </p>
     </NForm>
   </div>

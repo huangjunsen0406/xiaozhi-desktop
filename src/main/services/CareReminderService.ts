@@ -1,8 +1,8 @@
 /**
- * 桌宠本地关怀提醒调度
+ * 本地关怀提醒调度
  *
  * - 无语音 / 无 Opus / 不 sendText / 不写聊天记录
- * - 仅在 pets | live2d 模式下，经 bubble:show-local 展示
+ * - 可见桌宠使用本地气泡，其余场景使用静默系统通知
  * - 配置落盘 userData/care-reminders.json；设置变更热重启调度
  *
  * 生产间隔（代码常量，UI 不可改）：
@@ -12,7 +12,6 @@
  */
 
 import type {
-  BubbleLocalShowPayload,
   CareReminderConfig,
   CareReminderDemoResult,
   CareReminderTypeId,
@@ -21,17 +20,12 @@ import {
   DEFAULT_CARE_REMINDER_CONFIG,
   DeviceStateValue,
 } from '@shared/types'
-import { BrowserWindow } from 'electron'
+import { powerMonitor } from 'electron'
 import fs from 'fs-extra'
 import { getServiceContainer } from '../core/ServiceContainer'
 import { getLogger } from '../utils/logger'
 import { getCareRemindersConfigFile } from '../utils/paths'
-import {
-  ensureBubbleWindow,
-  getCurrentDisplayMode,
-  getLive2dWindow,
-  getPetsWindow,
-} from '../windows/windowManager'
+import { canPresentCareReminder, presentCareReminder } from './careReminderNotification'
 
 const logger = getLogger('CareReminderService')
 
@@ -86,6 +80,11 @@ const SLEEP_WINDOW_END_HOUR = 6
 
 let configCache: CareReminderConfig | null = null
 let started = false
+let suspended = false
+let locked = false
+let deliveryController = new AbortController()
+let demoController = new AbortController()
+const pendingTypes = new Set<CareReminderTypeId>()
 const timers = new Map<string, ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>>()
 /** 演示一轮专用定时器（与正式调度分离） */
 const demoTimers: Array<ReturnType<typeof setTimeout>> = []
@@ -196,11 +195,6 @@ function isInSleepWindow(): boolean {
   return hour >= SLEEP_WINDOW_START_HOUR || hour < SLEEP_WINDOW_END_HOUR
 }
 
-function isPetDisplayMode(): boolean {
-  const mode = getCurrentDisplayMode()
-  return mode === 'pets' || mode === 'live2d'
-}
-
 /**
  * 跳过 speaking / connecting；container 未就绪时保守跳过
  */
@@ -215,38 +209,22 @@ function shouldSkipForDeviceState(): boolean {
   }
 }
 
-/**
- * 向气泡窗推送本地提醒（不经 chat / protocol）
- */
-function sendLocalReminder(text: string): void {
-  const payload: BubbleLocalShowPayload = {
-    text,
-    durationMs: CARE_REMINDER_DISPLAY_MS,
-    source: 'reminder',
-  }
-
-  // 保证 bubble 窗存在（pets/live2d 通常已 ensure；冷启动错开后仍兜底）
+async function sendLocalReminder(text: string, signal: AbortSignal): Promise<boolean> {
   try {
-    ensureBubbleWindow()
+    const shown = await presentCareReminder(
+      text,
+      CARE_REMINDER_DISPLAY_MS,
+      signal,
+      () => !suspended && !locked && !shouldSkipForDeviceState(),
+    )
+    if (shown)
+      logger.info(`本地关怀提醒: ${text}`)
+    return shown
   }
   catch (error) {
-    logger.warn('ensureBubbleWindow 失败，仍尝试广播', error)
+    logger.warn('关怀提醒展示失败', error)
+    return false
   }
-
-  const windows = BrowserWindow.getAllWindows()
-  let sent = false
-  for (const win of windows) {
-    if (win.isDestroyed())
-      continue
-    // 广播；仅 BubbleView 订阅 onShowLocal。渲染端再 bubbleShow 贴角色窗
-    win.webContents.send('bubble:show-local', payload)
-    sent = true
-  }
-
-  if (!sent)
-    logger.debug('无可用窗口，跳过本地提醒展示')
-  else
-    logger.info(`本地关怀提醒: ${text}`)
 }
 
 function canFireType(type: CareReminderTypeId, intervalMs: number): boolean {
@@ -256,15 +234,11 @@ function canFireType(type: CareReminderTypeId, intervalMs: number): boolean {
   return true
 }
 
-function tryFirePeriodic(type: Exclude<CareReminderTypeId, 'sleep'>): void {
+async function tryFirePeriodic(type: Exclude<CareReminderTypeId, 'sleep'>): Promise<void> {
   const cfg = configCache ?? DEFAULT_CARE_REMINDER_CONFIG
-  if (!cfg.enabled || !cfg[type])
+  if (!cfg.enabled || !cfg[type] || suspended || locked || pendingTypes.has(type))
     return
-  if (!isPetDisplayMode())
-    return
-  if (isQuietHoursForPeriodic())
-    return
-  if (shouldSkipForDeviceState())
+  if (isQuietHoursForPeriodic() || shouldSkipForDeviceState())
     return
 
   const def = REMINDER_DEFS[type]
@@ -272,39 +246,41 @@ function tryFirePeriodic(type: Exclude<CareReminderTypeId, 'sleep'>): void {
     return
 
   const text = pickRandom(def.texts)
-  if (!text)
-    return
-
-  lastFiredAt.set(type, Date.now())
-  sendLocalReminder(text)
+  const signal = deliveryController.signal
+  pendingTypes.add(type)
+  try {
+    if (text && await sendLocalReminder(text, signal) && !signal.aborted)
+      lastFiredAt.set(type, Date.now())
+  }
+  finally {
+    if (signal === deliveryController.signal)
+      pendingTypes.delete(type)
+  }
 }
 
-function tryFireSleep(): void {
+async function tryFireSleep(): Promise<void> {
   const cfg = configCache ?? DEFAULT_CARE_REMINDER_CONFIG
-  if (!cfg.enabled || !cfg.sleep)
+  if (!cfg.enabled || !cfg.sleep || suspended || locked || pendingTypes.has('sleep'))
     return
-  if (!isPetDisplayMode())
-    return
-  if (!isInSleepWindow())
-    return
-  if (shouldSkipForDeviceState())
+  if (!isInSleepWindow() || shouldSkipForDeviceState())
     return
 
   const { nightKey } = localHourMinute()
-  if (sleepNightKey === nightKey)
+  if (sleepNightKey === nightKey || !canFireType('sleep', SLEEP_CHECK_MS))
     return
 
-  // cooldown：至少隔开一次检查周期量级，避免连弹
-  if (!canFireType('sleep', SLEEP_CHECK_MS))
-    return
-
-  const text = pickRandom(SLEEP_TEXTS)
-  if (!text)
-    return
-
-  sleepNightKey = nightKey
-  lastFiredAt.set('sleep', Date.now())
-  sendLocalReminder(text)
+  const signal = deliveryController.signal
+  pendingTypes.add('sleep')
+  try {
+    if (await sendLocalReminder(pickRandom(SLEEP_TEXTS), signal) && !signal.aborted) {
+      sleepNightKey = nightKey
+      lastFiredAt.set('sleep', Date.now())
+    }
+  }
+  finally {
+    if (signal === deliveryController.signal)
+      pendingTypes.delete('sleep')
+  }
 }
 
 function clearAllTimers(): void {
@@ -319,6 +295,8 @@ function clearDemoTimers(): void {
   for (const timer of demoTimers)
     clearTimeout(timer)
   demoTimers.length = 0
+  demoController.abort()
+  demoController = new AbortController()
 }
 
 function textForDemoType(type: CareReminderTypeId): string {
@@ -327,62 +305,35 @@ function textForDemoType(type: CareReminderTypeId): string {
   return pickRandom(REMINDER_DEFS[type].texts)
 }
 
-/**
- * 是否存在可用桌宠 surface（当前 pets/live2d，或窗已创建未销毁）
- */
-function hasPetSurfaceForDemo(): boolean {
-  if (isPetDisplayMode())
-    return true
-  const pets = getPetsWindow()
-  const live2d = getLive2dWindow()
-  return Boolean(
-    (pets && !pets.isDestroyed())
-    || (live2d && !live2d.isDestroyed()),
-  )
-}
-
-/**
- * 演示一轮：water → walk → eyes → sleep，在 0/5/10/15s 各弹一次。
- * 绕过总开关 / 类型开关 / 静默时段 / cooldown / 设备状态 / sleep 夜间窗口；
- * 仍走 bubble:show-local。再次调用会从 water 重开；四类结束后自动停止。
- * 无桌宠 surface 时 no-op（started: false）。
- */
+/** Demo previews ignore configuration and time windows, but retain power/device exclusions. */
 export function startDemoRound(): CareReminderDemoResult {
   clearDemoTimers()
 
-  if (!hasPetSurfaceForDemo()) {
-    logger.info('关怀提醒演示跳过：无桌宠 surface')
-    return {
-      started: false,
-      message: '请先切换到桌宠（Pets / Live2D）模式后再演示',
-    }
+  if (suspended || locked || shouldSkipForDeviceState()) {
+    return { started: false, message: '当前设备忙碌或系统休眠、锁屏，稍后再试' }
+  }
+  if (!canPresentCareReminder()) {
+    logger.warn('关怀提醒演示跳过：当前系统不支持通知且无可见桌宠')
+    return { started: false, message: '当前系统不支持通知，切换至可见桌宠后可预览气泡' }
   }
 
-  logger.info('关怀提醒演示一轮开始')
-
+  const signal = demoController.signal
   for (let i = 0; i < DEMO_ORDER.length; i++) {
     const type = DEMO_ORDER[i]!
-    const delayMs = i * DEMO_STEP_MS
     const timer = setTimeout(() => {
-      const text = textForDemoType(type)
-      if (!text)
-        return
-      sendLocalReminder(text)
-      logger.info(`关怀提醒演示: ${type} → ${text}`)
-    }, delayMs)
+      void sendLocalReminder(textForDemoType(type), signal)
+    }, i * DEMO_STEP_MS)
     demoTimers.push(timer)
   }
-
-  // 末项展示结束后清理引用（自动结束）
   const cleanup = setTimeout(() => {
-    clearDemoTimers()
+    demoTimers.length = 0
     logger.info('关怀提醒演示一轮结束')
   }, DEMO_ORDER.length * DEMO_STEP_MS)
   demoTimers.push(cleanup)
 
   return {
     started: true,
-    message: '已开始演示一轮提醒（四类各约 5 秒）',
+    message: '已启动四类提醒预览；可见桌宠使用气泡，其余使用静默系统通知',
   }
 }
 
@@ -393,9 +344,9 @@ function schedulePeriodic(type: Exclude<CareReminderTypeId, 'sleep'>): void {
 
   const first = setTimeout(() => {
     timers.delete(firstKey)
-    tryFirePeriodic(type)
+    void tryFirePeriodic(type)
     const loop = setInterval(() => {
-      tryFirePeriodic(type)
+      void tryFirePeriodic(type)
     }, def.intervalMs)
     timers.set(loopKey, loop)
   }, def.startOffsetMs)
@@ -409,9 +360,9 @@ function scheduleSleep(): void {
 
   const first = setTimeout(() => {
     timers.delete(firstKey)
-    tryFireSleep()
+    void tryFireSleep()
     const loop = setInterval(() => {
-      tryFireSleep()
+      void tryFireSleep()
     }, SLEEP_CHECK_MS)
     timers.set(loopKey, loop)
   }, SLEEP_START_OFFSET_MS)
@@ -424,6 +375,11 @@ function scheduleSleep(): void {
  */
 function restartCareReminderScheduler(): void {
   clearAllTimers()
+  deliveryController.abort()
+  deliveryController = new AbortController()
+  pendingTypes.clear()
+  if (!started || suspended || locked)
+    return
   const cfg = configCache ?? DEFAULT_CARE_REMINDER_CONFIG
   if (!cfg.enabled) {
     logger.info('关怀提醒总开关关闭，调度已停止')
@@ -447,26 +403,54 @@ function restartCareReminderScheduler(): void {
   })
 }
 
-/**
- * 应用启动后调用：读配置并开始调度
- */
+function onSuspend(): void {
+  suspended = true
+  clearDemoTimers()
+  restartCareReminderScheduler()
+}
+
+function onResume(): void {
+  suspended = false
+  restartCareReminderScheduler()
+}
+
+function onLock(): void {
+  locked = true
+  clearDemoTimers()
+  restartCareReminderScheduler()
+}
+
+function onUnlock(): void {
+  locked = false
+  restartCareReminderScheduler()
+}
+
+/** 应用启动后调用：读配置并开始调度。 */
 export async function startCareReminderService(): Promise<void> {
-  if (started) {
-    restartCareReminderScheduler()
+  if (started)
     return
-  }
   started = true
+  suspended = false
+  locked = powerMonitor.getSystemIdleState(1) === 'locked'
+  powerMonitor.on('suspend', onSuspend)
+  powerMonitor.on('resume', onResume)
+  powerMonitor.on('lock-screen', onLock)
+  powerMonitor.on('unlock-screen', onUnlock)
   await getCareReminderConfig()
   restartCareReminderScheduler()
   logger.info('CareReminderService 已启动')
 }
 
-/**
- * 应用退出前停止
- */
+/** 应用退出前停止，恢复事件不得重启已停止的服务。 */
 export function stopCareReminderService(): void {
+  started = false
   clearAllTimers()
   clearDemoTimers()
-  started = false
+  deliveryController.abort()
+  pendingTypes.clear()
+  powerMonitor.removeListener('suspend', onSuspend)
+  powerMonitor.removeListener('resume', onResume)
+  powerMonitor.removeListener('lock-screen', onLock)
+  powerMonitor.removeListener('unlock-screen', onUnlock)
   logger.info('CareReminderService 已停止')
 }

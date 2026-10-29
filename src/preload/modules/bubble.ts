@@ -94,6 +94,7 @@ export const bubbleApi = {
         callback(payload)
     }
     ipcRenderer.on('bubble:show-local', handler)
+    ipcRenderer.send('bubble:local-ready')
     return () => ipcRenderer.off('bubble:show-local', handler)
   },
 

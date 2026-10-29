@@ -415,6 +415,10 @@ export const ensureBubbleWindow = createWindowEnsurer(
   buildBubbleWindow,
 )
 
+export function getBubbleWindow(): BrowserWindow | null {
+  return windowRefs.bubble.current
+}
+
 // 角色头顶相对于其窗口顶边的偏移（CSS px）。
 // Live2D / Pets 由渲染端 measure 后经 pet-shell / bubble IPC 上报；用于气泡 anchor。
 let live2dAnchorOffsetY = 0

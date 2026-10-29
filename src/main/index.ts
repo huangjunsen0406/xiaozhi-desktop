@@ -199,7 +199,7 @@ app.whenReady().then(async () => {
   // 注册自定义协议处理器
   registerModelProtocolHandler()
 
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.xiaozhi.desktop')
 
   app.on('browser-window-created', (_, window) => {
     setDevDockIconOnce()

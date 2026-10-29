@@ -94,6 +94,46 @@ function desktopBoundaries(testFile) {
       'windows/behaviors/DragBehavior': `export const isWindowDragging = () => false`,
     })
   }
+  if (path.basename(testFile) === 'care-reminder.test.ts') {
+    Object.assign(stubs, {
+      'electron': `
+        import { EventEmitter } from 'node:events'
+        export const ipcMain = new EventEmitter()
+        export const ipcRenderer = Object.assign(new EventEmitter(), {
+          send: (channel, ...args) => {
+            const contents = globalThis.__careReminderRuntime.bubble.webContents
+            ipcMain.emit(channel, { sender: contents, senderFrame: contents.mainFrame }, ...args)
+          },
+        })
+        export const powerMonitor = new EventEmitter()
+        powerMonitor.getSystemIdleState = () => globalThis.__careReminderRuntime.locked ? 'locked' : 'active'
+        export class Notification extends EventEmitter {
+          static isSupported() { return globalThis.__careReminderRuntime.supported }
+          constructor(options) {
+            super()
+            this.options = options
+            globalThis.__careReminderRuntime.notifications.push(this)
+          }
+          show() {
+            const fixture = globalThis.__careReminderRuntime
+            if (fixture.notificationResult === 'show') this.emit('show')
+            else if (fixture.notificationResult === 'failed') this.emit('failed', {}, 'denied')
+          }
+          close() { this.emit('close') }
+        }
+      `,
+      'windows/windowManager': `
+        export const getCurrentDisplayMode = () => globalThis.__careReminderRuntime.mode
+        export const getPetsWindow = () => globalThis.__careReminderRuntime.pet
+        export const getLive2dWindow = () => globalThis.__careReminderRuntime.pet
+        export const getBubbleWindow = () => globalThis.__careReminderRuntime.bubble
+        export const ensureBubbleWindow = () => globalThis.__careReminderRuntime.bubble
+      `,
+      'core/ServiceContainer': `export const getServiceContainer = () => ({ getDeviceState: () => globalThis.__careReminderRuntime.deviceState })`,
+      'utils/paths': `export const getCareRemindersConfigFile = () => globalThis.__careReminderRuntime.configPath`,
+      'resources/icon.png?asset': `export default 'care-test-icon.png'`,
+    })
+  }
   return {
     name: 'unit-desktop-boundaries',
     setup(builder) {
