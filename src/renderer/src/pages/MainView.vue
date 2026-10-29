@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { EmotionType } from '../types/emotion'
 import { NButton, NMarquee } from 'naive-ui'
 import { watch } from 'vue'
 import Dots from '../components/Dots.vue'
@@ -19,21 +18,13 @@ const emotion = useEmotion({
 
 // 监听 store 中的表情变化并同步到 emotion
 watch(() => appStore.emotion, (newEmotion) => {
-  emotion.setEmotion(newEmotion as EmotionType)
+  emotion.setEmotion(newEmotion)
 }, { immediate: true })
 
 // 切换通话状态（拨打/挂断）
 async function toggleCall() {
   try {
-    // 只要不是 idle 状态就挂断（包括 connecting、listening、speaking）
-    if (appStore.deviceState !== 'idle') {
-      console.log('挂断电话')
-      await appStore.stopAutoConversation()
-    }
-    else {
-      console.log('拨打电话')
-      await appStore.startAutoConversation()
-    }
+    await appStore.toggleAutoConversation()
   }
   catch (error) {
     console.error('切换通话状态失败', error)
@@ -85,8 +76,8 @@ async function toggleCall() {
       <div class="flex flex-col items-center mb-8">
         <div class="flex items-center gap-2" style="-webkit-app-region: no-drag">
           <!-- 电话按钮：点击拨打/挂断 -->
-          <NButton quaternary circle @click="toggleCall">
-            <icon-carbon-phone v-if="appStore.deviceState === 'idle'" class="w-5 h-5 text-green-500" />
+          <NButton quaternary circle :disabled="appStore.isConversationPending" @click="toggleCall">
+            <icon-carbon-phone v-if="!appStore.isAutoConversationActive" class="w-5 h-5 text-green-500" />
             <icon-carbon-phone-block-filled v-else class="w-5 h-5 text-red-500" />
           </NButton>
         </div>

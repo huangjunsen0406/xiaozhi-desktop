@@ -31,7 +31,6 @@ export interface ChatSession {
   title: string
   /** 会话首条消息内容（会话列表摘要） */
   preview: string | null
-  active: boolean
   messageCount: number
   lastMessageAt: number
 }

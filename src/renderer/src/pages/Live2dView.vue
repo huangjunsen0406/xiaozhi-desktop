@@ -624,15 +624,10 @@ function setupModel(modelInstance: Live2DModel): void {
  * 双击窗口区域切换通话状态
  */
 async function toggleCall() {
+  if (appStore.isConversationPending)
+    return
   try {
-    if (appStore.deviceState !== 'idle') {
-      console.log('[Live2D] 挂断电话')
-      await appStore.stopAutoConversation()
-    }
-    else {
-      console.log('[Live2D] 拨打电话')
-      await appStore.startAutoConversation()
-    }
+    await appStore.toggleAutoConversation()
   }
   catch (error) {
     console.error('[Live2D] 切换通话状态失败', error)

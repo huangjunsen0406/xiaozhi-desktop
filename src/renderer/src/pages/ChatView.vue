@@ -1,256 +1,93 @@
 <script setup lang="ts">
 import { NButton, NDropdown } from 'naive-ui'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AudioWave from '../components/AudioWave.vue'
 import ChatMessage from '../components/ChatMessage.vue'
 import TitleBar from '../components/TitleBar.vue'
 import { useAppStore } from '../stores/app'
 
 const isMac = window.api.getPlatform() === 'darwin'
-// Win/Linux 无边框：用自定义 TitleBar 提供最小化/最大化/关闭
-
-// UI 状态
 const inputValue = ref('')
 const isSidebarOpen = ref(true)
 const messagesContainer = ref<HTMLElement>()
-
-// 麦克风按钮的本地状态（用于立即响应，避免等待后端状态更新）
-const isLocalListening = ref(false)
-
-// 使用全局 App Store
 const appStore = useAppStore()
-
-// 计算唯一的消息 key（使用 id 或 timestamp 作为后备）
 const messageKeys = computed(() =>
-  appStore.messages.map(msg => msg.id ?? `${msg.timestamp}-${msg.role}`),
+  appStore.messages.map(message => message.id ?? `${message.timestamp}-${message.role}`),
 )
 
-// 预计算会话列表的禁用状态，避免在模板中重复计算
-const sessionsWithDeleteStatus = computed(() =>
-  appStore.sessions.map(item => ({
-    ...item,
-    // 按 session 管理后均可删除（含当前）
-    canDelete: true,
-  })),
-)
+watch(() => appStore.messages.length, async (length, previous) => {
+  if (length > previous) {
+    await nextTick()
+    scrollToBottom()
+  }
+})
 
-// 监听后端状态变化，同步到本地状态
-watch(
-  () => appStore.isManualMode,
-  (newValue) => {
-    isLocalListening.value = newValue
-  },
-  { immediate: true },
-)
-
-// 优化：只在消息长度变化且最后一条消息是新增时才滚动
-// 避免用户输入时频繁触发滚动
-let lastMessageLength = 0
-watch(
-  () => appStore.messages.length,
-  (newLength) => {
-    if (newLength > lastMessageLength) {
-      // 只在消息增加时滚动
-      lastMessageLength = newLength
-      nextTick(() => {
-        scrollToBottom()
-      })
-    }
-  },
-)
-
-/**
- * 组件挂载
- */
 onMounted(async () => {
-  console.log('组件已挂载')
-
-  // 加载会话列表
-  await appStore.loadSessions()
-
-  // 确保有当前会话
-  if (!appStore.currentSessionId) {
-    if (appStore.sessions.length > 0) {
-      console.log('切换到第一个会话:', appStore.sessions[0].sessionId)
-      await switchSession(appStore.sessions[0].sessionId)
-    }
-    else {
-      // 无历史：不预创建日会话，等服务端 session / 首条消息
-      console.log('暂无会话，等待服务端 session_id')
-    }
-  }
-  else {
-    console.log('使用当前会话:', appStore.currentSessionId, '消息数:', appStore.messages.length)
-  }
-
-  // 滚动到底部
+  await appStore.ensureSelectedSession()
   await nextTick()
   scrollToBottom()
 })
 
-/**
- * 组件卸载
- */
-onUnmounted(() => {
-  console.log('组件卸载')
-})
-
-/**
- * 发送消息
- * 互斥：如果有模式在运行，先停止
- */
-async function sendMessage() {
+async function sendMessage(): Promise<void> {
   const text = inputValue.value.trim()
-  if (!text)
+  if (!text || appStore.isConversationPending)
     return
-
   try {
-    console.log('发送消息:', text)
-
-    // 互斥逻辑：停止任何正在运行的模式
-    if (appStore.isAutoMode) {
-      console.log('发送文本前停止自动模式')
-      await appStore.stopAutoConversation()
-    }
-    if (isLocalListening.value || appStore.isManualMode) {
-      console.log('发送文本前停止手动模式')
-      isLocalListening.value = false
-      await appStore.stopListeningManual()
-    }
-
-    // 确保有当前会话（无则等主进程按服务端 session 创建）
-    if (!appStore.currentSessionId) {
-      await appStore.ensureActiveSession()
-    }
-
-    // 清空输入框
-    inputValue.value = ''
-
-    // 滚动到底部
-    await nextTick()
-    scrollToBottom()
-
-    // 发送到服务器
-    // 后端会保存消息并通过 broadcastMessageAdded 广播事件
-    // App.vue 监听事件后会自动 loadMessages 刷新界面
-    await appStore.sendText(text)
+    await appStore.submitText(text)
+    if (inputValue.value.trim() === text)
+      inputValue.value = ''
   }
   catch (error) {
     console.error('发送消息失败', error)
   }
 }
 
-/**
- * 切换会话
- */
-async function switchSession(sessionId: string) {
-  console.log('请求切换会话:', sessionId)
+async function switchSession(sessionId: string): Promise<void> {
   await appStore.switchSession(sessionId)
-
-  // 滚动到底部
   await nextTick()
   scrollToBottom()
-
-  console.log('会话已切换，当前会话ID:', appStore.currentSessionId, '消息数:', appStore.messages.length)
 }
 
-/**
- * 删除会话
- */
-async function deleteSession(sessionId: string) {
-  await appStore.deleteSession(sessionId)
-
-  // 滚动到底部
-  await nextTick()
-  scrollToBottom()
-
-  console.log('会话已删除')
-}
-
-/**
- * 滚动到底部
- */
-function scrollToBottom() {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+async function deleteSession(sessionId: string): Promise<void> {
+  try {
+    await appStore.deleteSession(sessionId)
+  }
+  catch (error) {
+    console.error('删除会话失败', error)
   }
 }
 
-/**
- * 切换侧边栏
- */
-function toggleSidebar() {
+function scrollToBottom(): void {
+  if (messagesContainer.value)
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+}
+
+function toggleSidebar(): void {
   isSidebarOpen.value = !isSidebarOpen.value
 }
 
-/**
- * 处理麦克风按钮点击
- * 智能判断：如果正在监听则停止，否则开始监听
- * 互斥：如果自动模式激活，先停止自动模式
- */
-async function handleMicrophoneClick() {
+async function handleMicrophoneClick(): Promise<void> {
   try {
-    // 如果自动模式正在运行，先停止
-    if (appStore.isAutoMode) {
-      console.log('检测到自动模式激活，先停止自动模式')
-      await appStore.stopAutoConversation()
-      // 等待状态更新
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-
-    // 如果正在监听（手动模式），则停止
-    if (isLocalListening.value) {
-      isLocalListening.value = false
-      await appStore.stopListeningManual()
-    }
-    else {
-      // 否则（包括空闲、说话等），立即设置本地状态，然后开始监听
-      isLocalListening.value = true
-      await appStore.startListeningManual()
-    }
+    await appStore.toggleManualListening()
   }
   catch (error) {
-    console.error('麦克风按钮点击处理失败', error)
-    isLocalListening.value = false
+    console.error('切换手动监听失败', error)
   }
 }
 
-/**
- * 处理电话按钮点击（自动模式）
- * 互斥：如果手动模式激活，先停止手动模式
- */
-async function handlePhoneClick() {
+async function handlePhoneClick(): Promise<void> {
   try {
-    // 如果手动模式正在运行，先停止
-    if (isLocalListening.value || appStore.isManualMode) {
-      console.log('检测到手动模式激活，先停止手动模式')
-      isLocalListening.value = false
-      await appStore.stopListeningManual()
-      // 等待状态更新
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-
-    // 切换自动模式
-    if (appStore.isAutoMode) {
-      await appStore.stopAutoConversation()
-    }
-    else {
-      await appStore.startAutoConversation()
-    }
+    await appStore.toggleAutoConversation()
   }
   catch (error) {
-    console.error('电话按钮点击处理失败', error)
+    console.error('切换自动对话失败', error)
   }
 }
 
-/**
- * 处理回车发送
- */
-function handleKeydown(event: KeyboardEvent) {
+function handleKeydown(event: KeyboardEvent): void {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    sendMessage()
+    void sendMessage()
   }
 }
 </script>
@@ -284,7 +121,7 @@ function handleKeydown(event: KeyboardEvent) {
         <!-- History List -->
         <div class="flex-1 overflow-y-auto px-2 space-y-1">
           <div
-            v-for="item in sessionsWithDeleteStatus"
+            v-for="item in appStore.sessions"
             :key="item.id"
             class="group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors whitespace-nowrap relative"
             :class="[
@@ -304,7 +141,7 @@ function handleKeydown(event: KeyboardEvent) {
               v-if="item.active && isSidebarOpen"
               trigger="click"
               :options="[
-                { label: '删除对话', key: 'delete', disabled: !item.canDelete },
+                { label: '删除对话', key: 'delete', disabled: false },
               ]"
               @select="(key: string) => key === 'delete' && deleteSession(item.sessionId)"
             >
@@ -362,10 +199,11 @@ function handleKeydown(event: KeyboardEvent) {
                 circle
                 size="small"
                 class="transition-colors duration-200"
-                :class="[appStore.isAutoMode ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
+                :class="[appStore.isAutoConversationActive ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
+                :disabled="appStore.isConversationPending"
                 @click="handlePhoneClick"
               >
-                <icon-carbon-phone-block-filled v-if="appStore.isAutoMode" class="w-4 h-4" />
+                <icon-carbon-phone-block-filled v-if="appStore.isAutoConversationActive" class="w-4 h-4" />
                 <icon-carbon-phone v-else class="w-4 h-4" />
               </NButton>
 
@@ -375,17 +213,18 @@ function handleKeydown(event: KeyboardEvent) {
                 circle
                 size="small"
                 class="transition-colors duration-200"
-                :class="[isLocalListening ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
+                :class="[appStore.isManualListening ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
+                :disabled="appStore.isConversationPending"
                 @click="handleMicrophoneClick"
               >
-                <AudioWave v-if="isLocalListening" :active="true" class="w-4 h-4" />
+                <AudioWave v-if="appStore.isManualListening" :active="true" class="w-4 h-4" />
                 <icon-carbon-microphone v-else class="w-4 h-4" />
               </NButton>
               <NButton
                 circle
                 size="small"
                 class="bg-[#E5E5E5] dark:bg-gray-700 text-white dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 border-none"
-                :disabled="!inputValue"
+                :disabled="!inputValue.trim() || appStore.isConversationPending"
                 @click="sendMessage"
               >
                 <icon-carbon-arrow-up class="w-4 h-4" />

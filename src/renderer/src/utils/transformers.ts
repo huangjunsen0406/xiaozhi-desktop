@@ -11,10 +11,7 @@ import { formatSessionListTitle } from './dateUtils'
  * 将 IPC ChatSession 转换为前端 ChatSession
  * 列表优先展示首条消息摘要（preview），标题回退 formatSessionListTitle
  */
-export function mapIpcSessionToChatSession(
-  session: IpcChatSession,
-  isActive: boolean,
-): ChatSession {
+export function mapIpcSessionToChatSession(session: IpcChatSession): ChatSession {
   const preview = session.preview?.replace(/\s+/g, ' ').trim() || null
   const title = formatSessionListTitle(session.title, session.started_at, session.session_id)
   return {
@@ -23,7 +20,6 @@ export function mapIpcSessionToChatSession(
     // 侧栏：有首条消息摘要用 preview；否则 title（新会话为「新对话」）
     title,
     preview: preview || title,
-    active: isActive,
     messageCount: session.message_count,
     lastMessageAt: session.last_message_at ?? session.started_at,
   }

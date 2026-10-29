@@ -8,16 +8,15 @@ const appStore = useAppStore()
 // 发送文本消息
 async function handleSendText() {
   const message = text.value.trim()
-  if (!message) {
+  if (!message || appStore.isConversationPending) {
     return
   }
 
-  // 清空输入框
-  text.value = ''
-
   try {
     // 通过 store 发送文本
-    await appStore.sendText(message)
+    await appStore.submitText(message)
+    if (text.value.trim() === message)
+      text.value = ''
   }
   catch (error) {
     console.error('发送文本失败', error)
@@ -45,7 +44,7 @@ function handleKeyDown(event: KeyboardEvent) {
           @keydown="handleKeyDown"
         />
         <div class="flex items-center gap-[10px]">
-          <NButton circle type="primary" size="small" @click="handleSendText">
+          <NButton circle type="primary" size="small" :disabled="!text.trim() || appStore.isConversationPending" @click="handleSendText">
             <icon-carbon-send-alt class="w-4 h-4 dark:text-white" />
           </NButton>
         </div>

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { EmotionType } from '../types/emotion'
 import { onMounted, onUnmounted, watch } from 'vue'
 import { useEmotion } from '../composables/useEmotion'
 import { useAppStore } from '../stores/app'
@@ -11,7 +10,7 @@ const emotion = useEmotion({
 })
 
 watch(() => appStore.emotion, (newEmotion) => {
-  emotion.setEmotion(newEmotion as EmotionType)
+  emotion.setEmotion(newEmotion)
 }, { immediate: true })
 
 const pressDragHandlers = {

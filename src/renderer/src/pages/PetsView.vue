@@ -636,15 +636,10 @@ function maybeWaveOnRehover(wasHovered: boolean, nowHovered: boolean): void {
  * 双击窗口区域切换通话状态
  */
 async function toggleCall() {
+  if (appStore.isConversationPending)
+    return
   try {
-    if (appStore.deviceState !== 'idle') {
-      console.log('[Pets] 挂断电话')
-      await appStore.stopAutoConversation()
-    }
-    else {
-      console.log('[Pets] 拨打电话')
-      await appStore.startAutoConversation()
-    }
+    await appStore.toggleAutoConversation()
   }
   catch (error) {
     console.error('[Pets] 切换通话状态失败', error)
