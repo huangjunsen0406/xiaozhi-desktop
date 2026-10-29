@@ -7,8 +7,8 @@ import { unwrapIpcResult } from '../utils/ipc'
 
 export const backgroundAudioApi = {
   // 监听音频命令
-  onAudioCommand: (callback: (command: string, data?: unknown) => void): () => void => {
-    const handler = (_: Electron.IpcRendererEvent, command: string, data?: unknown) => callback(command, data)
+  onAudioCommand: (callback: (command: string, data?: Record<string, unknown>) => void): () => void => {
+    const handler = (_: Electron.IpcRendererEvent, command: string, data?: Record<string, unknown>) => callback(command, data)
     ipcRenderer.on('audio:command', handler)
     return () => ipcRenderer.off('audio:command', handler)
   },

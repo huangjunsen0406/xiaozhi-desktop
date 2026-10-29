@@ -2,6 +2,7 @@ import type { IpcResult } from '@shared/types'
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
 import { getLogger } from '../../utils/logger'
+import { isPlainObject } from './validation'
 
 const logger = getLogger('IpcMiddleware')
 
@@ -95,6 +96,10 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
         return `参数 ${key} 必须是数组`
       }
     }
+    else if (rule.type === 'object') {
+      if (!isPlainObject(value))
+        return `参数 ${key} 必须是普通对象`
+    }
     else {
       const actualType = typeof value
       const expectedType = rule.type
@@ -124,6 +129,8 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
 
     // 数字特定校验
     if (rule.type === 'number' && typeof value === 'number') {
+      if (!Number.isFinite(value))
+        return `参数 ${key} 必须是有限数字`
       if (rule.min !== undefined && value < rule.min) {
         return `参数 ${key} 不能小于 ${rule.min}`
       }
@@ -168,7 +175,7 @@ function formatError(error: unknown): string {
  *
  * @param config IPC 处理器配置
  */
-export function createIpcHandler(config: IpcHandlerConfig): void {
+export function createIpcHandler<T = unknown>(config: IpcHandlerConfig<NoInfer<T>>): void {
   const { channel, schema, verbose = false, handler } = config
   const prefix = `[IPC:${channel}]`
 
@@ -263,7 +270,7 @@ export function success<T>(data?: T): IpcResponse<T | undefined> {
   return {
     success: true,
     data,
-  } as IpcResponse<T | undefined>
+  }
 }
 
 /**

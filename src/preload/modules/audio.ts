@@ -44,10 +44,10 @@ export const audioApi = {
     return unwrapIpcResult<AecStatus>(result, '上报 AEC 采集状态失败')
   },
 
-  // 获取默认设备 ID
-  getDefaultDeviceId: async (kind: 'input' | 'output'): Promise<string | null> => {
-    const result: unknown = await ipcRenderer.invoke('audio:get-default-device-id', kind)
-    return unwrapIpcResult<string | null>(result, '获取默认设备ID失败')
+  // 获取配置中保存的首选设备名称
+  getPreferredDeviceName: async (kind: 'input' | 'output'): Promise<string | null> => {
+    const result: unknown = await ipcRenderer.invoke('audio:get-preferred-device-name', kind)
+    return unwrapIpcResult<string | null>(result, '获取首选设备名称失败')
   },
 
   // 获取系统音量

@@ -1,4 +1,8 @@
 export type SourceType = 'text' | 'voice' | 'tts' | 'image'
+
+export function isSourceType(value: unknown): value is SourceType {
+  return value === 'text' || value === 'voice' || value === 'tts' || value === 'image'
+}
 export type ImageSourceType = 'screenshot' | 'camera'
 
 export function isImageSourceType(value: unknown): value is ImageSourceType {

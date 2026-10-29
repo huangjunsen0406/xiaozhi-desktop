@@ -1,11 +1,9 @@
 import type {
-  AudioSettings,
-  CameraConfig,
   IpcResult,
   MqttInfo,
   OtaConfigResponse,
   ServerMessage,
-  WakeWordConfig,
+  SourceType,
 } from '@shared/types'
 /**
  * 数据库类型定义
@@ -131,7 +129,7 @@ export interface DbChatMessage {
   role: 'user' | 'assistant'
   content: string
   emotion: string | null
-  source_type: string
+  source_type: SourceType
   image_data: Buffer | null
   timestamp: number
   created_at: number
@@ -179,17 +177,27 @@ export interface DbShortcutConfig {
 // 导出共享类型
 export type { IpcResult, MqttInfo, OtaConfigResponse, ServerMessage }
 
-/**
- * 摄像头配置更新类型
- */
-export type CameraConfigUpdate = Partial<CameraConfig>
+/** 数据库更新使用列名；布尔列由存储层转换成 0/1。 */
+export type DbAudioSettingsPatch = Partial<Omit<
+  DbAudioSettings,
+  'id' | 'created_at' | 'updated_at' | 'enable_noise_reduction' | 'enable_echo_cancellation'
+>> & {
+  enable_noise_reduction?: boolean
+  enable_echo_cancellation?: boolean
+}
 
-/**
- * 唤醒词配置更新类型
- */
-export type WakeWordConfigUpdate = Partial<WakeWordConfig>
+export type DbCameraConfigPatch = Partial<Omit<
+  DbCameraConfig,
+  'id' | 'created_at' | 'updated_at' | 'enabled' | 'use_local_vision'
+>> & {
+  enabled?: boolean
+  use_local_vision?: boolean
+}
 
-/**
- * 音频配置更新类型
- */
-export type AudioSettingsUpdate = Partial<AudioSettings>
+export type DbWakeWordConfigPatch = Partial<Omit<
+  DbWakeWordConfig,
+  'id' | 'created_at' | 'updated_at' | 'enabled' | 'greet'
+>> & {
+  enabled?: boolean
+  greet?: boolean
+}

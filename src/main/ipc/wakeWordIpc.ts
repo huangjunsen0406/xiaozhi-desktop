@@ -1,3 +1,5 @@
+import type { WakeWordConfig } from '@shared/types'
+import type { DbWakeWordConfigPatch } from '../types/database'
 import type { IpcContext } from '../types/ipc'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -6,8 +8,25 @@ import {
   resolveWakeWordKeyword,
 } from '../wake-word/keywordsFile'
 import { createIpcHandler, failure, success } from './middleware'
+import { optionalBoolean, optionalNumber, optionalString, parseObject } from './middleware/validation'
 
 const logger = getLogger('WakeWordIpc')
+
+function parseWakeWordUpdate(value: unknown): Partial<WakeWordConfig> {
+  const input = parseObject(value)
+  const language = optionalString(input, 'language')
+  if (language !== undefined && language !== 'zh' && language !== 'en')
+    throw new Error('language 必须是 zh 或 en')
+  return {
+    enabled: optionalBoolean(input, 'enabled'),
+    greet: optionalBoolean(input, 'greet'),
+    language,
+    keyword: optionalString(input, 'keyword'),
+    threshold: optionalNumber(input, 'threshold', { min: 0, max: 1 }),
+    score: optionalNumber(input, 'score', { min: 0 }),
+    cooldownMs: optionalNumber(input, 'cooldownMs', { min: 0, integer: true }),
+  }
+}
 
 /**
  * 注册唤醒词相关的 IPC 通道（createIpcHandler + IpcResult）
@@ -30,15 +49,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
       updates: { type: 'object', required: true },
     },
     handler: async (_event, updatesUnknown: unknown) => {
-      const updates = updatesUnknown as {
-        enabled?: boolean
-        language?: string
-        keyword?: string
-        threshold?: number
-        score?: number
-        cooldownMs?: number
-        greet?: boolean
-      }
+      const updates = parseWakeWordUpdate(updatesUnknown)
       logger.info('更新唤醒词配置', updates)
 
       const current = db.getFormattedWakeWordConfig()
@@ -78,16 +89,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
       }
 
       // 3. 再写 DB
-      const dbUpdates: {
-        enabled?: boolean
-        language?: string
-        threshold?: number
-        score?: number
-        cooldown_ms?: number
-        keyword_zh?: string
-        keyword_en?: string
-        greet?: boolean
-      } = {}
+      const dbUpdates: DbWakeWordConfigPatch = {}
       if (updates.enabled !== undefined)
         dbUpdates.enabled = updates.enabled
       if (updates.language !== undefined)

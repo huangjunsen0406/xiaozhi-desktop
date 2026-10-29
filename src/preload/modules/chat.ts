@@ -49,28 +49,7 @@ export const chatApi = {
    */
   getMessages: async (sessionId: string, limit?: number, offset = 0): Promise<ChatMessage[]> => {
     const result: unknown = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset)
-    // 将 IPC 传输后的图片数据转换回 Uint8Array
-    const data = unwrapIpcResult<ChatMessage[] | undefined>(result, '获取消息失败')
-    const messages = (data ?? []).map((msg: ChatMessage) => {
-      if (msg.image_data) {
-        const imageData = msg.image_data as { type?: string, data?: number[] } | number[]
-        // IPC 传输后 Uint8Array 会变成 {type: 'Buffer', data: [...]} 或普通数组
-        if (typeof imageData === 'object' && 'type' in imageData && imageData.type === 'Buffer' && Array.isArray(imageData.data)) {
-          return {
-            ...msg,
-            image_data: new Uint8Array(imageData.data),
-          }
-        }
-        else if (Array.isArray(imageData)) {
-          return {
-            ...msg,
-            image_data: new Uint8Array(imageData),
-          }
-        }
-      }
-      return msg
-    })
-    return messages
+    return unwrapIpcResult<ChatMessage[]>(result, '获取消息失败')
   },
 
   /**

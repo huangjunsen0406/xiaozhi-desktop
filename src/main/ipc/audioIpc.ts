@@ -320,7 +320,7 @@ export function registerAudioIpc(): void {
   })
 
   createIpcHandler({
-    channel: 'audio:get-default-device-id',
+    channel: 'audio:get-preferred-device-name',
     schema: {
       kind: { type: 'string', required: true },
     },

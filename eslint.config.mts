@@ -9,6 +9,7 @@ export default antfu({
   },
 }, {
   files: ['src/renderer/src/**/*.{ts,tsx,vue}'],
+  ignores: ['**/__tests__/**'],
   rules: {
     'no-restricted-imports': ['error', {
       paths: [
@@ -41,8 +42,8 @@ export default antfu({
     ],
   },
 }, {
-  // 项目未接入 vitest；main 下最小 node:test 单测允许 node:test
-  files: ['src/main/__tests__/**'],
+  // 单元测试通过 Node 运行；生产 renderer 仍禁止 Node/Electron 导入。
+  files: ['src/main/__tests__/**', 'src/renderer/src/**/__tests__/**'],
   rules: {
     'test/no-import-node-test': 'off',
   },

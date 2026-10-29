@@ -2,14 +2,52 @@
  * 聊天 IPC 通道
  * 提供聊天会话和消息的数据库操作接口（createIpcHandler + IpcResult）
  */
-import type { AddMessageParams, CreateSessionParams } from '@shared/types'
+import type { AddMessageParams, ChatMessage, CreateSessionParams } from '@shared/types'
 import type { DbChatMessage } from '../types/database'
 import { Buffer } from 'node:buffer'
+import { isSourceType } from '@shared/types'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, success } from './middleware'
+import { optionalNumber, optionalString, parseObject } from './middleware/validation'
 
 const logger = getLogger('ChatIpc')
+
+function toChatMessageDto(message: DbChatMessage): ChatMessage {
+  return {
+    id: message.id,
+    session_id: message.session_id,
+    role: message.role,
+    content: message.content,
+    emotion: message.emotion,
+    sourceType: message.source_type,
+    image_data: message.image_data ? new Uint8Array(message.image_data) : null,
+    timestamp: message.timestamp,
+  }
+}
+
+function parseAddMessage(value: unknown): AddMessageParams {
+  const data = parseObject(value)
+  const sessionId = optionalString(data, 'session_id')
+  const content = optionalString(data, 'content')
+  if (!sessionId?.trim() || content === undefined)
+    throw new Error('session_id 和 content 必须提供')
+  if (data.role !== 'user' && data.role !== 'assistant')
+    throw new Error('role 必须是 user 或 assistant')
+  if (!isSourceType(data.sourceType))
+    throw new Error('sourceType 无效')
+  if (data.image_data !== undefined && !(data.image_data instanceof Uint8Array))
+    throw new Error('image_data 必须是 Uint8Array')
+  return {
+    session_id: sessionId,
+    content,
+    role: data.role,
+    sourceType: data.sourceType,
+    emotion: optionalString(data, 'emotion'),
+    image_data: data.image_data,
+    timestamp: optionalNumber(data, 'timestamp', { min: 0 }),
+  }
+}
 
 export function registerChatIpc(): void {
   const db = getDatabase()
@@ -47,7 +85,7 @@ export function registerChatIpc(): void {
     },
   })
 
-  createIpcHandler({
+  createIpcHandler<ChatMessage[]>({
     channel: 'chat:get-messages',
     schema: {
       sessionId: { type: 'string', required: true, minLength: 1 },
@@ -57,29 +95,17 @@ export function registerChatIpc(): void {
       const offset = typeof offsetUnknown === 'number' ? offsetUnknown : 0
       const messages = db.getChatMessages(String(sessionId), limit, offset)
 
-      // 将 DB 记录转换为 IPC 传输格式：Buffer -> Uint8Array, source_type -> sourceType
-      const processedMessages = messages.map((msg: DbChatMessage) => {
-        const { source_type, image_data, ...rest } = msg
-        return {
-          ...rest,
-          sourceType: source_type,
-          image_data: image_data && Buffer.isBuffer(image_data)
-            ? new Uint8Array(image_data)
-            : image_data,
-        }
-      })
-
-      return success(processedMessages)
+      return success(messages.map(toChatMessageDto))
     },
   })
 
-  createIpcHandler({
+  createIpcHandler<ChatMessage>({
     channel: 'chat:add-message',
     schema: {
       data: { type: 'object', required: true },
     },
     handler: async (_event, dataUnknown: unknown) => {
-      const data = dataUnknown as AddMessageParams
+      const data = parseAddMessage(dataUnknown)
 
       // 如果是 Uint8Array，转换为 Buffer
       let imageData: Buffer | undefined
@@ -97,7 +123,7 @@ export function registerChatIpc(): void {
         image_data: imageData,
         timestamp: data.timestamp,
       })
-      return success(message)
+      return success(toChatMessageDto(message))
     },
   })
 

@@ -1,9 +1,10 @@
-import type { AudioSettings, ValidSampleRate } from '@shared/types'
+import type { AudioSettings, SourceType } from '@shared/types'
 import type { Buffer } from 'node:buffer'
 import type {
-  AudioSettingsUpdate,
   DbAudioSettings,
+  DbAudioSettingsPatch,
   DbCameraConfig,
+  DbCameraConfigPatch,
   DbChatMessage,
   DbChatSession,
   DbDeviceInfo,
@@ -12,11 +13,13 @@ import type {
   DbSessionStats,
   DbShortcutConfig,
   DbWakeWordConfig,
+  DbWakeWordConfigPatch,
 } from '../types/database'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
 import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
+import { isAudioChannels, isAudioFrameDuration, isAudioSampleRate } from '../audio/audioSettingsValidation'
 import { getLogger } from '../utils/logger'
 import { getDatabasePath } from '../utils/paths'
 
@@ -858,7 +861,7 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get() as DbAudioSettings | undefined
   }
 
-  updateAudioSettings(updates: AudioSettingsUpdate | Record<string, unknown>): void {
+  updateAudioSettings(updates: DbAudioSettingsPatch): void {
     let config = this.getAudioSettings()
     if (!config) {
       config = this.getOrCreateAudioSettings()
@@ -870,7 +873,7 @@ export class DatabaseManager {
         dbUpdates[key] = value ? 1 : 0
       }
       else if (value !== undefined) {
-        dbUpdates[key] = value as string | number | null
+        dbUpdates[key] = value
       }
     }
 
@@ -890,22 +893,11 @@ export class DatabaseManager {
   }
 
   getFormattedAudioSettings(): AudioSettings {
-    const VALID_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000]
-    const isValidRate = (rate: number): rate is ValidSampleRate => VALID_RATES.includes(rate)
-    const VALID_AEC = new Set(['off', 'app', 'system'])
-
     const config = this.getOrCreateAudioSettings()
-    const inputRate = config.input_sample_rate
-    const outputRate = config.output_sample_rate
-
     const rawMode = (config.aec_mode || '').trim()
-    let aecMode: 'off' | 'app' | 'system'
-    if (VALID_AEC.has(rawMode)) {
-      aecMode = rawMode as 'off' | 'app' | 'system'
-    }
-    else {
-      aecMode = config.enable_echo_cancellation ? 'app' : 'off'
-    }
+    const aecMode = rawMode === 'off' || rawMode === 'app' || rawMode === 'system'
+      ? rawMode
+      : config.enable_echo_cancellation ? 'app' : 'off'
 
     return {
       inputDeviceName: config.input_device_name || undefined,
@@ -913,11 +905,11 @@ export class DatabaseManager {
       enableNoiseReduction: Boolean(config.enable_noise_reduction),
       enableEchoCancellation: aecMode !== 'off',
       aecMode,
-      conversationMode: (config.conversation_mode as 'realtime' | 'auto') || 'auto',
-      inputSampleRate: isValidRate(inputRate) ? inputRate : 16000,
-      outputSampleRate: isValidRate(outputRate) ? outputRate : 24000,
-      channels: config.channels || 1,
-      frameDuration: config.frame_duration || 20,
+      conversationMode: config.conversation_mode === 'realtime' ? 'realtime' : 'auto',
+      inputSampleRate: isAudioSampleRate(config.input_sample_rate) ? config.input_sample_rate : 16000,
+      outputSampleRate: isAudioSampleRate(config.output_sample_rate) ? config.output_sample_rate : 24000,
+      channels: isAudioChannels(config.channels) ? config.channels : 1,
+      frameDuration: isAudioFrameDuration(config.frame_duration) ? config.frame_duration : 20,
     }
   }
 
@@ -943,16 +935,7 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as DbWakeWordConfig | undefined
   }
 
-  updateWakeWordConfig(updates: {
-    enabled?: boolean
-    language?: string
-    keyword_zh?: string
-    keyword_en?: string
-    threshold?: number
-    score?: number
-    cooldown_ms?: number
-    greet?: boolean
-  }): void {
+  updateWakeWordConfig(updates: DbWakeWordConfigPatch): void {
     let config = this.getWakeWordConfig()
     if (!config) {
       config = this.getOrCreateWakeWordConfig()
@@ -964,7 +947,7 @@ export class DatabaseManager {
         dbUpdates[key] = value ? 1 : 0
       }
       else if (value !== undefined) {
-        dbUpdates[key] = value as string | number
+        dbUpdates[key] = value
       }
     }
 
@@ -1004,9 +987,9 @@ export class DatabaseManager {
       enabled: Boolean(config.enabled),
       language,
       keyword,
-      threshold: config.threshold || 0.2,
-      score: config.score || 1.8,
-      cooldownMs: config.cooldown_ms || 1500,
+      threshold: config.threshold ?? 0.2,
+      score: config.score ?? 1.8,
+      cooldownMs: config.cooldown_ms ?? 1500,
       greet: Boolean(config.greet),
     }
   }
@@ -1034,19 +1017,7 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get() as DbCameraConfig | undefined
   }
 
-  updateCameraConfig(updates: {
-    enabled?: boolean
-    device_id?: string
-    device_label?: string
-    use_local_vision?: boolean
-    vl_api_key?: string
-    vl_url?: string
-    vl_model?: string
-    capture_width?: number
-    capture_height?: number
-    jpeg_quality?: number
-    max_dimension?: number
-  }): void {
+  updateCameraConfig(updates: DbCameraConfigPatch): void {
     let config = this.getCameraConfig()
     if (!config) {
       config = this.getOrCreateCameraConfig()
@@ -1058,7 +1029,7 @@ export class DatabaseManager {
         dbUpdates[key] = value ? 1 : 0
       }
       else if (value !== undefined) {
-        dbUpdates[key] = value as string | number
+        dbUpdates[key] = value
       }
     }
 
@@ -1248,11 +1219,11 @@ export class DatabaseManager {
     role: 'user' | 'assistant'
     content: string
     emotion?: string
-    source_type: string
+    source_type: SourceType
     image_data?: Buffer
     timestamp?: number
   }): DbChatMessage {
-    const timestamp = data.timestamp || Math.floor(Date.now() / 1000)
+    const timestamp = data.timestamp ?? Math.floor(Date.now() / 1000)
 
     const result = this.db.prepare(`
       INSERT INTO chat_messages (session_id, role, content, emotion, source_type, image_data, timestamp)

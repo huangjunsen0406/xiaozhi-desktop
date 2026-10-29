@@ -1,3 +1,4 @@
+import type { ShortcutConfig } from '@shared/types'
 import { ipcRenderer } from 'electron'
 import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
@@ -5,7 +6,7 @@ export const shortcutApi = {
   /**
    * 获取所有快捷键配置
    */
-  getAll: async () => {
+  getAll: async (): Promise<ShortcutConfig[]> => {
     const result: unknown = await ipcRenderer.invoke('shortcut:get-all')
     return unwrapIpcResult(result, '获取快捷键配置失败')
   },
@@ -23,10 +24,11 @@ export const shortcutApi = {
    */
   checkConflict: async (accelerator: string, excludeAction?: string) => {
     const result: unknown = await ipcRenderer.invoke('shortcut:check-conflict', accelerator, excludeAction)
-    return unwrapIpcResult<{ conflict: boolean, name: string | null | undefined }>(
+    const data = unwrapIpcResult<{ conflict: boolean, name?: string | null }>(
       result,
       '检测快捷键冲突失败',
     )
+    return { conflict: data.conflict, name: data.name ?? null }
   },
 
   /**

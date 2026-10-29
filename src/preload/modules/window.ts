@@ -1,11 +1,12 @@
 /**
  * 窗口控制 API 模块
  */
+import type { DisplayMode } from '@shared/types'
 import type { IpcRendererEvent } from 'electron'
 import { ipcRenderer } from 'electron'
 import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
 
-export type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
+export type { DisplayMode } from '@shared/types'
 
 export const windowApi = {
   // 面板控制

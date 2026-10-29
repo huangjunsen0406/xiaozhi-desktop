@@ -2,6 +2,7 @@
  * Preload 脚本入口
  * 使用模块化 API 结构
  */
+import type { RendererApi } from '../shared/rendererApi'
 import { contextBridge } from 'electron'
 import { activationApi, analyticsApi, appApi, appEnvApi, audioApi, backgroundAudioApi, bubbleApi, cameraApi, cameraConfigApi, careReminderApi, chatApi, clipboardApi, emotionApi, hoverApi, live2dApi, mcpToolsApi, modelApi, musicApi, musicConfigApi, petsApi, shortcutApi, systemApi, themeApi, updateApi, wakeWordApi, windowApi } from './modules'
 
@@ -76,7 +77,7 @@ const api = {
   audioUpdateConfig: audioApi.updateConfig,
   audioGetAecStatus: audioApi.getAecStatus,
   audioReportAecCapture: audioApi.reportAecCapture,
-  audioGetDefaultDeviceId: audioApi.getDefaultDeviceId,
+  audioGetPreferredDeviceName: audioApi.getPreferredDeviceName,
   audioSystemGetVolume: audioApi.systemGetVolume,
   audioSystemSetVolume: audioApi.systemSetVolume,
   audioSystemVolumeSupported: audioApi.systemVolumeSupported,
@@ -219,7 +220,7 @@ const api = {
   // 剪贴板 API
   clipboardWriteText: clipboardApi.writeText,
   clipboardReadText: clipboardApi.readText,
-}
+} satisfies RendererApi
 
 // 使用 contextBridge 暴露 API
 // eslint-disable-next-line node/prefer-global/process
@@ -232,6 +233,5 @@ if (process.contextIsolated) {
   }
 }
 else {
-  // @ts-expect-error (type mismatch in activation/app modules)
   window.api = api
 }
