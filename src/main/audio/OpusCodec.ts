@@ -91,6 +91,11 @@ export class OpusCodec {
     }
   }
 
+  destroy(): void {
+    this.encoder.delete?.()
+    this.decoder.delete?.()
+  }
+
   /**
    * 重建编解码器（配置更新时调用）
    * 用于动态更新采样率等参数；调用前应先 getAudioRuntime().reload()

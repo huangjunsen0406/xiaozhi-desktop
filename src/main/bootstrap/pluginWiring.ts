@@ -94,7 +94,7 @@ export async function setupPlugins(
     new UIPlugin(),
   )
 
-  const setupResults = await container.getPluginManager().setupAll(ctx, cmd) as PluginSetupResult[]
+  const setupResults = await container.getPluginManager().setupAll(ctx, cmd)
 
   // 关键插件健康检查（轻量）
   const healthy = checkCriticalPlugins(container.getPluginManager(), setupResults)
@@ -124,7 +124,7 @@ export async function setupPlugins(
  *
  * ResourcePool 按注册逆序释放（先注册的后释放）。
  * 期望关闭顺序：
- * session → protocol → plugins → shortcutManager → tasks → shared_services → eventBus
+ * session → tasks → protocol → plugins → shortcutManager → shared_services → eventBus
  */
 export function registerCleanupResources(
   container: ServiceContainer,
@@ -141,10 +141,6 @@ export function registerCleanupResources(
     await unbindSharedServices(container)
   })
 
-  pool.register('tasks', async () => {
-    await container.taskManager.cancelAll(3000)
-  })
-
   pool.register('shortcutManager', () => {
     shortcutManager?.destroy()
   })
@@ -159,7 +155,11 @@ export function registerCleanupResources(
     await container.protocolManager.shutdown()
   })
 
-  // 最后注册 = 最先释放：先解绑会话，避免关闭过程中仍处理事件
+  pool.register('tasks', async () => {
+    await container.taskManager.drain(3000)
+  })
+
+  // 最后注册 = 最先释放：先解绑会话，排空命令后再销毁协议/插件
   pool.register('session', () => {
     container.session.unbindEvents()
   })

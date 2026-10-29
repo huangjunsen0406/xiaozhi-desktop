@@ -7,15 +7,12 @@ import type { ConnectionInfo } from './Protocol'
 import { Buffer } from 'node:buffer'
 import crypto from 'node:crypto'
 import dgram from 'node:dgram'
+import { parseServerMessage } from '@shared/types'
 import * as mqtt from 'mqtt'
 import { getAudioRuntime } from '../audio/AudioRuntime'
 import { getConfigManager } from '../services/configManagerDB'
-import {
-  isGoodbyeMessage,
-  parseMqttServerHello,
-  parseServerMessage,
-} from '../types/protocol'
 import { getLogger } from '../utils/logger'
+import { parseMqttServerHello } from './mqttServerHello'
 import { Protocol } from './Protocol'
 
 const logger = getLogger('MQTT')
@@ -322,10 +319,6 @@ export class MqttProtocol extends Protocol {
       const msgType = data.type
 
       if (msgType === 'goodbye') {
-        if (!isGoodbyeMessage(data)) {
-          logger.error('goodbye 消息形态无效', data)
-          return
-        }
         const sessionId = data.session_id
         if (!sessionId || sessionId === this.sessionId) {
           this.handleGoodbye().catch((error) => {

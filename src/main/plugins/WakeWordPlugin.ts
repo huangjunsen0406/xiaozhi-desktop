@@ -1,6 +1,5 @@
 import type { PluginCommands, PluginContext } from '../core'
 import type { AudioPlugin } from './AudioPlugin'
-import { Events } from '../core'
 import { AbortReason } from '../protocols/Protocol'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
@@ -257,8 +256,6 @@ export class WakeWordPlugin extends Plugin {
       if (deviceState === 'listening' && listeningMode === 'manual') {
         logger.info('检测到手动模式激活，停止手动模式')
         await this.cmd.stopListening()
-        // 使用事件驱动等待状态变更而非固定延迟
-        await this.waitForStateChange()
       }
 
       // 情况1: 说话中，打断语音输出（包括半双工和全双工）
@@ -272,9 +269,6 @@ export class WakeWordPlugin extends Plugin {
         if (backgroundWindow && !backgroundWindow.isDestroyed()) {
           backgroundWindow.webContents.send('audio:command', 'clearQueue')
         }
-
-        // 使用事件驱动等待状态变更
-        await this.waitForStateChange()
       }
 
       // 重新获取状态（可能已变化）
@@ -300,35 +294,6 @@ export class WakeWordPlugin extends Plugin {
     catch (error) {
       logger.error('处理唤醒词失败', error)
     }
-  }
-
-  /**
-   * 等待设备状态变更
-   * 使用 EventBus 监听状态变更事件，带超时保护
-   */
-  private waitForStateChange(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      if (!this.ctx) {
-        resolve()
-        return
-      }
-
-      let resolved = false
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          resolve()
-        }
-      }, 500) // 500ms 超时保护
-
-      this.ctx.eventBus.once(Events.DEVICE_STATE_CHANGED, () => {
-        if (!resolved) {
-          resolved = true
-          clearTimeout(timeout)
-          resolve()
-        }
-      })
-    })
   }
 
   /**

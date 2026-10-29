@@ -1,10 +1,9 @@
-import type { ListeningMode } from '@shared/types'
+import type { ListeningMode, ServerMcpPayload, ServerMessage } from '@shared/types'
 /**
  * Protocol 抽象基类
  * 定义所有通信协议的通用接口
  */
 import type { Buffer } from 'node:buffer'
-import type { JsonMessage, McpPayload } from '../types/protocol'
 
 import { getLogger } from '../utils/logger'
 
@@ -49,7 +48,7 @@ export abstract class Protocol {
   protected sessionId: string = ''
 
   // 回调函数
-  protected onIncomingJsonCallback?: (data: JsonMessage) => void
+  protected onIncomingJsonCallback?: (data: ServerMessage) => void
   protected onIncomingAudioCallback?: (data: Buffer) => void
   protected onAudioChannelOpenedCallback?: () => void | Promise<void>
   protected onAudioChannelClosedCallback?: () => void | Promise<void>
@@ -60,7 +59,7 @@ export abstract class Protocol {
   /**
    * 设置 JSON 消息接收回调
    */
-  onIncomingJson(callback: (data: JsonMessage) => void): void {
+  onIncomingJson(callback: (data: ServerMessage) => void): void {
     this.onIncomingJsonCallback = callback
   }
 
@@ -210,9 +209,9 @@ export abstract class Protocol {
   /**
    * 发送 MCP 消息
    */
-  async sendMcpMessage(payload: McpPayload | string): Promise<boolean> {
+  async sendMcpMessage(payload: ServerMcpPayload | string): Promise<boolean> {
     try {
-      let payloadData: McpPayload
+      let payloadData: ServerMcpPayload
       if (typeof payload === 'string') {
         payloadData = JSON.parse(payload)
       }

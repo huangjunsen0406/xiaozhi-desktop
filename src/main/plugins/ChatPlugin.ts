@@ -1,13 +1,11 @@
-import type { ImageSourceType } from '@shared/types'
+import type { ImageSourceType, ServerMessage, ServerTtsMessage } from '@shared/types'
 import type { PluginCommands, PluginContext } from '../core'
-import type { JsonMessage, TtsJsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
 import { Buffer } from 'node:buffer'
-import { isImageSourceType } from '@shared/types'
+import { isImageSourceType, isServerImageMessage, isServerTtsMessage } from '@shared/types'
 import { Events } from '../core'
 import { getServiceContainer } from '../core/ServiceContainer'
 import { getDatabase } from '../services/database'
-import { isImageMessage, isServerMessage, isTtsMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -51,8 +49,6 @@ export class ChatPlugin extends Plugin {
     logger.info('初始化...')
 
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      if (!isServerMessage(data))
-        return
       this.onIncomingJson(data).catch((error) => {
         logger.error('处理 JSON 消息失败', error)
       })
@@ -68,10 +64,8 @@ export class ChatPlugin extends Plugin {
   /**
    * 从消息 / 协议解析服务端 session id
    */
-  private resolveServerSessionId(message?: JsonMessage): string | undefined {
-    const fromMsg = message && typeof (message as { session_id?: unknown }).session_id === 'string'
-      ? String((message as { session_id: string }).session_id).trim()
-      : ''
+  private resolveServerSessionId(message?: ServerMessage): string | undefined {
+    const fromMsg = message?.session_id?.trim() ?? ''
     if (fromMsg)
       return fromMsg
 
@@ -146,7 +140,7 @@ export class ChatPlugin extends Plugin {
     }
   }
 
-  private async ensureActiveSession(message?: JsonMessage, titleFromUserText?: string): Promise<string> {
+  private async ensureActiveSession(message?: ServerMessage, titleFromUserText?: string): Promise<string> {
     const serverId = this.resolveServerSessionId(message)
     if (serverId) {
       await this.bindSession(serverId, { titleFromUserText })
@@ -177,7 +171,7 @@ export class ChatPlugin extends Plugin {
     }
   }
 
-  private async onIncomingJson(message: JsonMessage): Promise<void> {
+  private async onIncomingJson(message: ServerMessage): Promise<void> {
     const msgType = message.type
 
     // 任意带 session_id 的消息：尽早绑定服务端会话
@@ -190,11 +184,11 @@ export class ChatPlugin extends Plugin {
       await this.handleSttMessage(String(message.text), message)
     }
 
-    if (isTtsMessage(message)) {
+    if (isServerTtsMessage(message)) {
       await this.handleTtsMessage(message)
     }
 
-    if (isImageMessage(message)) {
+    if (isServerImageMessage(message)) {
       this.messageAccumulator.pendingImageData = {
         type: isImageSourceType(message.image_type) ? message.image_type : 'screenshot',
         data: message.image_data,
@@ -207,7 +201,7 @@ export class ChatPlugin extends Plugin {
     }
   }
 
-  private async handleSttMessage(text: string, message?: JsonMessage): Promise<void> {
+  private async handleSttMessage(text: string, message?: ServerMessage): Promise<void> {
     try {
       if (text === '获取用户输入文本。') {
         logger.info('过滤掉工具触发提示消息，跳过保存')
@@ -233,7 +227,7 @@ export class ChatPlugin extends Plugin {
     }
   }
 
-  private async handleTtsMessage(message: TtsJsonMessage): Promise<void> {
+  private async handleTtsMessage(message: ServerTtsMessage): Promise<void> {
     const { state, text } = message
 
     if (state === 'start') {

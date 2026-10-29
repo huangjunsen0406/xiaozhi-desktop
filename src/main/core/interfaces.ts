@@ -8,6 +8,7 @@
 
 import type { DeviceState, ListeningMode } from '@shared/types'
 import type { Buffer } from 'node:buffer'
+import type { AbortReason } from '../protocols/Protocol'
 import type { EventBus } from './EventBus'
 
 /**
@@ -31,6 +32,9 @@ export interface PluginContext {
 
   /** 是否正在说话 */
   isSpeaking: () => boolean
+
+  /** 是否保持持续监听 */
+  isKeepListening: () => boolean
 
   /** 是否处于空闲状态 */
   isIdle: () => boolean
@@ -56,7 +60,7 @@ export interface PluginCommands {
   stopListening: () => Promise<void>
 
   /** 中止语音输出 */
-  abortSpeaking: (reason: string) => Promise<void>
+  abortSpeaking: (reason: AbortReason) => Promise<void>
 
   /** 发送音频数据 */
   sendAudio: (data: Buffer) => Promise<void>
@@ -73,6 +77,6 @@ export interface PluginCommands {
   /** 发送唤醒词检测消息 */
   sendWakeWordDetected: (text: string) => Promise<void>
 
-  /** 创建异步任务（带追踪） */
-  spawn: <T>(promise: Promise<T>, name: string) => Promise<T>
+  /** 追踪已启动的异步任务 */
+  track: <T>(promise: Promise<T>, name: string) => Promise<T>
 }

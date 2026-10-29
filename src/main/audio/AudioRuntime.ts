@@ -1,14 +1,9 @@
 import type { ValidSampleRate } from '@shared/types'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
+import { isAudioChannels, isAudioFrameDuration, isAudioSampleRate } from './audioSettingsValidation'
 
 const logger = getLogger('AudioRuntime')
-
-const VALID_RATES: readonly number[] = [8000, 12000, 16000, 24000, 48000]
-
-function isValidRate(rate: unknown): rate is ValidSampleRate {
-  return typeof rate === 'number' && VALID_RATES.includes(rate)
-}
 
 /**
  * 编解码 / hello 用的运行时音频参数（非用户偏好 DTO）
@@ -46,10 +41,10 @@ function loadParamsFromDb(): AudioRuntimeParams {
     const dbConfig = db.getFormattedAudioSettings()
 
     return {
-      inputSampleRate: isValidRate(dbConfig.inputSampleRate) ? dbConfig.inputSampleRate : DEFAULT_PARAMS.inputSampleRate,
-      outputSampleRate: isValidRate(dbConfig.outputSampleRate) ? dbConfig.outputSampleRate : DEFAULT_PARAMS.outputSampleRate,
-      channels: dbConfig.channels || DEFAULT_PARAMS.channels,
-      frameDuration: dbConfig.frameDuration || DEFAULT_PARAMS.frameDuration,
+      inputSampleRate: isAudioSampleRate(dbConfig.inputSampleRate) ? dbConfig.inputSampleRate : DEFAULT_PARAMS.inputSampleRate,
+      outputSampleRate: isAudioSampleRate(dbConfig.outputSampleRate) ? dbConfig.outputSampleRate : DEFAULT_PARAMS.outputSampleRate,
+      channels: isAudioChannels(dbConfig.channels) ? dbConfig.channels : DEFAULT_PARAMS.channels,
+      frameDuration: isAudioFrameDuration(dbConfig.frameDuration) ? dbConfig.frameDuration : DEFAULT_PARAMS.frameDuration,
     }
   }
   catch (error) {

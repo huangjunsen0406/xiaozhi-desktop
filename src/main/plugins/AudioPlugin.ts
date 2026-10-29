@@ -3,8 +3,8 @@ import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
 import type { PluginCommands, PluginContext } from '../core'
 import { ipcMain } from 'electron'
+import { disposeOpusCodec, getOpusCodec, initOpusCodec } from '../audio/codecService'
 import { Events } from '../core'
-import { getOpusCodec, initOpusCodec } from '../ipc/audioIpc'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -67,12 +67,12 @@ export class AudioPlugin extends Plugin {
 
       // 订阅音频接收事件（EventBus fallback；生产路径由 protocol.setAudioHandler 直连）
       ctx.eventBus.on(Events.INCOMING_AUDIO, (data) => {
-        this.onIncomingAudio(data as Buffer)
+        this.onIncomingAudio(data)
       })
 
       // 订阅设备状态变更事件
       ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, (data) => {
-        const { newState } = data as { newState: DeviceState }
+        const { newState } = data
         this.onDeviceStateChanged(newState)
       })
 
@@ -265,6 +265,7 @@ export class AudioPlugin extends Plugin {
     }
 
     // 清理引用
+    disposeOpusCodec()
     this.backgroundAudioWindow = null
 
     // ���用父类 shutdown

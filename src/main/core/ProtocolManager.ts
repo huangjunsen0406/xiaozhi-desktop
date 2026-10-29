@@ -15,10 +15,9 @@
  * 注意：TTS 状态迁移已迁至 ConversationSession，本类只广播 INCOMING_JSON。
  */
 
-import type { ListeningMode } from '@shared/types'
+import type { ListeningMode, ServerMessage } from '@shared/types'
 import type { Buffer } from 'node:buffer'
 import type { AbortReason, Protocol } from '../protocols/Protocol'
-import type { JsonMessage } from '../types/protocol'
 import type { EventBus } from './EventBus'
 import type { TaskManager } from './TaskManager'
 import { MqttProtocol } from '../protocols/MqttProtocol'
@@ -124,8 +123,8 @@ export class ProtocolManager {
 
     // 收到 JSON 消息 → 广播（TTS 状态迁移由 ConversationSession 订阅处理）
     this.protocol.onIncomingJson((data) => {
-      this.taskManager.spawn(
-        this.handleIncomingJson(data),
+      this.taskManager.run(
+        () => this.handleIncomingJson(data),
         'handle:json',
       ).catch(() => {})
     })
@@ -170,7 +169,7 @@ export class ProtocolManager {
    *
    * 仅负责日志与事件广播；TTS 状态迁移已迁至 ConversationSession。
    */
-  private async handleIncomingJson(jsonData: JsonMessage): Promise<void> {
+  private async handleIncomingJson(jsonData: ServerMessage): Promise<void> {
     try {
       logger.info(`收到 JSON 消息: type=${jsonData.type}`, jsonData)
       // 广播给插件与 ConversationSession
@@ -205,7 +204,8 @@ export class ProtocolManager {
             return false
           }
           logger.info('协议连接已建立')
-          await this.eventBus.emit(Events.PROTOCOL_CONNECTED, this.protocol)
+          if (this.protocol)
+            await this.eventBus.emit(Events.PROTOCOL_CONNECTED, this.protocol)
           return true
         }
         catch (error) {

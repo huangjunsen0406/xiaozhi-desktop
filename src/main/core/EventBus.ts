@@ -1,233 +1,107 @@
-/**
- * 事件总线
- *
- * 提供组件间解耦通信机制。
- * 支持多处理器、并行/顺序执行、错误隔离。
- */
-
+import type { ServerMessage } from '@shared/types'
+import type { Buffer } from 'node:buffer'
+import type { Protocol } from '../protocols/Protocol'
+import type { StateChangeData } from './StateManager'
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('EventBus')
 
-/** 事件处理器类型 */
-export type EventHandler = (data?: unknown) => Promise<void> | void
-
-/**
- * 预定义事件常量
- * 集中管理所有事件名称，避免魔术字符串
- */
 export const Events = {
-  /** ━━━ 设备状态 ━━━ */
-  /** 设备状态变更（idle/listening/speaking/connecting） */
   DEVICE_STATE_CHANGED: 'device:state_changed',
-
-  /** ━━━ 协议/连接 ━━━ */
-  /** 协议连接成功 */
   PROTOCOL_CONNECTED: 'protocol:connected',
-  /** 协议断开 */
   PROTOCOL_DISCONNECTED: 'protocol:disconnected',
-  /** 网络错误 */
   NETWORK_ERROR: 'protocol:network_error',
-
-  /** ━━━ 音频 ━━━ */
-  /** 收到服务端音频帧（Opus 编码） */
   INCOMING_AUDIO: 'audio:incoming',
-  /** 音频解码完成（PCM 数据，用于口型同步等） */
   AUDIO_DECODED: 'audio:decoded',
-  /** 音频通道已打开 */
   AUDIO_CHANNEL_OPENED: 'audio:channel_opened',
-  /** 音频通道已关闭 */
   AUDIO_CHANNEL_CLOSED: 'audio:channel_closed',
-
-  /** ━━━ 消息 ━━━ */
-  /** 收到服务端 JSON 消息 */
   INCOMING_JSON: 'message:incoming_json',
-
-  /** ━━━ 音乐 ━━━ */
-  /** 请求暂停音乐（来源：tts/manual） */
   MUSIC_PAUSE_REQUEST: 'music:pause_request',
-  /** 请求恢复音乐 */
   MUSIC_RESUME_REQUEST: 'music:resume_request',
-
-  /** ━━━ 应用生命周期 ━━━ */
-  /** 应用正在关闭 */
   APP_SHUTDOWN: 'app:shutdown',
 } as const
 
-/**
- * 事件总线
- *
- * 支持异步事件处理，实现组件间松耦合通信。
- *
- * @example
- * ```typescript
- * const bus = new EventBus()
- *
- * // 注册处理器
- * bus.on(Events.DEVICE_STATE_CHANGED, async (data) => {
- *   console.log('状态变更:', data)
- * })
- *
- * // 触发事件（并行执行所有处理器）
- * await bus.emit(Events.DEVICE_STATE_CHANGED, { oldState, newState })
- * ```
- */
-export class EventBus {
-  /** 事件处理器映射表 */
-  private handlers = new Map<string, EventHandler[]>()
+export interface EventPayloads {
+  'device:state_changed': StateChangeData
+  'protocol:connected': Protocol
+  'protocol:disconnected': void
+  'protocol:network_error': string
+  'audio:incoming': Buffer
+  'audio:decoded': Buffer
+  'audio:channel_opened': void
+  'audio:channel_closed': void
+  'message:incoming_json': ServerMessage
+  'music:pause_request': void
+  'music:resume_request': void
+  'app:shutdown': void
+}
 
-  /**
-   * 注册事件处理器
-   *
-   * @param event 事件名称
-   * @param handler 处理函数（同步或异步）
-   */
-  on(event: string, handler: EventHandler): void {
-    const list = this.handlers.get(event) || []
-    // 去重注册：避免同一处理器重复绑定
+export type EventName = keyof EventPayloads
+type EventArgs<K extends EventName> = EventPayloads[K] extends void ? [] : [data: EventPayloads[K]]
+export type EventHandler<K extends EventName> = (...args: EventArgs<K>) => Promise<void> | void
+
+/** 事件名决定载荷类型；并行广播隔离错误，顺序广播遇错停止。 */
+export class EventBus {
+  private handlers = new Map<EventName, unknown[]>()
+
+  // Map 无法保留 key 与 value 的关联；擦除只发生在这个内部存储边界。
+  private getHandlers<K extends EventName>(event: K): EventHandler<K>[] {
+    return (this.handlers.get(event) ?? []) as EventHandler<K>[]
+  }
+
+  on<K extends EventName>(event: K, handler: EventHandler<K>): () => void {
+    const list = this.getHandlers(event)
     if (!list.includes(handler)) {
       list.push(handler)
       this.handlers.set(event, list)
-      logger.debug(`注册处理器 -> ${event}`)
     }
+    return () => this.off(event, handler)
   }
 
-  /**
-   * 移除事件处理器
-   *
-   * @param event 事件名称
-   * @param handler 要移除的处理函数
-   */
-  off(event: string, handler: EventHandler): void {
-    const list = this.handlers.get(event)
-    if (!list)
-      return
-
+  off<K extends EventName>(event: K, handler: EventHandler<K>): void {
+    const list = this.getHandlers(event)
     const index = list.indexOf(handler)
-    if (index !== -1) {
+    if (index !== -1)
       list.splice(index, 1)
-      logger.debug(`移除处理器 <- ${event}`)
-      // 清理空列表
-      if (list.length === 0) {
-        this.handlers.delete(event)
-      }
-    }
-  }
-
-  /**
-   * 注册一次性事件处理器
-   * 触发一次后自动移除
-   *
-   * @param event 事件名称
-   * @param handler 处理函数
-   */
-  once(event: string, handler: EventHandler): void {
-    const wrapper: EventHandler = async (data?: unknown) => {
-      this.off(event, wrapper)
-      await handler(data)
-    }
-    this.on(event, wrapper)
-  }
-
-  /**
-   * 触发事件（并行执行所有处理器）
-   *
-   * 使用 Promise.allSettled 确保单个处理器失败不影响其他处理器。
-   *
-   * @param event 事件名称
-   * @param data 事件数据
-   */
-  async emit(event: string, data?: unknown): Promise<void> {
-    const list = this.handlers.get(event)
-    if (!list || list.length === 0)
-      return
-
-    if (!['audio:decoded', 'audio:incoming'].includes(event))
-      logger.debug(`触发事件 ${event}, ${list.length} 个处理器`)
-
-    // 复制列表，防止处理器中修改导致迭代异常
-    const handlers = [...list]
-    const results = await Promise.allSettled(
-      handlers.map(handler => this.safeCall(handler, data)),
-    )
-
-    // 记录失败的处理器
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        logger.error(`事件 ${event} 处理器执行异常:`, result.reason)
-      }
-    }
-  }
-
-  /**
-   * 顺序触发事件
-   *
-   * 按注册顺序依次调用处理器，前一个完成后再调用下一个。
-   * 适用于有依赖关系的处理场景。
-   *
-   * @param event 事件名称
-   * @param data 事件数据
-   */
-  async emitSequential(event: string, data?: unknown): Promise<void> {
-    const list = this.handlers.get(event)
-    if (!list || list.length === 0)
-      return
-
-    // 复制列表，防止处理器中修改导致迭代异常
-    const handlers = [...list]
-    for (const handler of handlers) {
-      await this.safeCall(handler, data)
-    }
-  }
-
-  /**
-   * 清除事件处理器
-   *
-   * @param event 事件名称，为 undefined 时清除所有事件的处理器
-   */
-  clear(event?: string): void {
-    if (event === undefined) {
-      this.handlers.clear()
-      logger.debug('清除所有处理器')
-    }
-    else {
+    if (!list.length)
       this.handlers.delete(event)
-      logger.debug(`清除事件 ${event} 的所有处理器`)
+  }
+
+  once<K extends EventName>(event: K, handler: EventHandler<K>): () => void {
+    const wrapper: EventHandler<K> = async (...args) => {
+      this.off(event, wrapper)
+      await handler(...args)
+    }
+    return this.on(event, wrapper)
+  }
+
+  async emit<K extends EventName>(event: K, ...args: EventArgs<K>): Promise<void> {
+    const results = await Promise.allSettled(
+      [...this.getHandlers(event)].map(async handler => handler(...args)),
+    )
+    for (const result of results) {
+      if (result.status === 'rejected')
+        logger.error(`事件 ${event} 处理器执行异常:`, result.reason)
     }
   }
 
-  /**
-   * 检查事件是否有处理器
-   *
-   * @param event 事件名称
-   * @returns 是否存在至少一个处理器
-   */
-  hasHandlers(event: string): boolean {
-    const list = this.handlers.get(event)
-    return !!list && list.length > 0
+  async emitSequential<K extends EventName>(event: K, ...args: EventArgs<K>): Promise<void> {
+    for (const handler of [...this.getHandlers(event)])
+      await handler(...args)
   }
 
-  /**
-   * 获取事件的处理器数量
-   *
-   * @param event 事件名称
-   * @returns 处理器数量
-   */
-  handlerCount(event: string): number {
-    const list = this.handlers.get(event)
-    return list ? list.length : 0
+  clear(event?: EventName): void {
+    if (event === undefined)
+      this.handlers.clear()
+    else
+      this.handlers.delete(event)
   }
 
-  /**
-   * 安全调用处理器，捕获异常防止扩散
-   */
-  private async safeCall(handler: EventHandler, data?: unknown): Promise<void> {
-    try {
-      await handler(data)
-    }
-    catch (error) {
-      logger.error('处理器执行异常:', error)
-      throw error // 重新抛出，由 Promise.allSettled 捕获
-    }
+  hasHandlers(event: EventName): boolean {
+    return this.handlerCount(event) > 0
+  }
+
+  handlerCount(event: EventName): number {
+    return this.handlers.get(event)?.length ?? 0
   }
 }

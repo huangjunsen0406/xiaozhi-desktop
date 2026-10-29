@@ -34,7 +34,7 @@ export class Live2DPlugin extends Plugin {
   private lastVolume = 0 // 上一帧音量，用于平滑
 
   /** 事件处理器引用（用于移除） */
-  private audioDecodedHandler: ((data?: unknown) => void) | null = null
+  private audioDecodedHandler: ((data: Buffer) => void) | null = null
 
   /**
    * 插件初始化
@@ -44,8 +44,8 @@ export class Live2DPlugin extends Plugin {
     logger.info('初始化...')
 
     // 订阅解码后的音频事件
-    this.audioDecodedHandler = (data?: unknown) => {
-      this.onDecodedAudio(data as Buffer)
+    this.audioDecodedHandler = (data: Buffer) => {
+      this.onDecodedAudio(data)
     }
     ctx.eventBus.on(Events.AUDIO_DECODED, this.audioDecodedHandler)
   }

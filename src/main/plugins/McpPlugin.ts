@@ -1,10 +1,9 @@
-import type { ImageSourceType } from '@shared/types'
+import type { ImageSourceType, ServerMcpMessage } from '@shared/types'
 import type { PluginCommands, PluginContext } from '../core'
 import type { McpServer } from '../mcp/McpServer'
-import type { McpJsonMessage } from '../types/protocol'
 import type { UIPlugin } from './UIPlugin'
+import { isServerMcpMessage } from '@shared/types'
 import { Events } from '../core'
-import { isMcpMessage, isServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -96,7 +95,7 @@ export class McpPlugin extends Plugin {
 
       // 订阅 JSON 消息事件
       ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-        if (isServerMessage(data) && isMcpMessage(data)) {
+        if (isServerMcpMessage(data)) {
           this.handleMcpMessage(data).catch((error) => {
             logger.error('处理 MCP 消息失败', error)
           })
@@ -117,7 +116,7 @@ export class McpPlugin extends Plugin {
   /**
    * 处理 MCP 消息
    */
-  private async handleMcpMessage(message: McpJsonMessage): Promise<void> {
+  private async handleMcpMessage(message: ServerMcpMessage): Promise<void> {
     const payload = message.payload
     if (!payload) {
       logger.warn('MCP 消息缺少 payload')

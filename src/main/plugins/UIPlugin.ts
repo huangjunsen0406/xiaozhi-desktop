@@ -5,12 +5,11 @@ import type {
   ImageCapturedEvent,
   ImageSourceType,
 } from '@shared/types'
-import type { PluginCommands, PluginContext, StateChangeData } from '../core'
+import type { PluginCommands, PluginContext } from '../core'
 import type { AudioPlugin } from './AudioPlugin'
 import { ListeningModeValue } from '@shared/types'
 import { webContents } from 'electron'
 import { Events } from '../core'
-import { isServerMessage } from '../types/protocol'
 import { getLogger } from '../utils/logger'
 import { Plugin } from './Plugin'
 
@@ -47,14 +46,12 @@ export class UIPlugin extends Plugin {
 
     // 协议层已 parse 一次；直接广播已归一化的 ServerMessage
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
-      if (!isServerMessage(data))
-        return
       this.broadcastToRenderer('server:message', data)
     })
 
     // 订阅设备状态变化事件
     ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, (data) => {
-      const { newState } = data as StateChangeData
+      const { newState } = data
       this.broadcastState(newState)
     })
   }
@@ -69,7 +66,7 @@ export class UIPlugin extends Plugin {
       ? {
           deviceState: this.ctx.getDeviceState(),
           listeningMode: this.ctx.getListeningMode(),
-          keepListening: false, // 由 StateManager 管理
+          keepListening: this.ctx.isKeepListening(),
           channelOpen: this.ctx.isAudioChannelOpened(),
         }
       : {

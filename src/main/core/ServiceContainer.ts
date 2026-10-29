@@ -73,6 +73,10 @@ class PluginContextAdapter implements PluginContext {
     return this.container.stateManager.isSpeaking()
   }
 
+  isKeepListening(): boolean {
+    return this.container.stateManager.isKeepListening()
+  }
+
   isIdle(): boolean {
     return this.container.stateManager.isIdle()
   }
@@ -105,8 +109,8 @@ class PluginCommandsAdapter implements PluginCommands {
     await this.container.session.stopListening()
   }
 
-  async abortSpeaking(reason: string): Promise<void> {
-    await this.container.session.abortSpeaking(reason as AbortReason)
+  async abortSpeaking(reason: AbortReason): Promise<void> {
+    await this.container.session.abortSpeaking(reason)
   }
 
   async sendAudio(data: Buffer): Promise<void> {
@@ -130,8 +134,8 @@ class PluginCommandsAdapter implements PluginCommands {
     await this.container.session.sendWakeWordDetected(text)
   }
 
-  spawn<T>(promise: Promise<T>, name: string): Promise<T> {
-    return this.container.taskManager.spawn(promise, name)
+  track<T>(promise: Promise<T>, name: string): Promise<T> {
+    return this.container.taskManager.track(promise, name)
   }
 }
 
@@ -279,6 +283,7 @@ export class ServiceContainer {
       return
     }
     this.running = false
+    this.taskManager.requestShutdown()
     logger.info('正在关闭 ServiceContainer...')
     await this.resourcePool.shutdown()
     this.audioPlugin = null

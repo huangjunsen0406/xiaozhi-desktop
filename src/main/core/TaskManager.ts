@@ -1,49 +1,14 @@
-/**
- * 异步任务管理器
- *
- * 统一管理异步任务的创建、追踪和清理。
- * 提供协作式关闭机制，确保应用退出时所有任务正确完成或取消。
- */
-
 import { getLogger } from '../utils/logger'
 
 const logger = getLogger('TaskManager')
 
-/**
- * 异步任务管理器
- *
- * 职责:
- * - 创建和追踪异步任务（Promise）
- * - 关闭时统一等待或超时取消
- * - 提供关闭信号（requestShutdown / waitShutdown）
- *
- * @example
- * ```typescript
- * const tm = new TaskManager()
- *
- * // 创建追踪任务
- * const result = await tm.spawn(fetchData(), 'fetch:data')
- *
- * // 协作式关闭
- * tm.requestShutdown()
- * await tm.cancelAll(5000)
- * ```
- */
+/** 追踪已启动任务，关闭时停止启动新工作并等待现有工作；不伪装成取消 Promise。 */
 export class TaskManager {
-  /** 活跃任务映射（taskId -> Promise） */
   private tasks = new Map<string, Promise<unknown>>()
-
-  /** 任务 ID 计数器 */
-  private taskIdCounter: number = 0
-
-  /** 是否正在运行 */
-  private running: boolean = true
-
-  /** 关闭信号 resolve 函数 */
+  private taskIdCounter = 0
+  private running = true
   private shutdownResolve: (() => void) | null = null
-
-  /** 关闭 Promise（外部可 await 等待关闭信号） */
-  private shutdownPromise: Promise<void>
+  private readonly shutdownPromise: Promise<void>
 
   constructor() {
     this.shutdownPromise = new Promise<void>((resolve) => {
@@ -51,119 +16,72 @@ export class TaskManager {
     })
   }
 
-  /**
-   * 创建并追踪异步任务
-   *
-   * 任务完成后自动从追踪列表中移除。
-   * 如果应用正在关闭，直接返回 resolve(undefined)。
-   *
-   * @param promise 要追踪的 Promise
-   * @param name 任务名称（用于日志和调试）
-   * @returns 原始 Promise（带追踪逻辑）
-   */
-  spawn<T>(promise: Promise<T>, name: string): Promise<T> {
-    if (!this.running) {
-      logger.debug(`跳过任务创建（应用正在关闭）: ${name}`)
-      return Promise.resolve(undefined as T)
-    }
-
+  /** 已启动的 Promise 即使在关闭阶段也必须被追踪，并保留原始结果。 */
+  track<T>(promise: Promise<T>, name: string): Promise<T> {
     const taskId = `${name}:${++this.taskIdCounter}`
-
-    const trackedPromise = promise
-      .catch((error) => {
-        logger.error(`任务 ${taskId} 异常:`, error)
-        throw error
-      })
-      .finally(() => {
-        this.tasks.delete(taskId)
-      })
-
-    this.tasks.set(taskId, trackedPromise)
-    return trackedPromise as Promise<T>
+    const tracked = promise.catch((error) => {
+      logger.error(`任务 ${taskId} 异常:`, error)
+      throw error
+    }).finally(() => {
+      this.tasks.delete(taskId)
+    })
+    this.tasks.set(taskId, tracked)
+    return tracked
   }
 
-  /**
-   * 请求关闭
-   *
-   * 触发关闭信号，��知所有等待者应用即将退出。
-   */
+  /** 工厂仅在允许启动新任务时执行；拒绝用 undefined 冒充任务结果。 */
+  run<T>(work: () => T | Promise<T>, name: string): Promise<T> {
+    if (!this.running)
+      return Promise.reject(new Error(`应用正在关闭，无法启动任务: ${name}`))
+    return this.track(Promise.resolve().then(work), name)
+  }
+
   requestShutdown(): void {
-    if (this.shutdownResolve) {
-      logger.info('收到关闭请求')
-      this.shutdownResolve()
-      this.shutdownResolve = null
-    }
+    this.running = false
+    this.shutdownResolve?.()
+    this.shutdownResolve = null
   }
 
-  /**
-   * 等待关闭信号
-   *
-   * 阻塞直到 requestShutdown() 被调用。
-   */
   waitShutdown(): Promise<void> {
     return this.shutdownPromise
   }
 
-  /**
-   * 取消所有任务并等待完成
-   *
-   * 设置 running = false 阻止新任务创建，
-   * 然后等待现有任务完成（带超时保护）。
-   *
-   * @param timeout 超时时间（毫秒），默认 5000ms
-   */
-  async cancelAll(timeout: number = 5000): Promise<void> {
-    this.running = false
-
-    // 触发关闭信号
-    if (this.shutdownResolve) {
-      this.shutdownResolve()
-      this.shutdownResolve = null
-    }
-
-    if (this.tasks.size === 0)
+  /** 超时只结束等待；未完成任务继续保留追踪，完成后自行移除。 */
+  async drain(timeoutMs = 5000): Promise<void> {
+    this.requestShutdown()
+    if (!this.tasks.size)
       return
 
-    logger.info(`等待 ${this.tasks.size} 个任务完成...`)
-    const taskNames = Array.from(this.tasks.keys())
-    logger.info(`活跃任务: ${taskNames.join(', ')}`)
-
-    // 超时保护
-    const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        if (this.tasks.size > 0) {
-          logger.warn(`等待任务超时，${this.tasks.size} 个任务未完成`)
-        }
-        resolve()
-      }, timeout)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), timeoutMs)
     })
-
-    await Promise.race([
-      Promise.allSettled(this.tasks.values()),
-      timeoutPromise,
-    ])
-
-    this.tasks.clear()
-    logger.info('所有任务已清理')
+    try {
+      while (this.tasks.size) {
+        const result = await Promise.race([
+          Promise.allSettled([...this.tasks.values()]),
+          deadline,
+        ])
+        if (result === 'timeout') {
+          logger.warn(`等待任务超时，${this.tasks.size} 个任务未完成`)
+          return
+        }
+      }
+    }
+    finally {
+      if (timer)
+        clearTimeout(timer)
+    }
   }
 
-  /**
-   * 获取当前活跃任务数量
-   */
   getActiveCount(): number {
     return this.tasks.size
   }
 
-  /**
-   * 获取所有活跃任务名称
-   */
   getTaskNames(): string[] {
-    return Array.from(this.tasks.keys())
+    return [...this.tasks.keys()]
   }
 
-  /**
-   * 是否正在运行（未进入关闭流程）
-   */
   isRunning(): boolean {
     return this.running
   }
