@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NButton, NForm, NFormItem, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 
@@ -89,9 +90,12 @@ onMounted(() => {
   void loadConfig()
 })
 
-defineExpose({
-  handleSave,
-})
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

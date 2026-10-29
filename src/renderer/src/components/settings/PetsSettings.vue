@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PetInfo } from '@shared/types'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NButton, NEmpty, NPopconfirm, NSpin, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import IconCarbonAdd from '~icons/carbon/add'
@@ -121,16 +122,17 @@ onMounted(() => {
   loadPets()
 })
 
-// 暴露方法给父组件
-defineExpose({
-  handleSave: async () => {
-    message.success('宠物设置已保存')
-  },
-  handleCustomButton: async () => {
-    await loadPets()
-    message.success('已刷新宠物列表')
-  },
-})
+async function refreshPets() {
+  await loadPets()
+  message.success('已刷新宠物列表')
+}
+
+const panel = {
+  persistence: 'immediate',
+  actions: { refreshPets: { label: '刷新列表', run: refreshPets } },
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

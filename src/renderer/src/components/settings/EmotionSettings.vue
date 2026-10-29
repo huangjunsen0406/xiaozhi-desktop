@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { EmotionType } from '../../types/emotion'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NButton, useDialog, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import IconCarbonClose from '~icons/carbon/close'
 import { EMOTION_METADATA } from '../../types/emotion'
+import { resolveEmotionAsset } from '../../utils/emotionAssets'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -17,53 +19,23 @@ interface EmotionDisplay {
   isCustom: boolean // 是否为自定义图片
 }
 
-const emotionImages = ref<Record<EmotionType, EmotionDisplay>>({} as Record<EmotionType, EmotionDisplay>)
+const emotionImages = ref<Partial<Record<EmotionType, EmotionDisplay>>>({})
+const previewRequests = new Map<EmotionType, number>()
 
-/**
- * 获取默认图片 URL
- */
-function getDefaultImageUrl(emotionType: EmotionType): string {
-  return new URL(`../../assets/emoji/${emotionType}.png`, import.meta.url).href
-}
-
-/**
- * 加载所有表情
- */
-async function loadEmotions() {
-  try {
-    const customMapping = await window.api.emotionGetMapping()
-
-    for (const emotion of EMOTION_METADATA) {
-      if (customMapping[emotion.type]) {
-        // 有自定义：加载自定义图片
-        const customUrl = await window.api.emotionGetCustomPath(emotion.type)
-        if (customUrl) {
-          emotionImages.value[emotion.type] = {
-            url: customUrl,
-            isCustom: true,
-          }
-        }
-        else {
-          // 自定义图片不存在，回退到默认
-          emotionImages.value[emotion.type] = {
-            url: getDefaultImageUrl(emotion.type),
-            isCustom: false,
-          }
-        }
-      }
-      else {
-        // 没有自定义：加载默认图片
-        emotionImages.value[emotion.type] = {
-          url: getDefaultImageUrl(emotion.type),
-          isCustom: false,
-        }
-      }
+async function loadEmotion(emotion: EmotionType) {
+  const requestId = (previewRequests.get(emotion) ?? 0) + 1
+  previewRequests.set(emotion, requestId)
+  const asset = await resolveEmotionAsset(emotion)
+  if (previewRequests.get(emotion) === requestId) {
+    emotionImages.value[emotion] = {
+      url: asset.url,
+      isCustom: asset.source === 'custom',
     }
   }
-  catch (error) {
-    console.error('加载表情失败', error)
-    message.error('加载表情失败')
-  }
+}
+
+async function loadEmotions() {
+  await Promise.all(EMOTION_METADATA.map(emotion => loadEmotion(emotion.type)))
 }
 
 /**
@@ -86,14 +58,8 @@ async function handleUpload(emotionType: EmotionType) {
     await window.api.emotionUploadCustom(emotionType, sourcePath)
 
     // 4. 刷新显示
-    const customUrl = await window.api.emotionGetCustomPath(emotionType)
-    if (customUrl) {
-      emotionImages.value[emotionType] = {
-        url: customUrl,
-        isCustom: true,
-      }
-      message.success('上传成功')
-    }
+    await loadEmotion(emotionType)
+    message.success('上传成功')
   }
   catch (error) {
     console.error('上传失败', error)
@@ -121,10 +87,7 @@ async function handleReset(emotionType: EmotionType) {
         await window.api.emotionReset(emotionType)
 
         // 2. 恢复默认图片
-        emotionImages.value[emotionType] = {
-          url: getDefaultImageUrl(emotionType),
-          isCustom: false,
-        }
+        await loadEmotion(emotionType)
         message.success('已恢复默认')
       }
       catch (error) {
@@ -140,12 +103,11 @@ onMounted(() => {
   loadEmotions()
 })
 
-// 暴露方法给父组件（表情设置不需要保存按钮，上传即生效）
-defineExpose({
-  handleSave: async () => {
-    message.success('表情设置已自动保存')
-  },
-})
+const panel = {
+  persistence: 'immediate',
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>
@@ -166,7 +128,7 @@ defineExpose({
         <div class="preview-container">
           <img
             v-if="emotionImages[emotion.type]"
-            :src="emotionImages[emotion.type].url"
+            :src="emotionImages[emotion.type]?.url"
             :alt="emotion.label"
             class="preview-image"
           >

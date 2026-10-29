@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, useMessage } from 'naive-ui'
 import { onMounted, ref, watch } from 'vue'
 
@@ -98,7 +99,7 @@ async function handleSave() {
 /**
  * 测试唤醒词
  */
-async function handleCustomButton() {
+async function testWakeWord() {
   try {
     loading.value = true
 
@@ -118,7 +119,13 @@ onMounted(() => {
   loadConfig()
 })
 
-defineExpose({ handleSave, handleCustomButton })
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+  actions: { testWakeWord: { label: '测试', run: testWakeWord } },
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

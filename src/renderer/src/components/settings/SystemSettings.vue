@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SystemConfig } from '@shared/types'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NForm, NFormItem, NInput, NSelect, useMessage } from 'naive-ui'
 import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
 
@@ -102,12 +103,18 @@ async function handleSave() {
   }
 }
 
-async function handleCustomButton() {
+async function resetDraft() {
   const snap = cloneDeep(DEFAULTS)
   Object.assign(form, snap)
 }
 
-defineExpose({ handleSave, handleCustomButton })
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+  actions: { resetDraft: { label: '重置', run: resetDraft } },
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

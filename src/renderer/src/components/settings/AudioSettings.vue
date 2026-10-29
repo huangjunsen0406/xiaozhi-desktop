@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AecMode, AecStatus, AudioSettings as AudioSettingsDto } from '@shared/types'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NButton, NForm, NFormItem, NSelect, NSlider, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useDevices } from '../../composables/useDevices'
@@ -348,7 +349,7 @@ async function handleSave(): Promise<void> {
   }
 }
 
-async function handleCustomButton(): Promise<void> {
+async function refreshDeviceList(): Promise<void> {
   await refreshDevices()
   message.success('设备列表已刷新')
 }
@@ -376,7 +377,13 @@ onMounted(async () => {
   await loadConfig()
 })
 
-defineExpose({ handleSave, handleCustomButton })
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+  actions: { refreshDevices: { label: '刷新设备', run: refreshDeviceList } },
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

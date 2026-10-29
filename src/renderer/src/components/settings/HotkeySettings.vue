@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NForm, NFormItem, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import ShortcutRecorder from '../ShortcutRecorder.vue'
@@ -92,21 +93,16 @@ async function resetToDefaults() {
   }
 }
 
-// 保存（预留,目前是实时保存）
-async function handleSave() {
-  message.success('快捷键配置已保存')
-}
-
-// 自定义按钮（重置）
-async function handleCustomButton() {
-  await resetToDefaults()
-}
-
 onMounted(() => {
   loadShortcuts()
 })
 
-defineExpose({ handleSave, handleCustomButton })
+const panel = {
+  persistence: 'immediate',
+  actions: { resetToDefaults: { label: '重置所有', run: resetToDefaults } },
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MusicConfig } from '@shared/types'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { NForm, NFormItem, NInput, NSelect, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 
@@ -74,7 +75,12 @@ onMounted(async () => {
 })
 
 // 导出方法供父组件调用
-defineExpose({ handleSave })
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

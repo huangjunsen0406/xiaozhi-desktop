@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SettingsPanelHandle } from '../../types/settings'
 import {
   PET_DISPLAY_WIDTH_DEFAULT,
   PET_DISPLAY_WIDTH_MAX,
@@ -138,16 +139,11 @@ onUnmounted(() => {
   }
 })
 
-defineExpose({
-  handleSave: async () => {
-    if (sizeDebounceTimer) {
-      clearTimeout(sizeDebounceTimer)
-      sizeDebounceTimer = null
-      await persistDisplayWidth(displayWidthPx.value)
-    }
-    message.success('外观设置已保存')
-  },
-})
+const panel = {
+  persistence: 'immediate',
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

@@ -30,8 +30,6 @@ export type EmotionType
 export interface EmotionConfig {
   /** 默认表情 */
   defaultEmotion?: EmotionType
-  /** 是否启用缓存 */
-  enableCache?: boolean
 }
 
 /**

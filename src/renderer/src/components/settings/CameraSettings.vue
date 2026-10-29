@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SettingsPanelHandle } from '../../types/settings'
 import type { CameraDevice } from '../../utils/camera'
 import { NButton, NForm, NFormItem, NInput, NSelect, NSpace, NSwitch, useMessage } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -221,18 +222,6 @@ async function handleSave() {
   }
 }
 
-/**
- * 测试按钮（暴露给父组件）
- */
-async function handleCustomButton() {
-  if (isPreviewing.value) {
-    stopPreview()
-  }
-  else {
-    await startPreview()
-  }
-}
-
 // 监听设备ID变化，自动重启预览
 watch(deviceId, () => {
   restartPreview()
@@ -255,7 +244,12 @@ onBeforeUnmount(() => {
 })
 
 // 暴露方法给父组件
-defineExpose({ handleSave, handleCustomButton })
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

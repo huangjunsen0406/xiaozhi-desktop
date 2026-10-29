@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { McpInstalledPlugin, McpToolCatalogItem, McpToolsSyncResult } from '@shared/types'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { isMcpToolDraftDirty, mergeMcpToolDraft, mergeMcpToolSaveResult } from '@shared/mcpToolState'
 import { NButton, NCheckbox, NEmpty, NPopconfirm, NSpin, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
@@ -297,7 +298,7 @@ async function handleDeletePlugin(directoryName: string) {
 /**
  * 重置：全部启用（清空本地禁用），不立即落盘
  */
-async function handleCustomButton() {
+async function resetDraft() {
   const next: Record<string, boolean> = {}
   for (const item of catalog.value) {
     next[item.name] = true
@@ -330,11 +331,13 @@ onMounted(() => {
   loadCatalog()
 })
 
-defineExpose({
-  handleSave,
-  handleCustomButton,
-  isDirty,
-})
+const panel = {
+  persistence: 'explicit',
+  save: handleSave,
+  actions: { resetDraft: { label: '重置', run: resetDraft } },
+} satisfies SettingsPanelHandle
+
+defineExpose(panel)
 </script>
 
 <template>

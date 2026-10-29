@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
+import type { SettingsPanelHandle } from '../types/settings'
 import {
   NButton,
   NLayout,
@@ -9,8 +10,8 @@ import {
   NSpace,
   useMessage,
 } from 'naive-ui'
-import { computed, h, ref } from 'vue'
 
+import { computed, h, ref } from 'vue'
 // 图标
 import IconCarbonPet from '~icons/carbon/bot'
 import IconCarbonCamera from '~icons/carbon/camera'
@@ -24,8 +25,8 @@ import IconCarbonMusic from '~icons/carbon/music'
 import IconCarbonSettings from '~icons/carbon/settings'
 import IconCarbonTools from '~icons/carbon/tools'
 import IconCarbonUser from '~icons/carbon/user'
-import IconCarbonView from '~icons/carbon/view'
 
+import IconCarbonView from '~icons/carbon/view'
 // 子面板
 import AboutSettings from '../components/settings/AboutSettings.vue'
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue'
@@ -63,14 +64,8 @@ const menuOptions = [
   { label: '关于', key: 'about', icon: withIcon(IconCarbonInformation) },
 ] satisfies { label: string, key: Key, icon: () => ReturnType<typeof h> }[]
 
-type MaybePromise<T> = T | Promise<T>
-export interface PanelExposed {
-  handleSave: () => MaybePromise<void>
-  handleCustomButton?: () => MaybePromise<void>
-}
-
-// 使用字典存储每个面板的引用
-const panelRefs = ref<Record<Key, PanelExposed | null>>({
+// 各子面板在 expose 处检查契约；动态组件 ref 在这里保留一次窄断言。
+const panelRefs = ref<Record<Key, SettingsPanelHandle | null>>({
   system: null,
   appearance: null,
   model: null,
@@ -86,44 +81,29 @@ const panelRefs = ref<Record<Key, PanelExposed | null>>({
   about: null,
 })
 
-// 设置面板引用的辅助函数
 function setPanelRef(key: Key) {
   return (el: unknown) => {
-    panelRefs.value[key] = el as PanelExposed | null
+    panelRefs.value[key] = el as SettingsPanelHandle | null
   }
 }
 
-// 获取当前选中面板的引用
 const currentPanelRef = computed(() => panelRefs.value[selected.value])
+const currentActions = computed(() => Object.entries(currentPanelRef.value?.actions ?? {}))
+const showSave = computed(() => currentPanelRef.value?.persistence === 'explicit')
+const showFooter = computed(() => showSave.value || currentActions.value.length > 0)
 
 const message = useMessage()
-
-const customButtonTextByKey: Record<Key, string | undefined> = {
-  system: '重置',
-  appearance: undefined,
-  model: '刷新列表',
-  pets: '刷新列表',
-  care: undefined,
-  emotion: undefined, // 表情设置没有自定义按钮
-  wake: '测试',
-  camera: undefined, // 摄像头改为内嵌预览，不需要自定义按钮
-  music: undefined,
-  audio: '刷新设备',
-  hotkey: '重置所有',
-  mcp: '重置',
-  about: undefined,
-}
-const customText = computed(() => customButtonTextByKey[selected.value])
-
 const saveLoading = ref(false)
-const customLoading = ref(false)
+const pendingAction = ref<string | null>(null)
 
 async function onSaveClick() {
-  if (!currentPanelRef.value?.handleSave)
+  const save = currentPanelRef.value?.save
+  if (!save)
     return
+
   saveLoading.value = true
   try {
-    await currentPanelRef.value.handleSave()
+    await save()
   }
   catch (e) {
     const errorMessage = e instanceof Error ? e.message : '保存失败'
@@ -134,19 +114,21 @@ async function onSaveClick() {
   }
 }
 
-async function onCustomClick() {
-  if (!currentPanelRef.value?.handleCustomButton)
+async function onActionClick(id: string) {
+  const action = currentPanelRef.value?.actions?.[id]
+  if (!action)
     return
-  customLoading.value = true
+
+  pendingAction.value = id
   try {
-    await currentPanelRef.value.handleCustomButton()
+    await action.run()
   }
   catch (e) {
     const errorMessage = e instanceof Error ? e.message : '操作失败'
     message.error(errorMessage)
   }
   finally {
-    customLoading.value = false
+    pendingAction.value = null
   }
 }
 </script>
@@ -209,13 +191,13 @@ async function onCustomClick() {
             </div>
           </div>
 
-          <!-- 底部按钮：固定行（外观 / 关于 不显示保存栏） -->
-          <div v-if="selected !== 'appearance' && selected !== 'about'" class="shrink-0">
+          <!-- 底部按钮：由面板真实能力决定是否显示 -->
+          <div v-if="showFooter" class="shrink-0">
             <NSpace justify="end">
-              <NButton v-if="customText" :loading="customLoading" @click="onCustomClick">
-                {{ customText }}
+              <NButton v-for="[id, action] in currentActions" :key="id" :loading="pendingAction === id" @click="onActionClick(id)">
+                {{ action.label }}
               </NButton>
-              <NButton type="primary" :loading="saveLoading" @click="onSaveClick">
+              <NButton v-if="showSave" type="primary" :loading="saveLoading" @click="onSaveClick">
                 保存
               </NButton>
             </NSpace>

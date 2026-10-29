@@ -4,6 +4,7 @@
  * 布局与系统选项 / 关怀等页一致：NForm 左标签
  */
 import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
+import type { SettingsPanelHandle } from '../../types/settings'
 import { stripReleaseNotesHtml } from '@shared/releaseNotes'
 import { NButton, NForm, NFormItem, NProgress, NSpace, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -218,11 +219,11 @@ onUnmounted(() => {
   offError?.()
 })
 
-async function handleSave() {
-  message.success('关于页无需保存')
-}
+const panel = {
+  persistence: 'immediate',
+} satisfies SettingsPanelHandle
 
-defineExpose({ handleSave })
+defineExpose(panel)
 </script>
 
 <template>
