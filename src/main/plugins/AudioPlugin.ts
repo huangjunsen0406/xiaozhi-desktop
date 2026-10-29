@@ -2,9 +2,9 @@ import type { AudioListener, DeviceState } from '@shared/types'
 import type { BrowserWindow } from 'electron'
 import type { Buffer } from 'node:buffer'
 import type { PluginCommands, PluginContext } from '../core'
-import { ipcMain } from 'electron'
+import { ipcMain, powerMonitor } from 'electron'
 import { disposeOpusCodec, getOpusCodec, initOpusCodec } from '../audio/codecService'
-import { Events } from '../core'
+import { Events } from '../core/EventBus'
 import { getLogger } from '../utils/logger'
 
 import { Plugin } from './Plugin'
@@ -39,8 +39,28 @@ export class AudioPlugin extends Plugin {
   }
 
   private backgroundAudioWindow: BrowserWindow | null = null
+  private systemSuspended = false
 
-  // 音���监听器（观察者模式）
+  private readonly onSystemSuspend = (): void => {
+    this.systemSuspended = true
+    logger.info('系统即将睡眠，暂停后台音频')
+    this.sendAudioCommand('suspend')
+  }
+
+  private readonly onSystemResume = (): void => {
+    this.systemSuspended = false
+    logger.info('系统已唤醒，恢复后台音频')
+    this.sendAudioCommand('recover')
+  }
+
+  private sendAudioCommand(command: 'suspend' | 'recover' | 'switchDevices' | 'cleanup'): void {
+    const window = this.backgroundAudioWindow
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('audio:command', command)
+    }
+  }
+
+  // 音频监听器（观察者模式）
   private audioListeners: Set<AudioListener> = new Set()
 
   // IPC 监听器引用（用于精确移除）
@@ -76,6 +96,9 @@ export class AudioPlugin extends Plugin {
         this.onDeviceStateChanged(newState)
       })
 
+      powerMonitor.on('suspend', this.onSystemSuspend)
+      powerMonitor.on('resume', this.onSystemResume)
+
       logger.info('初始化完成')
     }
     catch (error) {
@@ -100,12 +123,9 @@ export class AudioPlugin extends Plugin {
     logger.info(`设备状态变化: ${state}`)
 
     // 根据状态控制后台音频窗口
-    if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
-      if (state === 'listening') {
-        // 开始监听前，检查并切换设备（如果配置有变化）
-        logger.info('通知后台音频窗口检查设备配置')
-        this.backgroundAudioWindow.webContents.send('audio:command', 'switchDevices')
-      }
+    if (state === 'listening' && !this.systemSuspended) {
+      logger.info('通知后台音频窗口检查设备配置')
+      this.sendAudioCommand('switchDevices')
     }
   }
 
@@ -114,6 +134,9 @@ export class AudioPlugin extends Plugin {
    */
   setBackgroundAudioWindow(window: BrowserWindow): void {
     this.backgroundAudioWindow = window
+    if (this.systemSuspended) {
+      this.sendAudioCommand('suspend')
+    }
   }
 
   /**
@@ -164,6 +187,9 @@ export class AudioPlugin extends Plugin {
    * 处理来自渲染进程的 PCM 数据
    */
   private handlePCMFromRenderer(pcmData: Int16Array): void {
+    if (this.systemSuspended)
+      return
+
     try {
       // 1. 发送到服务器（仅在应该采集时）
       if (this.ctx?.shouldCaptureAudio()) {
@@ -206,6 +232,9 @@ export class AudioPlugin extends Plugin {
    * 处理从网络接收的 Opus 数据
    */
   private handleOpusFromNetwork(opusFrame: Buffer): void {
+    if (this.systemSuspended)
+      return
+
     try {
       const opusCodec = getOpusCodec()
       if (!opusCodec) {
@@ -252,11 +281,10 @@ export class AudioPlugin extends Plugin {
   async shutdown(): Promise<void> {
     logger.info('正在关闭...')
 
-    // 停止后台音频窗口的采集
-    if (this.backgroundAudioWindow && !this.backgroundAudioWindow.isDestroyed()) {
-      logger.info('通知后台音频窗口停止采集并清理资源')
-      this.backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
-    }
+    this.systemSuspended = true
+    powerMonitor.removeListener('suspend', this.onSystemSuspend)
+    powerMonitor.removeListener('resume', this.onSystemResume)
+    this.sendAudioCommand('cleanup')
 
     // 清理 IPC 监听器（精确移除，避免误删其他模块的监听器）
     if (this.pcmHandler) {
@@ -268,7 +296,7 @@ export class AudioPlugin extends Plugin {
     disposeOpusCodec()
     this.backgroundAudioWindow = null
 
-    // ���用父类 shutdown
+    // 调用父类 shutdown
     await super.shutdown()
 
     logger.info('已关闭')

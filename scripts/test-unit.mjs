@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url))
-const testRoots = ['src/main/__tests__', 'src/renderer/src/stores/__tests__']
+const testRoots = ['src/main/__tests__', 'src/renderer/src/stores/__tests__', 'src/renderer/src/utils/audio/__tests__']
 const filters = process.argv.slice(2)
 const testFiles = []
 for (const directory of testRoots) {
@@ -28,11 +28,17 @@ if (!testFiles.length)
 const quietLogger = `export const getLogger = () => ({ debug() {}, info() {}, warn() {}, error() {} })`
 const electronStub = `
   import os from 'node:os'
+  import { EventEmitter } from 'node:events'
+  export const powerMonitor = new EventEmitter()
   export const app = { getPath: () => os.tmpdir(), getName: () => 'xiaozhi-unit', isPackaged: false }
   export const BrowserWindow = { getAllWindows: () => [] }
   export const ipcMain = {
     handle: (name, handler) => globalThis.__ipcRuntime.handlers.set(name, handler),
     on: (name, handler) => globalThis.__ipcRuntime.listeners.set(name, handler),
+    removeListener: (name, handler) => {
+      if (globalThis.__ipcRuntime.listeners.get(name) === handler)
+        globalThis.__ipcRuntime.listeners.delete(name)
+    },
   }
   export const ipcRenderer = {
     invoke: (name, ...args) => globalThis.__ipcRuntime.handlers.get(name)({}, ...args),
@@ -56,12 +62,25 @@ function desktopBoundaries(testFile) {
       'wake-word/keywordsFile': `export const ensureWakeWordKeywordsFile = () => {}; export const resolveWakeWordKeyword = (_, keyword) => keyword`,
     })
   }
+  if (path.basename(testFile) === 'audio-power-lifecycle.test.ts') {
+    stubs['audio/codecService'] = `
+      export const initOpusCodec = () => {}
+      export const disposeOpusCodec = () => {}
+      export const getOpusCodec = () => ({
+        encode: data => data,
+        decode: () => new Int16Array([100]),
+      })
+    `
+  }
   return {
     name: 'unit-desktop-boundaries',
     setup(builder) {
       builder.onResolve({ filter: /./ }, (args) => {
         const normalized = args.path.replaceAll('\\', '/').replace(/\.ts$/, '')
-        const name = Object.keys(stubs).find(key => normalized === key || normalized.endsWith(`/${key}`))
+        const resolved = args.path.startsWith('.')
+          ? path.resolve(args.resolveDir, args.path).replaceAll('\\', '/').replace(/\.ts$/, '')
+          : normalized
+        const name = Object.keys(stubs).find(key => normalized === key || normalized.endsWith(`/${key}`) || resolved.endsWith(`/${key}`))
         if (name)
           return { path: name, namespace: 'unit-stub' }
       })

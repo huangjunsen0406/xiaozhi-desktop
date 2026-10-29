@@ -69,6 +69,7 @@ export function registerBackgroundAudioIpc(): void {
         currentOutputDeviceId: optionalString(input, 'currentOutputDeviceId'),
         error: optionalString(input, 'error'),
       }
+      const previous = audioStatus
       audioStatus = {
         initialized: state.initialized ?? audioStatus.initialized,
         capturing: state.capturing ?? audioStatus.capturing,
@@ -79,6 +80,15 @@ export function registerBackgroundAudioIpc(): void {
         currentOutputDeviceId: state.currentOutputDeviceId ?? audioStatus.currentOutputDeviceId,
         // A normal report clears a previous error; omitted device/state fields keep their values.
         error: state.error,
+      }
+      if (state.error) {
+        logger.warn('后台音频错误', state.error)
+      }
+      else if (previous.initialized !== audioStatus.initialized || previous.capturing !== audioStatus.capturing) {
+        logger.info('后台音频状态变化', {
+          initialized: audioStatus.initialized,
+          capturing: audioStatus.capturing,
+        })
       }
     }
     catch (error) {

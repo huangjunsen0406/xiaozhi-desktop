@@ -1,337 +1,170 @@
-/**
- * 后台音频窗口入口
- * 负责音频采集和播放,保持系统AEC永久活跃
- */
+import type { AudioCommand } from './utils/audio/AudioCommandQueue'
 import { AudioCapture } from './utils/audio/AudioCapture'
+import { AudioCommandQueue } from './utils/audio/AudioCommandQueue'
 import { AudioPlayback } from './utils/audio/AudioPlayback'
 import { getDeviceIdsFromConfig } from './utils/audio/deviceUtils'
 import { initMusicPlayer } from './utils/music/MusicPlayer'
 
-console.log('初始化后台音频系统...')
-
-// 初始化音乐播放器
+// Music has its own HTMLAudio lifecycle and is independent from conversation PCM.
 initMusicPlayer()
-console.log('音乐播放器已初始化')
 
-enum AudioState {
-  UNINITIALIZED = 'uninitialized',
-  INITIALIZING = 'initializing',
-  CAPTURING = 'capturing',
-  SWITCHING = 'switching',
-  ERROR = 'error',
-}
-
-type CommandType = 'initialize' | 'switchDevices' | 'updateConfig' | 'reinitialize' | 'cleanup'
-
-interface Command {
-  type: CommandType
-  priority: number // 0=高优先级, 1=普通
-}
-
-class AudioCommandQueue {
-  private queue: Command[] = []
-  private processing = false
-
-  enqueue(type: CommandType, priority = 1): void {
-    const command: Command = { type, priority }
-
-    // 按优先级插入
-    const insertIndex = this.queue.findIndex(c => c.priority > priority)
-    if (insertIndex === -1) {
-      this.queue.push(command)
-    }
-    else {
-      this.queue.splice(insertIndex, 0, command)
-    }
-
-    console.log(`[Queue] 加入命令: ${type}`)
-    this.processNext()
-  }
-
-  private async processNext(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
-      return
-    }
-
-    this.processing = true
-    const command = this.queue.shift()!
-
-    try {
-      await this.execute(command)
-    }
-    catch (error) {
-      console.error(`[Queue] 处理失败: ${command.type}`, error)
-      updateState(AudioState.ERROR)
-    }
-    finally {
-      this.processing = false
-      if (this.queue.length > 0) {
-        this.processNext()
-      }
-    }
-  }
-
-  private async execute(command: Command): Promise<void> {
-    switch (command.type) {
-      case 'initialize':
-        await doInitialize()
-        break
-      case 'switchDevices':
-        await doSwitchDevices()
-        break
-      case 'updateConfig':
-        await doUpdateConfig()
-        break
-      case 'reinitialize':
-        await doReinitialize()
-        break
-      case 'cleanup':
-        await doCleanup()
-        break
-    }
-  }
-}
-
-const commandQueue = new AudioCommandQueue()
-const capture = new AudioCapture()
-const playback = new AudioPlayback()
-
-let currentState = AudioState.UNINITIALIZED
+type AudioState = 'uninitialized' | 'initializing' | 'capturing' | 'suspended' | 'error'
+let state: AudioState = 'uninitialized'
+let generation = 0
+let sleeping = false
+let closed = false
 let currentInputDeviceId: string | undefined
 let currentOutputDeviceId: string | undefined
+const playback = new AudioPlayback()
+const capture = new AudioCapture(() => enqueue('recover'))
+const commandQueue = new AudioCommandQueue(execute, (error) => {
+  console.error('后台音频命令失败', error)
+  updateState('error', error)
+})
 
-/**
- * 更新状态并上报
- */
-function updateState(newState: AudioState): void {
-  if (currentState === newState) {
-    return
-  }
-
-  const oldState = currentState
-  currentState = newState
-
-  console.log(`[State] ${oldState} → ${newState}`)
-
-  // 上报给主进程
+function updateState(next: AudioState, error?: unknown): void {
+  state = next
   window.api.sendAudioState({
-    state: newState,
-    capturing: newState === AudioState.CAPTURING,
-    initialized: newState !== AudioState.UNINITIALIZED && newState !== AudioState.INITIALIZING,
+    state: next,
+    capturing: next === 'capturing',
+    initialized: next === 'capturing',
+    error: error === undefined ? undefined : error instanceof Error ? error.message : String(error),
   })
 }
 
-/**
- * 执行初始化并启动采集
- */
-async function doInitialize(): Promise<void> {
-  if (currentState !== AudioState.UNINITIALIZED && currentState !== AudioState.ERROR) {
-    console.log('音频系统已初始化,跳过')
+async function disposeResources(): Promise<void> {
+  const results = await Promise.allSettled([capture.dispose(), playback.dispose()])
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failures.length)
+    throw new AggregateError(failures.map(result => result.reason), '音频资源释放失败')
+}
+
+/** A system wake rebuilds both contexts even if Chromium still reports running. */
+async function rebuild(): Promise<void> {
+  const version = generation
+  const cancelled = () => version !== generation || sleeping || closed
+  await disposeResources()
+  if (cancelled())
     return
-  }
-
-  updateState(AudioState.INITIALIZING)
-
+  updateState('initializing')
   try {
-    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
-
-    await capture.initialize(inputDeviceId)
-    currentInputDeviceId = inputDeviceId
-    console.log('✓ 采集器初始化成功')
-
-    await playback.initialize(outputDeviceId)
-    currentOutputDeviceId = outputDeviceId
-    console.log('✓ 播放器初始化成功')
-
-    // 直接开始采集
+    const devices = await getDeviceIdsFromConfig()
+    if (cancelled())
+      return
+    await capture.initialize(devices.inputDeviceId)
+    if (cancelled()) {
+      await disposeResources()
+      return
+    }
+    await playback.initialize(devices.outputDeviceId)
+    if (cancelled()) {
+      await disposeResources()
+      return
+    }
     await capture.start()
-    updateState(AudioState.CAPTURING)
-    console.log('✓ 音频系统初始化并开始采集')
+    if (cancelled()) {
+      await disposeResources()
+      return
+    }
+    playback.start()
+    currentInputDeviceId = devices.inputDeviceId
+    currentOutputDeviceId = devices.outputDeviceId
+    updateState('capturing')
   }
   catch (error) {
-    console.error('初始化失败', error)
-    updateState(AudioState.ERROR)
+    await disposeResources()
     throw error
   }
 }
 
-/**
- * 执行设备切换
- */
-async function doSwitchDevices(): Promise<void> {
-  // 未初始化，先初始化
-  if (currentState === AudioState.UNINITIALIZED || currentState === AudioState.ERROR) {
-    console.log('音频系统未初始化，先进行初始化...')
-    await doInitialize()
-  }
-
-  try {
-    console.log('检查设备配置...')
-
-    // 获取最新的设备配置
-    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
-
-    let changed = false
-
-    // 切换输入设备
-    if (inputDeviceId !== currentInputDeviceId && inputDeviceId) {
-      console.log('切换输入设备:', currentInputDeviceId, '→', inputDeviceId)
-      await capture.switchDevice(inputDeviceId)
-      currentInputDeviceId = inputDeviceId
-      changed = true
-    }
-
-    // 切换输出设备
-    if (outputDeviceId !== currentOutputDeviceId && outputDeviceId) {
-      console.log('切换输出设备:', currentOutputDeviceId, '→', outputDeviceId)
-      await playback.switchDevice(outputDeviceId)
-      currentOutputDeviceId = outputDeviceId
-      changed = true
-    }
-
-    if (changed) {
-      console.log('✓ 设备切换完成')
-    }
-    else {
-      console.log('设备未变化')
-    }
-
-    // 恢复到采集状态
-    updateState(AudioState.CAPTURING)
-  }
-  catch (error) {
-    console.error('切换设备失败', error)
-    updateState(AudioState.ERROR)
-    throw error
-  }
-}
-
-/**
- * 执行配置更新（采样率、帧长度等）
- */
-async function doUpdateConfig(): Promise<void> {
-  // 未初始化，跳过更新
-  if (currentState === AudioState.UNINITIALIZED || currentState === AudioState.ERROR) {
-    console.log('音频系统未初始化，跳过配置更新')
+async function switchDevices(): Promise<void> {
+  const version = generation
+  if (state !== 'capturing') {
+    await rebuild()
     return
   }
-
-  try {
-    console.log('更新音频配置...')
-
-    // 更新采集器配置
-    await capture.updateConfig()
-
-    // 更新播放器配置
-    await playback.updateConfig()
-
-    console.log('✓ 音频配置已更新')
+  const devices = await getDeviceIdsFromConfig()
+  if (version !== generation || sleeping || closed)
+    return
+  if (devices.inputDeviceId !== currentInputDeviceId) {
+    await capture.switchDevice(devices.inputDeviceId || 'default')
+    currentInputDeviceId = devices.inputDeviceId
   }
-  catch (error) {
-    console.error('更新配置失败', error)
-    // 配置更新失败不改变状态，继续使用旧配置
+  if (version !== generation || sleeping || closed)
+    return
+  if (devices.outputDeviceId !== currentOutputDeviceId) {
+    await playback.switchDevice(devices.outputDeviceId || 'default')
+    currentOutputDeviceId = devices.outputDeviceId
   }
 }
 
-/**
- * 执行完整重建（采样率/帧长度/声道数变化时）
- * 完全销毁并重建 AudioContext，确保新参数完整生效
- */
-async function doReinitialize(): Promise<void> {
-  // 未初始化，跳过重建
-  if (currentState === AudioState.UNINITIALIZED || currentState === AudioState.ERROR) {
-    console.log('音频系统未初始化，跳过重建')
+async function execute(command: AudioCommand): Promise<void> {
+  if (command === 'cleanup' || command === 'suspend') {
+    await disposeResources()
+    updateState(command === 'cleanup' ? 'uninitialized' : 'suspended')
     return
   }
-
-  try {
-    console.log('开始完整重建音频系统...')
-
-    // 1. 停止采集并销毁所有资源
-    if (currentState === AudioState.CAPTURING) {
-      capture.stop()
-    }
-    await capture.dispose()
-    await playback.dispose()
-    console.log('旧音频资源已销毁')
-
-    // 2. 重新获取设备配置
-    const { inputDeviceId, outputDeviceId } = await getDeviceIdsFromConfig()
-
-    // 3. 重新初始化采集器
-    await capture.initialize(inputDeviceId)
-    currentInputDeviceId = inputDeviceId
-    console.log('采集器重建完成')
-
-    // 4. 重新初始化播放器
-    await playback.initialize(outputDeviceId)
-    currentOutputDeviceId = outputDeviceId
-    console.log('播放器重建完成')
-
-    // 5. 重新开始采集
-    await capture.start()
-    updateState(AudioState.CAPTURING)
-    console.log('音频系统重建完成，已恢复采集')
-  }
-  catch (error) {
-    console.error('音频系统重建失败', error)
-    updateState(AudioState.ERROR)
-    throw error
-  }
-}
-
-/**
- * 执行清理
- */
-async function doCleanup(): Promise<void> {
-  console.log('清理资源...')
-
-  try {
-    if (currentState === AudioState.CAPTURING) {
-      capture.stop()
-    }
-
-    await capture.dispose()
-    await playback.dispose()
-
-    updateState(AudioState.UNINITIALIZED)
-    console.log('✓ 资源已清理')
-  }
-  catch (error) {
-    console.error('清理失败', error)
-    updateState(AudioState.ERROR)
-  }
-}
-
-// 监听来自主进程的指令
-window.api.onAudioCommand((command: string, _data?: Record<string, unknown>) => {
-  console.log('收到指令:', command)
-
+  if (sleeping || closed)
+    return
   switch (command) {
-    case 'switchDevices':
-      // 用户在设置中更改了音频设备
-      commandQueue.enqueue('switchDevices', 1)
-      break
-    case 'updateConfig':
-      // 用户在设置中更改了音频配置（采样率、帧长度等）
-      commandQueue.enqueue('updateConfig', 1)
+    case 'initialize':
+      if (state !== 'capturing')
+        await rebuild()
       break
     case 'reinitialize':
-      // 音频参数变化，需要完整重建 AudioContext
-      commandQueue.enqueue('reinitialize', 0)
+    case 'recover':
+      await rebuild()
       break
+    case 'switchDevices':
+      await switchDevices()
+      break
+    case 'updateConfig':
+      if (state === 'capturing') {
+        const version = generation
+        await capture.updateConfig()
+        if (version !== generation || sleeping || closed)
+          return
+        await playback.updateConfig()
+      }
+      break
+  }
+}
+
+function enqueue(command: AudioCommand): void {
+  if (closed)
+    return
+  if (command === 'suspend' || command === 'cleanup') {
+    generation++
+    sleeping = true
+    closed = command === 'cleanup'
+    if (closed)
+      navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange)
+    // Close data gates before awaiting in-flight resource work.
+    capture.stop()
+    playback.stop()
+  }
+  else if (command === 'recover') {
+    sleeping = false
+  }
+  commandQueue.enqueue(command)
+}
+
+window.api.onAudioCommand((command) => {
+  switch (command) {
+    case 'switchDevices':
+    case 'updateConfig':
+    case 'reinitialize':
     case 'cleanup':
-      // 应用即将退出，清理资源
-      commandQueue.enqueue('cleanup', 0)
+    case 'suspend':
+    case 'recover':
+      enqueue(command)
       break
     default:
-      console.warn('[BackgroundAudio] 未知指令:', command)
+      console.warn('未知音频命令:', command)
   }
 })
-
-// 页面加载完成后自动初始化并开始采集
-window.addEventListener('DOMContentLoaded', () => {
-  commandQueue.enqueue('initialize', 0)
-})
-
-console.log('后台音频系统已启动')
+function onDeviceChange(): void {
+  enqueue('switchDevices')
+}
+navigator.mediaDevices.addEventListener('devicechange', onDeviceChange)
+window.addEventListener('DOMContentLoaded', () => enqueue('initialize'))

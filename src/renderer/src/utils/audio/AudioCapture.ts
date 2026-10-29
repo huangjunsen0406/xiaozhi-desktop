@@ -9,6 +9,10 @@ export class AudioCapture {
   private stream: MediaStream | null = null
   private source: MediaStreamAudioSourceNode | null = null
   private deviceId: string | undefined = undefined
+  private accepting = false
+  private generation = 0
+
+  constructor(private readonly onTrackEnded: () => void = () => {}) {}
 
   // 配置（从数据库动态加载）
   private sampleRate = 16000
@@ -42,10 +46,10 @@ export class AudioCapture {
         sampleRate: this.sampleRate,
       })
 
-      this.audioContext.onstatechange = () => {
-        if (this.audioContext?.state === 'suspended') {
-          console.warn('[AEC] AudioContext(capture) suspended，尝试恢复...')
-          this.audioContext.resume().catch(e => console.error('[AEC] resume 失败:', e))
+      const context = this.audioContext
+      context.onstatechange = () => {
+        if (this.accepting && context.state === 'suspended') {
+          void context.resume().catch(error => console.error('恢复采集上下文失败:', error))
         }
       }
 
@@ -66,6 +70,7 @@ export class AudioCapture {
 
       // 加载 AudioWorklet 模块
       await this.audioContext.audioWorklet.addModule('./worklets/pcm-capture-processor.js')
+      await this.audioContext.resume()
 
       console.log('AudioWorklet 模块加载成功')
 
@@ -97,6 +102,7 @@ export class AudioCapture {
    * @param deviceId 可选的设备ID，如果提供则覆盖初始化时的设备ID
    */
   async start(deviceId?: string): Promise<void> {
+    const generation = ++this.generation
     if (!this.audioContext || !this.workletNode) {
       throw new Error('AudioCapture 未初始化')
     }
@@ -111,6 +117,8 @@ export class AudioCapture {
 
       // 获取音频配置
       const audioConfig = await window.api.audioGetConfig()
+      if (generation !== this.generation)
+        return
       const aecMode = audioConfig.aecMode
         ?? (audioConfig.enableEchoCancellation === false ? 'off' : 'app')
 
@@ -134,28 +142,34 @@ export class AudioCapture {
         return navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
       }
 
+      let stream: MediaStream
       if (aecMode === 'off') {
-        this.stream = await tryGum(false)
+        stream = await tryGum(false)
       }
       else if (aecMode === 'system') {
         try {
-          this.stream = await tryGum({ ideal: 'all' })
+          stream = await tryGum({ ideal: 'all' })
         }
         catch (gumError) {
           console.warn('[AEC] system ideal:all 失败，回退 echoCancellation:true', gumError)
-          this.stream = await tryGum(true)
+          stream = await tryGum(true)
         }
       }
       else {
-        this.stream = await tryGum(true)
+        stream = await tryGum(true)
       }
+      if (generation !== this.generation) {
+        stream.getTracks().forEach(track => track.stop())
+        return
+      }
+      this.stream = stream
 
       // track 意外结束时自动重连（蓝牙切换、设备断连等）
       const track = this.stream.getAudioTracks()[0]
       if (track) {
         track.onended = () => {
-          console.warn('[AEC] 麦克风 track 意外结束，尝试重新采集...')
-          this.start(this.deviceId).catch(e => console.error('[AEC] 重新采集失败:', e))
+          this.stop()
+          this.onTrackEnded()
         }
 
         const settings = track.getSettings()
@@ -178,7 +192,10 @@ export class AudioCapture {
       console.log('麦克风权限已获取')
 
       // 创建音频源节点
+      if (generation !== this.generation)
+        return
       this.source = this.audioContext.createMediaStreamSource(this.stream)
+      this.accepting = true
 
       // 连接音频图: 麦克风 → Worklet
       this.source.connect(this.workletNode)
@@ -270,6 +287,8 @@ export class AudioCapture {
    * 停止采集音频
    */
   stop(): void {
+    this.accepting = false
+    this.generation++
     console.log('停止音频采集...')
 
     try {
@@ -298,6 +317,7 @@ export class AudioCapture {
       // 停止媒体流
       if (this.stream) {
         this.stream.getTracks().forEach((track) => {
+          track.onended = null
           try {
             if (track.readyState !== 'ended') {
               track.stop()
@@ -331,8 +351,10 @@ export class AudioCapture {
       this.workletNode = null
     }
 
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      await this.audioContext.close()
+    if (this.audioContext) {
+      this.audioContext.onstatechange = null
+      if (this.audioContext.state !== 'closed')
+        await this.audioContext.close()
       this.audioContext = null
     }
 
@@ -344,6 +366,8 @@ export class AudioCapture {
    * @param float32PCM Float32Array PCM 数据
    */
   private handlePCMData(float32PCM: Float32Array): void {
+    if (!this.accepting)
+      return
     try {
       // Float32 → Int16 转换
       const int16PCM = this.convertFloat32ToInt16(float32PCM)
