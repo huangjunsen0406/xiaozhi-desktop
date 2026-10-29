@@ -1,9 +1,9 @@
-import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 import { getLogger } from '../../utils/logger'
 import { applyPetSurfaceWorkspaceAndTop } from '../petSurfaceLayering'
+import { createRendererPreferences, loadRendererRoute } from '../rendererWindow'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('BubbleWindow')
@@ -47,13 +47,7 @@ export function buildBubbleWindow(): BrowserWindow {
     hiddenInMissionControl: true,
     type: isDarwin ? 'panel' : undefined,
     ...(isDarwin ? { enableLargerThanScreen: true } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      nodeIntegration: false,
-      contextIsolation: true,
-      devTools: is.dev,
-    },
+    webPreferences: createRendererPreferences({ devTools: is.dev }),
   })
 
   // 窗口准备好后的回调
@@ -72,12 +66,7 @@ export function buildBubbleWindow(): BrowserWindow {
   win.setIgnoreMouseEvents(true, { forward: false })
 
   // 加载页面
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/bubble`)
-  }
-  else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'bubble' })
-  }
+  loadRendererRoute(win, 'bubble')
 
   return win
 }

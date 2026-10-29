@@ -1,10 +1,10 @@
-import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
 import { getLogger } from '../../utils/logger'
 import { applyPetSurfaceWorkspaceAndTop } from '../petSurfaceLayering'
+import { createRendererPreferences, loadRendererRoute } from '../rendererWindow'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('Live2dWindow')
@@ -54,13 +54,7 @@ export function buildLive2dWindow(): BrowserWindow {
     // Codex：允许在全屏应用边缘外布局时略超出屏
     ...(isDarwin ? { enableLargerThanScreen: true } : {}),
     ...(icon ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      nodeIntegration: false,
-      contextIsolation: true,
-      devTools: is.dev, // 仅在开发模式下启用开发者工具
-    },
+    webPreferences: createRendererPreferences({ devTools: is.dev }),
   })
 
   // 窗口准备好后的回调
@@ -84,12 +78,7 @@ export function buildLive2dWindow(): BrowserWindow {
   // initLive2dDragBehavior(win)
 
   // 加载页面
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/live2d`)
-  }
-  else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'live2d' })
-  }
+  loadRendererRoute(win, 'live2d')
 
   return win
 }

@@ -1,13 +1,11 @@
-import { join } from 'node:path'
 import process from 'node:process'
-import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
+import { createRendererPreferences, loadRendererRoute } from '../rendererWindow'
 import { handleWindowClose } from '../windowManager'
 
 export function buildMiniWindow(): BrowserWindow {
   const icon = getAppIcon()
-
   const win = new BrowserWindow({
     width: 72,
     height: 72,
@@ -23,30 +21,15 @@ export function buildMiniWindow(): BrowserWindow {
     skipTaskbar: true,
     hiddenInMissionControl: true,
     ...(icon ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-    },
+    webPreferences: createRendererPreferences(),
   })
 
-  // 处理窗口关闭事件
-  win.on('close', (event) => {
-    handleWindowClose(event, win)
-  })
-
-  // 允许跨工作区显示（如果你想让悬浮球"全局悬浮"，保留；否则可以关）
+  win.on('close', event => handleWindowClose(event, win))
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  // 悬浮球用较低层级即可（不要 screen-saver）
   win.setAlwaysOnTop(true, process.platform === 'darwin' ? 'status' : 'normal')
   win.moveTop()
   win.excludedFromShownWindowsMenu = true
-
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/mini`)
-  }
-  else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'mini' })
-  }
+  loadRendererRoute(win, 'mini')
 
   return win
 }

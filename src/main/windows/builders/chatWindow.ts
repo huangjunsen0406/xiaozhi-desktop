@@ -1,8 +1,7 @@
-import { join } from 'node:path'
 import process from 'node:process'
-import { is } from '@electron-toolkit/utils'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
+import { createRendererPreferences, loadRendererRoute, openWindowLinksExternally, setAppWindowTitle } from '../rendererWindow'
 import { handleWindowClose } from '../windowManager'
 
 export function buildChatWindow(): BrowserWindow {
@@ -17,7 +16,6 @@ export function buildChatWindow(): BrowserWindow {
     show: false,
     frame: isMac,
     title: app.getName(),
-    // 三键保持可用：mac 上 fullscreenable:false 会让绿键变灰
     minimizable: true,
     maximizable: true,
     resizable: true,
@@ -27,7 +25,7 @@ export function buildChatWindow(): BrowserWindow {
     ...(isMac
       ? {
           titleBarStyle: 'hiddenInset' as const,
-          // 与 ChatView 顶部 h-11 对齐，避免红绿灯压住「历史对话」
+          // 与聊天页顶部拖拽区对齐。
           trafficLightPosition: { x: 16, y: 18 },
         }
       : {}),
@@ -36,42 +34,16 @@ export function buildChatWindow(): BrowserWindow {
       : {}),
     autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: true,
-    },
+    webPreferences: createRendererPreferences(),
   })
 
-  // 阻止页面 <title> 覆盖窗口标题（index.html 曾写成 Electron）
-  win.on('page-title-updated', (event) => {
-    event.preventDefault()
-  })
-  win.setTitle(app.getName())
-
-  win.on('ready-to-show', () => {
-    win.show()
-  })
-
-  win.on('close', (event) => {
-    handleWindowClose(event, win)
-  })
-
+  setAppWindowTitle(win)
+  win.on('ready-to-show', () => win.show())
+  win.on('close', event => handleWindowClose(event, win))
   win.setAlwaysOnTop(false)
   win.setVisibleOnAllWorkspaces(false)
-  win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/chat`)
-  }
-  else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'chat' })
-  }
+  openWindowLinksExternally(win)
+  loadRendererRoute(win, 'chat')
 
   return win
 }

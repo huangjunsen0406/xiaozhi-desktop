@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import { BrowserWindow } from 'electron'
 
 import { getLogger } from '../../utils/logger'
+import { createRendererPreferences } from '../rendererWindow'
 
 const logger = getLogger('BackgroundAudioWindow')
 
@@ -18,16 +19,11 @@ export function buildBackgroundAudioWindow(): BrowserWindow {
     height: 1,
     show: false, // 永远不显示
     skipTaskbar: true, // 不在任务栏显示
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false, // 需要访问 Node.js API
-      contextIsolation: true,
-      webSecurity: false, // 禁用 Web 安全以允许 getUserMedia
-      nodeIntegration: false,
-      backgroundThrottling: false, // 禁用后台节流，保持音频处理性能
-      // 允许自动播放音频和视频
+    webPreferences: createRendererPreferences({
+      webSecurity: false, // 允许后台媒体采集
+      backgroundThrottling: false,
       additionalArguments: ['--autoplay-policy=no-user-gesture-required'],
-    },
+    }),
   })
 
   // 加载音频处理页面

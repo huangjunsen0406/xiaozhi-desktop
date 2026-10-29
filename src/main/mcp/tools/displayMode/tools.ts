@@ -2,6 +2,8 @@
  * 显示模式切换工具定义
  */
 
+import type { DisplayMode } from '@shared/types'
+import { DISPLAY_MODES, isDisplayMode } from '@shared/types'
 import { getLogger } from '../../../utils/logger'
 import {
   getCurrentDisplayMode,
@@ -16,19 +18,12 @@ import { defineTool } from '../registry'
 
 const logger = getLogger('DisplayModeTools')
 
-const DISPLAY_MODES = ['main', 'mini', 'chat', 'live2d', 'pets'] as const
-type DisplayMode = (typeof DISPLAY_MODES)[number]
-
 const MODE_LABELS: Record<DisplayMode, string> = {
   main: '标准窗口',
   mini: '迷你悬浮球',
   chat: '聊天视图',
   live2d: 'Live2D 桌面宠物',
   pets: '精灵宠物',
-}
-
-function isDisplayMode(value: unknown): value is DisplayMode {
-  return typeof value === 'string' && (DISPLAY_MODES as readonly string[]).includes(value)
 }
 
 function switchToMode(mode: DisplayMode): void {

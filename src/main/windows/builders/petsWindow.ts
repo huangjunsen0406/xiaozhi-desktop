@@ -1,10 +1,10 @@
-import { join } from 'node:path'
 import process from 'node:process'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, screen } from 'electron'
 import { getAppIcon } from '../../utils/appIcon'
 import { getLogger } from '../../utils/logger'
 import { applyPetSurfaceWorkspaceAndTop } from '../petSurfaceLayering'
+import { createRendererPreferences, loadRendererRoute } from '../rendererWindow'
 import { handleWindowClose } from '../windowManager'
 
 const logger = getLogger('PetsWindow')
@@ -50,13 +50,7 @@ export function buildPetsWindow(): BrowserWindow {
     type: isDarwin ? 'panel' : undefined,
     ...(isDarwin ? { enableLargerThanScreen: true } : {}),
     ...(icon ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      nodeIntegration: false,
-      contextIsolation: true,
-      devTools: is.dev, // 仅在开发模式下启用开发者工具
-    },
+    webPreferences: createRendererPreferences({ devTools: is.dev }),
   })
 
   // 窗口准备好后的回调
@@ -94,12 +88,7 @@ export function buildPetsWindow(): BrowserWindow {
   })
 
   // 加载页面
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/pets`)
-  }
-  else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'pets' })
-  }
+  loadRendererRoute(win, 'pets')
 
   return win
 }

@@ -1,6 +1,7 @@
-import type { PetSurfaceContentSize, PetSurfaceId } from '@shared/types'
+import type { DisplayMode, PetSurfaceContentSize, PetSurfaceId } from '@shared/types'
 import fs from 'node:fs'
 import process from 'node:process'
+import { isDisplayMode } from '@shared/types'
 import { BrowserWindow, ipcMain, screen } from 'electron'
 import { hide as hideHover } from '../hover/controller'
 import { getDatabase } from '../services/database'
@@ -26,8 +27,7 @@ const windowRefs = {
   bubble: { current: null as BrowserWindow | null },
 }
 
-// 显示模式状态管理
-export type DisplayMode = 'main' | 'mini' | 'chat' | 'live2d' | 'pets'
+export type { DisplayMode } from '@shared/types'
 
 function getDisplayModeFilePath(): string {
   return getDisplayModeFile()
@@ -52,11 +52,7 @@ function loadDisplayMode(): DisplayMode {
   try {
     const data = JSON.parse(fs.readFileSync(getDisplayModeFilePath(), 'utf-8'))
     const mode = data?.mode
-    // 校验是否为合法值
-    if (mode === 'main' || mode === 'mini' || mode === 'chat' || mode === 'live2d' || mode === 'pets') {
-      return mode
-    }
-    return 'main'
+    return isDisplayMode(mode) ? mode : 'main'
   }
   catch {
     return 'main'
