@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from 'electron'
 import process from 'node:process'
 import { app, Menu } from 'electron'
-import { getCurrentDisplayMode, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
+import { getCurrentDisplayMode, restoreCurrentModeWindow, toggleSettings, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from '../windows/windowManager'
 /**
  * 构建应用菜单（包含 Edit 菜单以支持复制粘贴等操作）
  */
@@ -77,6 +77,11 @@ export function buildDisplayModeMenu(includeQuit: boolean = false): Menu {
   const currentMode = getCurrentDisplayMode()
 
   const menuTemplate: MenuItemConstructorOptions[] = [
+    {
+      label: '显示窗口',
+      click: restoreCurrentModeWindow,
+    },
+    { type: 'separator' },
     {
       label: '显示模式',
       submenu: [

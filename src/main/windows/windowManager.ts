@@ -141,11 +141,12 @@ function createWindowEnsurer(
   position?: PositionConfig,
 ): () => BrowserWindow {
   return () => {
-    if (windowRef.current == null) {
+    if (windowRef.current == null || windowRef.current.isDestroyed()) {
       const win = builder()
       windowRef.current = win
       win.on('closed', () => {
-        windowRef.current = null
+        if (windowRef.current === win)
+          windowRef.current = null
       })
       if (position) {
         if (position.type === 'corner') {
@@ -1098,6 +1099,36 @@ export function getCurrentModeWindow(): BrowserWindow | null {
     default:
       return windowRefs.main.current
   }
+}
+
+/** 恢复当前模式；显示窗口入口不切换用户选择的模式。 */
+export function restoreCurrentModeWindow(): void {
+  const ensureWindow = {
+    main: ensureMainWindow,
+    mini: ensureMiniWindow,
+    chat: ensureChatWindow,
+    live2d: ensureLive2dWindow,
+    pets: ensurePetsWindow,
+  }[currentDisplayMode]
+  const win = ensureWindow()
+  if (win.isMinimized())
+    win.restore()
+
+  if (currentDisplayMode === 'live2d' || currentDisplayMode === 'pets') {
+    clampPetWindowToWorkAreaAndPersist(win)
+    reassertPetSurfaceTop(win)
+    win.showInactive()
+    const bubble = ensureBubbleWindow()
+    setupBubbleFollow(win)
+    // 只恢复已有内容的可见气泡，隐藏的气泡由消息展示流程控制。
+    if (bubble.isVisible())
+      reassertPetSurfaceTop(bubble)
+    return
+  }
+
+  win.show()
+  win.focus()
+  win.moveTop()
 }
 
 /**

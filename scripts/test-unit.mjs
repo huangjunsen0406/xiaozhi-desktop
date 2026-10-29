@@ -72,10 +72,35 @@ function desktopBoundaries(testFile) {
       })
     `
   }
+  if (path.basename(testFile) === 'tray-window.test.ts') {
+    Object.assign(stubs, {
+      'tray-test-asset': `export default 'tray-test-icon'`,
+      'electron': `export const { app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, screen, ipcMain } = globalThis.__trayRuntime.electron`,
+      'windows/builders': `
+        export const buildMainWindow = () => globalThis.__trayRuntime.buildWindow('main')
+        export const buildMiniWindow = () => globalThis.__trayRuntime.buildWindow('mini')
+        export const buildPanelWindow = () => globalThis.__trayRuntime.buildWindow('panel')
+        export const buildActivationWindow = () => globalThis.__trayRuntime.buildWindow('activation')
+        export const buildSettingsWindow = () => globalThis.__trayRuntime.buildWindow('settings')
+        export const buildBackgroundAudioWindow = () => globalThis.__trayRuntime.buildWindow('backgroundAudio')
+        export const buildChatWindow = () => globalThis.__trayRuntime.buildWindow('chat')
+        export const buildLive2dWindow = () => globalThis.__trayRuntime.buildWindow('live2d')
+        export const buildPetsWindow = () => globalThis.__trayRuntime.buildWindow('pets')
+        export const buildBubbleWindow = () => globalThis.__trayRuntime.buildWindow('bubble')
+      `,
+      'services/database': `export const getDatabase = () => globalThis.__trayRuntime.database`,
+      'utils/paths': `export const getDisplayModeFile = () => globalThis.__trayRuntime.modeFile`,
+      'hover/controller': `export const hide = () => {}`,
+      'windows/behaviors/DragBehavior': `export const isWindowDragging = () => false`,
+    })
+  }
   return {
     name: 'unit-desktop-boundaries',
     setup(builder) {
       builder.onResolve({ filter: /./ }, (args) => {
+        if (path.basename(testFile) === 'tray-window.test.ts' && args.path.endsWith('?asset')) {
+          return { path: 'tray-test-asset', namespace: 'unit-stub' }
+        }
         const normalized = args.path.replaceAll('\\', '/').replace(/\.ts$/, '')
         const resolved = args.path.startsWith('.')
           ? path.resolve(args.resolveDir, args.path).replaceAll('\\', '/').replace(/\.ts$/, '')

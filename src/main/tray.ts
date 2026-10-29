@@ -6,7 +6,7 @@ import linux32 from '../../resources/tray/icon-32.png?asset'
 import winIco from '../../resources/tray/icon.ico?asset'
 import macTpl2x from '../../resources/tray/iconTemplate@2x.png?asset'
 import { buildDisplayModeMenu } from './utils/menuBuilder'
-import { onDisplayModeChange } from './windows/windowManager'
+import { onDisplayModeChange, restoreCurrentModeWindow } from './windows/windowManager'
 
 let tray: Tray | null = null
 let lastLinuxBucket: 24 | 32 | null = null
@@ -74,8 +74,13 @@ export function registerTray(): void {
   if (process.platform === 'darwin') {
     tray.on('click', () => tray?.popUpContextMenu())
   }
-  else {
+  else if (process.platform === 'win32') {
+    tray.on('double-click', restoreCurrentModeWindow)
     tray.on('right-click', () => tray?.popUpContextMenu())
+  }
+  else {
+    // Linux click 表示桌面环境的 activation，可能由单击或双击触发。
+    tray.on('click', restoreCurrentModeWindow)
   }
 
   screen.on('display-metrics-changed', () => {
