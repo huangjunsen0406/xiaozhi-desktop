@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DisplayMode } from '@shared/types'
 import type { SettingsPanelHandle } from '../../types/settings'
 import {
   PET_DISPLAY_WIDTH_DEFAULT,
@@ -7,7 +8,7 @@ import {
 } from '@shared/types'
 import { useColorMode } from '@vueuse/core'
 import { NForm, NFormItem, NSelect, NSlider, useMessage } from 'naive-ui'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 const message = useMessage()
 
@@ -18,22 +19,16 @@ const mode = useColorMode({
   modes: {
     light: 'light',
     dark: 'dark',
-    auto: 'auto',
+    auto: '',
   },
 })
 
-const displayMode = ref<'main' | 'mini' | 'chat' | 'live2d' | 'pets'>('main')
-
-// 全局桌宠显示宽度（Sprite + Live2D 共用，Codex 80–224 默认 112）
+const displayMode = ref<DisplayMode>('main')
 const displayWidthPx = ref(PET_DISPLAY_WIDTH_DEFAULT)
 const sizeSaving = ref(false)
 let sizeDebounceTimer: ReturnType<typeof setTimeout> | null = null
-let removeDisplayWidthListener: (() => void) | null = null
-let removeDisplayModeListener: (() => void) | null = null
-/** 避免本地 set 后广播回写再触发保存 */
-let suppressSizeWatch = false
+const cleanups: Array<() => void> = []
 
-// 选项定义
 const displayModeOptions = [
   { label: '标准窗口', value: 'main' },
   { label: '迷你悬浮球', value: 'mini' },
@@ -48,7 +43,7 @@ const themeOptions = [
   { label: '跟随系统', value: 'auto' },
 ]
 
-async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat' | 'live2d' | 'pets') {
+async function handleDisplayModeChange(value: DisplayMode) {
   try {
     await window.api.switchDisplayMode(value)
   }
@@ -57,22 +52,12 @@ async function handleDisplayModeChange(value: 'main' | 'mini' | 'chat' | 'live2d
   }
 }
 
-function handleThemeChange(value: 'light' | 'dark' | 'auto') {
-  mode.value = value
-}
-
-/**
- * 持久化显示宽度（防抖）；主进程会广播给已打开的 pets/live2d 窗
- */
 async function persistDisplayWidth(width: number): Promise<void> {
   if (sizeSaving.value)
     return
   sizeSaving.value = true
   try {
-    const saved = await window.api.petsSetDisplayWidth(width)
-    suppressSizeWatch = true
-    displayWidthPx.value = saved
-    suppressSizeWatch = false
+    displayWidthPx.value = await window.api.petsSetDisplayWidth(width)
   }
   catch {
     message.error('设置宠物大小失败')
@@ -82,46 +67,38 @@ async function persistDisplayWidth(width: number): Promise<void> {
   }
 }
 
-watch(displayWidthPx, (width) => {
-  if (suppressSizeWatch)
-    return
+function handleDisplayWidthInput(width: number): void {
+  displayWidthPx.value = width
   if (sizeDebounceTimer)
     clearTimeout(sizeDebounceTimer)
   sizeDebounceTimer = setTimeout(() => {
     void persistDisplayWidth(width)
   }, 200)
-})
+}
 
 onMounted(async () => {
   try {
-    const mode = await window.api.getDisplayMode()
-    displayMode.value = mode
+    displayMode.value = await window.api.getDisplayMode()
   }
   catch {
-    // 加载失败时保持默认值
+    // 保持默认值
   }
 
   try {
-    const width = await window.api.petsGetDisplayWidth()
-    suppressSizeWatch = true
-    displayWidthPx.value = width
-    suppressSizeWatch = false
+    displayWidthPx.value = await window.api.petsGetDisplayWidth()
   }
   catch {
-    // 加载失败时保持默认值
+    // 保持默认值
   }
 
-  removeDisplayModeListener = window.api.onDisplayModeChanged((mode) => {
-    displayMode.value = mode
-  })
-
-  removeDisplayWidthListener = window.api.petsOnDisplayWidthChanged((width) => {
-    if (width === displayWidthPx.value)
-      return
-    suppressSizeWatch = true
-    displayWidthPx.value = width
-    suppressSizeWatch = false
-  })
+  cleanups.push(
+    window.api.onDisplayModeChanged((next) => {
+      displayMode.value = next
+    }),
+    window.api.petsOnDisplayWidthChanged((width) => {
+      displayWidthPx.value = width
+    }),
+  )
 })
 
 onUnmounted(() => {
@@ -129,14 +106,8 @@ onUnmounted(() => {
     clearTimeout(sizeDebounceTimer)
     sizeDebounceTimer = null
   }
-  if (removeDisplayWidthListener) {
-    removeDisplayWidthListener()
-    removeDisplayWidthListener = null
-  }
-  if (removeDisplayModeListener) {
-    removeDisplayModeListener()
-    removeDisplayModeListener = null
-  }
+  while (cleanups.length)
+    cleanups.pop()?.()
 })
 
 const panel = {
@@ -149,7 +120,6 @@ defineExpose(panel)
 <template>
   <div class="min-h-0">
     <NForm label-placement="left" :label-width="120">
-      <!-- 显示模式 -->
       <NFormItem label="显示模式">
         <NSelect
           v-model:value="displayMode"
@@ -159,24 +129,22 @@ defineExpose(panel)
         />
       </NFormItem>
 
-      <!-- 主题设置 -->
       <NFormItem label="主题">
         <NSelect
           v-model:value="mode"
           :options="themeOptions"
           placeholder="选择主题"
-          @update:value="handleThemeChange"
         />
       </NFormItem>
 
-      <!-- 宠物大小（Sprite Pets + Live2D 共用） -->
       <NFormItem label="宠物大小">
         <div style="display: flex; flex-direction: column; gap: 4px; width: 100%">
           <NSlider
-            v-model:value="displayWidthPx"
+            :value="displayWidthPx"
             :min="PET_DISPLAY_WIDTH_MIN"
             :max="PET_DISPLAY_WIDTH_MAX"
             :step="1"
+            @update:value="handleDisplayWidthInput"
           />
           <span style="color: #999; font-size: 12px">
             当前宽度: {{ displayWidthPx }}px（{{ PET_DISPLAY_WIDTH_MIN }}–{{ PET_DISPLAY_WIDTH_MAX }}，默认 {{ PET_DISPLAY_WIDTH_DEFAULT }}）

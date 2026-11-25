@@ -95,11 +95,6 @@ export interface AudioUpdateSettingsResult {
   }
 }
 
-export interface AudioDeviceList {
-  inputs: AudioDeviceInfo[]
-  outputs: AudioDeviceInfo[]
-}
-
 export interface AudioListener {
   readonly name: string
   onAudioData: (pcmData: Int16Array) => void

@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AboutSettings: typeof import('./components/settings/AboutSettings.vue')['default']
     AppearanceSettings: typeof import('./components/settings/AppearanceSettings.vue')['default']
+    AssetGallerySettings: typeof import('./components/settings/AssetGallerySettings.vue')['default']
     AudioSettings: typeof import('./components/settings/AudioSettings.vue')['default']
     AudioWave: typeof import('./components/AudioWave.vue')['default']
     CameraSettings: typeof import('./components/settings/CameraSettings.vue')['default']
@@ -42,7 +43,6 @@ declare module 'vue' {
     ShortcutRecorder: typeof import('./components/ShortcutRecorder.vue')['default']
     SystemSettings: typeof import('./components/settings/SystemSettings.vue')['default']
     TitleBar: typeof import('./components/TitleBar.vue')['default']
-    Versions: typeof import('./components/Versions.vue')['default']
     WakeWordSettings: typeof import('./components/settings/WakeWordSettings.vue')['default']
   }
 }

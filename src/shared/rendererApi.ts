@@ -51,59 +51,6 @@ import type {
   WakeWordConfig,
 } from '@shared/types'
 
-/**
- * 激活设备信息
- */
-export type ActivationDeviceInfo = DeviceInfo
-
-// 导出共享类型供渲染进程使用
-export type {
-  ActivationData,
-  ActivationInitResult,
-  ActivationResult,
-  ActivationStatus,
-  AecCaptureReport,
-  AecStatus,
-  AppStateSnapshot,
-  AudioSettings,
-  AudioUpdateSettingsResult,
-  BackgroundAudioStateUpdate,
-  BackgroundAudioStatus,
-  BubbleLocalShowPayload,
-  CameraConfig,
-  CareReminderConfig,
-  CareReminderDemoResult,
-  ChatMessage,
-  ChatMessageAddedEvent,
-  ChatMessagesBatchAddedEvent,
-  ChatSession,
-  ChatSessionCreatedEvent,
-  CreateSessionParams,
-  DeviceInfo,
-  FileDialogResult,
-  HoverAnchor,
-  ImageCapturedEvent,
-  McpPluginImportResult,
-  McpPluginsHostConfig,
-  McpToolCatalogItem,
-  McpToolsSaveResult,
-  ModelInfo,
-  MusicConfig,
-  PcmAudioData,
-  PetInfo,
-  PetSpritesheetPayload,
-  PetSurfaceContentSize,
-  PetSurfaceId,
-  ServerMessage,
-  ShortcutConfig,
-  SystemConfig,
-  UpdateCheckResult,
-  UpdateDownloadProgress,
-  UpdatePrefs,
-  UpdateStatusSnapshot,
-  WakeWordConfig,
-}
-
 export interface RendererApi {
   togglePanel: () => void
   toggleToMini: () => void
@@ -164,7 +111,7 @@ export interface RendererApi {
   careReminderDemo: () => Promise<CareReminderDemoResult>
   // Activation APIs
   activationInitialize: () => Promise<ActivationInitResult>
-  activationGetDeviceInfo: () => Promise<ActivationDeviceInfo>
+  activationGetDeviceInfo: () => Promise<DeviceInfo>
   activationGetActivationData: () => Promise<ActivationData | null>
   activationStart: (data: ActivationData) => Promise<ActivationResult>
   activationCancel: () => Promise<ActivationResult>

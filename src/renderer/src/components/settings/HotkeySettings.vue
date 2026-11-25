@@ -1,18 +1,9 @@
 <script setup lang="ts">
+import type { ShortcutConfig } from '@shared/types'
 import type { SettingsPanelHandle } from '../../types/settings'
 import { NForm, NFormItem, NSwitch, useMessage } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import ShortcutRecorder from '../ShortcutRecorder.vue'
-
-interface ShortcutConfig {
-  id: number
-  action: string
-  name: string
-  category: string
-  accelerator: string | null
-  enabled: boolean
-  isGlobal: boolean
-}
 
 const message = useMessage()
 

@@ -1,63 +1,28 @@
 import type { AppStateSnapshot, ServerMessage } from '@shared/types'
-/**
- * Application 控制 API 模块
- */
-import { ipcRenderer } from 'electron'
-import { unwrapIpcResult } from '../utils/ipc'
-
-// 导出类型以便其他模块使用
-export type { AppStateSnapshot, ServerMessage }
+import { invokeData, invokeVoid, subscribeChannel } from '../utils/ipc'
 
 export const appApi = {
-  // 开始手动监听
-  startListeningManual: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('app:start-listening-manual')
-    unwrapIpcResult(result, '开始手动监听失败')
-  },
+  startListeningManual: (): Promise<void> =>
+    invokeVoid('app:start-listening-manual', '开始手动监听失败'),
 
-  // 停止手动监听
-  stopListeningManual: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('app:stop-listening-manual')
-    unwrapIpcResult(result, '停止手动监听失败')
-  },
+  stopListeningManual: (): Promise<void> =>
+    invokeVoid('app:stop-listening-manual', '停止手动监听失败'),
 
-  // 开始自动对话
-  startAutoConversation: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('app:start-auto-conversation')
-    unwrapIpcResult(result, '开始自动对话失败')
-  },
+  startAutoConversation: (): Promise<void> =>
+    invokeVoid('app:start-auto-conversation', '开始自动对话失败'),
 
-  // 停止自动对话
-  stopAutoConversation: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('app:stop-auto-conversation')
-    unwrapIpcResult(result, '停止自动对话失败')
-  },
+  stopAutoConversation: (): Promise<void> =>
+    invokeVoid('app:stop-auto-conversation', '停止自动对话失败'),
 
-  // 发送文本消息（用户话语，会话语义）
-  sendText: async (text: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('app:send-text', text)
-    unwrapIpcResult(result, '发送文本消息失败')
-  },
+  sendText: (text: string): Promise<void> =>
+    invokeVoid('app:send-text', '发送文本消息失败', text),
 
-  // 获取状态快照（IpcResult 包装）
-  getState: async (): Promise<AppStateSnapshot> => {
-    const result: unknown = await ipcRenderer.invoke('app:get-state')
-    return unwrapIpcResult<AppStateSnapshot>(result, '获取状态快照失败')
-  },
+  getState: (): Promise<AppStateSnapshot> =>
+    invokeData('app:get-state', '获取状态快照失败'),
 
-  // 监听状态变化
-  onStateChanged: (callback: (state: AppStateSnapshot) => void): () => void => {
-    const handler = (_: Electron.IpcRendererEvent, state: AppStateSnapshot) => callback(state)
-    ipcRenderer.on('app:state-changed', handler)
-    return () => {
-      ipcRenderer.off('app:state-changed', handler)
-    }
-  },
+  onStateChanged: (callback: (state: AppStateSnapshot) => void): () => void =>
+    subscribeChannel('app:state-changed', callback),
 
-  // 监听服务器消息（用于接收表情、文本等数据）
-  onServerMessage: (callback: (message: ServerMessage) => void): () => void => {
-    const handler = (_: Electron.IpcRendererEvent, message: ServerMessage) => callback(message)
-    ipcRenderer.on('server:message', handler)
-    return () => ipcRenderer.off('server:message', handler)
-  },
+  onServerMessage: (callback: (message: ServerMessage) => void): () => void =>
+    subscribeChannel('server:message', callback),
 }

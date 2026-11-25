@@ -298,125 +298,48 @@ export class MusicPlayer {
     }
   }
 
-  /**
-   * 暂停播放
-   */
   private pause(): void {
-    try {
-      this.audio.pause()
-    }
-    catch (error) {
-      console.error('暂停失败', error)
-    }
+    this.audio.pause()
   }
 
-  /**
-   * 恢复播放
-   */
   private resume(): void {
-    try {
-      this.audio.play().catch((error) => {
-        console.error('恢复播放失败', error)
-      })
-    }
-    catch (error) {
-      console.error('恢复播放异常', error)
-    }
+    void this.audio.play().catch((error) => {
+      console.error('恢复播放失败', error)
+    })
   }
 
-  /**
-   * 停止播放
-   */
   private stop(): void {
-    try {
-      this.audio.pause()
-      this.audio.currentTime = 0
-      this.destroyHls()
-      this.currentState = 'stopped'
-      this.notifyMainProcess({
-        state: 'stopped',
-        currentTime: 0,
-      })
-    }
-    catch (error) {
-      console.error('停止失败', error)
-    }
+    this.audio.pause()
+    this.audio.currentTime = 0
+    this.destroyHls()
+    this.currentState = 'stopped'
+    this.notifyMainProcess({ state: 'stopped', currentTime: 0 })
   }
 
-  /**
-   * 设置音量
-   */
   private setVolume(volume: number): void {
-    try {
-      // 音量范围 0-100，转换为 0-1
-      this.audio.volume = Math.max(0, Math.min(100, volume)) / 100
-      console.log(`[MusicPlayer] 音量设置为: ${volume}`)
-    }
-    catch (error) {
-      console.error('设置音量失败', error)
-    }
+    this.audio.volume = Math.max(0, Math.min(100, volume)) / 100
   }
 
-  /**
-   * 跳转到指定位置
-   */
   private seek(position: number): void {
-    try {
-      this.audio.currentTime = position
-      console.log(`[MusicPlayer] 跳转到: ${position}秒`)
-    }
-    catch (error) {
-      console.error('跳转失败', error)
-    }
+    this.audio.currentTime = position
   }
 
-  /**
-   * 设置循环播放
-   */
   private setLoop(loop: boolean): void {
-    try {
-      this.audio.loop = loop
-      console.log(`[MusicPlayer] 循环播放: ${loop}`)
-    }
-    catch (error) {
-      console.error('设置循环失败', error)
-    }
+    this.audio.loop = loop
   }
 
-  /**
-   * 设置播放速度
-   */
   private setPlaybackRate(rate: number): void {
-    try {
-      this.audio.playbackRate = rate
-      console.log(`[MusicPlayer] 播放速度: ${rate}x`)
-    }
-    catch (error) {
-      console.error('设置播放速度失败', error)
-    }
+    this.audio.playbackRate = rate
   }
 
-  /**
-   * 通知主进程状态变化
-   */
   private notifyMainProcess(status: Record<string, unknown>): void {
-    try {
-      window.api.musicStatusUpdate(status)
-    }
-    catch (error) {
-      console.error('通知主进程失败', error)
-    }
+    window.api.musicStatusUpdate(status)
   }
 
-  /**
-   * 清理资源
-   */
   dispose(): void {
-    console.log('清理资源')
     this.audio.pause()
     this.audio.src = ''
     this.destroyHls()
-    // 移除所有事件监听器
     this.audio.removeEventListener('play', this.onPlay)
     this.audio.removeEventListener('pause', this.onPause)
     this.audio.removeEventListener('ended', this.onEnded)
@@ -429,23 +352,9 @@ export class MusicPlayer {
   }
 }
 
-// 全局单例
 let musicPlayerInstance: MusicPlayer | null = null
 
-/**
- * 获取音乐播放器实例
- */
-export function getMusicPlayer(): MusicPlayer {
-  if (!musicPlayerInstance) {
-    musicPlayerInstance = new MusicPlayer()
-  }
+export function initMusicPlayer(): MusicPlayer {
+  musicPlayerInstance ??= new MusicPlayer()
   return musicPlayerInstance
-}
-
-/**
- * 初始化音乐播放器（在应用启动时调用）
- */
-export function initMusicPlayer(): void {
-  console.log('初始化全局音乐播放器')
-  getMusicPlayer()
 }

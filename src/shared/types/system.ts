@@ -1,7 +1,3 @@
-/**
- * SystemConfig shares network field keys with NetworkFields,
- * but requires all values as non-nullable strings.
- */
 export interface SystemConfig {
   client_id: string
   device_id: string

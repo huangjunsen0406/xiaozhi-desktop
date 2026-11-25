@@ -22,7 +22,7 @@ const emit = defineEmits<Emits>()
 const isRecording = ref(false)
 const tempAccelerator = ref<string | null>(null)
 const pendingTimer = ref<number | null>(null)
-const abortController = ref<AbortController | null>(null)
+let checkSeq = 0
 
 function startRecording() {
   if (props.disabled)
@@ -32,10 +32,10 @@ function startRecording() {
 }
 
 function stopRecording() {
+  checkSeq++
   isRecording.value = false
   tempAccelerator.value = null
 
-  // Clear pending timer
   if (pendingTimer.value !== null) {
     clearTimeout(pendingTimer.value)
     pendingTimer.value = null
@@ -49,35 +49,21 @@ async function handleKeyDown(e: KeyboardEvent) {
   e.preventDefault()
   e.stopPropagation()
 
-  // ESC 取消录制
   if (e.key === 'Escape') {
     stopRecording()
     return
   }
 
   const accelerator = convertEventToAccelerator(e)
-
-  if (!accelerator) {
-    // console.log('无效的快捷键组合')
+  if (!accelerator)
     return
-  }
 
-  // Cancel previous request if exists
-  if (abortController.value) {
-    abortController.value.abort()
-  }
-
-  // Create new AbortController for this request
-  abortController.value = new AbortController()
+  const seq = ++checkSeq
 
   try {
-    // 检测冲突
     const result = await window.api.shortcutCheckConflict(accelerator)
-
-    // Check if component is still recording (not unmounted)
-    if (!isRecording.value) {
+    if (seq !== checkSeq || !isRecording.value)
       return
-    }
 
     if (result.conflict && result.name) {
       emit('conflict', result.name)
@@ -85,41 +71,25 @@ async function handleKeyDown(e: KeyboardEvent) {
       return
     }
 
-    // 保存
     emit('update:modelValue', accelerator)
     tempAccelerator.value = accelerator
 
-    // 延迟关闭录制状态（让用户看到结果）
     pendingTimer.value = window.setTimeout(() => {
-      if (isRecording.value) {
+      if (isRecording.value)
         stopRecording()
-      }
     }, 300)
   }
   catch (error) {
-    // Only handle error if component is still mounted
-    if (isRecording.value) {
+    if (seq === checkSeq && isRecording.value) {
       console.error('冲突检测失败', error)
       emit('error', '快捷键冲突检测失败，请重试')
       stopRecording()
     }
   }
-  finally {
-    abortController.value = null
-  }
 }
 
 onUnmounted(() => {
-  if (pendingTimer.value !== null) {
-    clearTimeout(pendingTimer.value)
-    pendingTimer.value = null
-  }
-
-  // Abort any in-flight requests
-  if (abortController.value) {
-    abortController.value.abort()
-    abortController.value = null
-  }
+  stopRecording()
 })
 
 function handleClear(e: MouseEvent) {

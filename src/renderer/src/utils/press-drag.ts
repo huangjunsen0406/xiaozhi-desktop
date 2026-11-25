@@ -1,292 +1,107 @@
-// press-drag.ts
 import type { DirectiveBinding } from 'vue'
 
-interface Point { x: number, y: number }
-interface DragState {
-  start: Point
-  last: Point
-  current: Point
-  totalDx: number
-  totalDy: number
-  duration: number // 从按下到当前的毫秒数
-  longPressed: boolean
-  dragging: boolean
-}
-
-interface Handlers {
+export interface PressDragHandlers {
   onClick?: (ev: PointerEvent) => void
-  onLongPress?: (ev: PointerEvent, state: DragState) => void
-  onDragStart?: (ev: PointerEvent, state: DragState) => void
-  onDrag?: (ev: PointerEvent, state: DragState) => void
-  onDragEnd?: (ev: PointerEvent, state: DragState) => void
-  // Hover & right-click
+  onDragStart?: (ev: PointerEvent) => void
+  onDrag?: (ev: PointerEvent) => void
+  onDragEnd?: (ev: PointerEvent) => void
   onHoverEnter?: (ev: MouseEvent) => void
   onHoverLeave?: (ev: MouseEvent) => void
-  onRightClick?: (ev: MouseEvent) => void
-  // 配置
-  longPressMs?: number // 默认 500ms
-  moveTolerance?: number // 判定点击/进入拖动的位移阈值，默认 6px
-  preventContextMenu?: boolean // 移动端长按不弹系统菜单，默认 true
-  preventRightClickMenu?: boolean // 是否屏蔽右键系统菜单，默认 false
+  moveTolerance?: number
+  preventRightClickMenu?: boolean
 }
 
-interface Store {
-  opts: Required<Pick<Handlers, 'longPressMs' | 'moveTolerance' | 'preventContextMenu' | 'preventRightClickMenu'>> & Omit<Handlers, 'longPressMs' | 'moveTolerance' | 'preventContextMenu' | 'preventRightClickMenu'>
-  pressTimer: number | null
-  downAt: number
-  start: Point | null
-  last: Point | null
-  dragging: boolean
-  longPressed: boolean
-  movedBeyondTolerance: boolean
-  suppressNextClick: boolean
-  cleanup?: () => void
-}
-
-const KEY = Symbol('press-drag')
-
-function now() {
-  return (performance || Date).now()
-}
-
-function getPoint(ev: PointerEvent): Point {
-  return { x: ev.screenX, y: ev.screenY }
-}
-
-function distance(a: Point, b: Point) {
-  const dx = a.x - b.x
-  const dy = a.y - b.y
-  return Math.hypot(dx, dy)
-}
+const CLEANUP_KEY = Symbol('press-drag-cleanup')
 
 export const vPressDrag = {
-  mounted(el: HTMLElement, binding: DirectiveBinding<Handlers>) {
-    const opts: Store['opts'] = {
-      ...binding.value,
-      longPressMs: binding.value?.longPressMs ?? 500,
-      moveTolerance: binding.value?.moveTolerance ?? 6,
-      preventContextMenu: binding.value?.preventContextMenu ?? true,
-      preventRightClickMenu: binding.value?.preventRightClickMenu ?? false,
+  mounted(el: HTMLElement, binding: DirectiveBinding<PressDragHandlers>) {
+    const opts = binding.value ?? {}
+    const tolerance = opts.moveTolerance ?? 6
+
+    let startX = 0
+    let startY = 0
+    let active = false
+    let dragging = false
+    let suppressNextClick = false
+
+    const clickBlocker = (ev: MouseEvent): void => {
+      if (!suppressNextClick)
+        return
+      ev.stopImmediatePropagation()
+      ev.preventDefault()
+      suppressNextClick = false
     }
 
-    const st: Store = {
-      opts,
-      pressTimer: null,
-      downAt: 0,
-      start: null,
-      last: null,
-      dragging: false,
-      longPressed: false,
-      movedBeyondTolerance: false,
-      suppressNextClick: false,
-    }
-
-    // 为了在 pointerup 后阻止“原生 click”冒泡（长按或拖动后不算点击）
-    const clickBlocker = (ev: MouseEvent) => {
-      if (st.suppressNextClick) {
-        ev.stopImmediatePropagation()
+    const onMouseEnter = (ev: MouseEvent): void => opts.onHoverEnter?.(ev)
+    const onMouseLeave = (ev: MouseEvent): void => opts.onHoverLeave?.(ev)
+    const onContextMenu = (ev: MouseEvent): void => {
+      if (opts.preventRightClickMenu)
         ev.preventDefault()
-        st.suppressNextClick = false
-      }
     }
-    el.addEventListener('click', clickBlocker, true)
 
-    // Hover handlers
-    const onMouseEnter = (ev: MouseEvent) => {
-      st.opts.onHoverEnter?.(ev)
-    }
-    const onMouseLeave = (ev: MouseEvent) => {
-      st.opts.onHoverLeave?.(ev)
-    }
-    el.addEventListener('mouseenter', onMouseEnter)
-    el.addEventListener('mouseleave', onMouseLeave)
-
-    // Right click / context menu
-    const onContextMenu = (ev: MouseEvent) => {
-      if (st.opts.preventRightClickMenu)
-        ev.preventDefault()
-      st.opts.onRightClick?.(ev)
-    }
-    el.addEventListener('contextmenu', onContextMenu)
-
-    const onPointerDown = (ev: PointerEvent) => {
-      // 仅左键/触控
+    const onPointerDown = (ev: PointerEvent): void => {
       if (ev.button !== 0 && ev.pointerType === 'mouse')
         return
-
       el.setPointerCapture?.(ev.pointerId)
-      st.downAt = now()
-      st.start = getPoint(ev)
-      st.last = st.start
-      st.dragging = false
-      st.longPressed = false
-      st.movedBeyondTolerance = false
-
-      if (st.opts.preventContextMenu) {
-        // 阻止长按呼出系统菜单（移动端）
-        const preventMenu = (e: Event) => e.preventDefault()
-        el.addEventListener('contextmenu', preventMenu, { once: true })
-        // 也可以加 touch-action CSS：touch-action: none;
-      }
-
-      // 启动长按计时器
-      if (st.pressTimer)
-        clearTimeout(st.pressTimer)
-      st.pressTimer = window.setTimeout(() => {
-        st.longPressed = true
-        const state: DragState = {
-          start: st.start!,
-          last: st.last!,
-          current: st.last!,
-          totalDx: (st.last!.x - st.start!.x),
-          totalDy: (st.last!.y - st.start!.y),
-          duration: now() - st.downAt,
-          longPressed: true,
-          dragging: st.dragging,
-        }
-        st.opts.onLongPress?.(ev, state)
-        // 触发过长按后，后续的原生 click 应该被抑制
-        st.suppressNextClick = true
-      }, st.opts.longPressMs)
+      startX = ev.screenX
+      startY = ev.screenY
+      active = true
+      dragging = false
     }
 
-    const onPointerMove = (ev: PointerEvent) => {
-      if (!st.start)
+    const onPointerMove = (ev: PointerEvent): void => {
+      if (!active)
         return
-      const pt = getPoint(ev)
-      const last = st.last ?? pt
-      st.last = pt
-
-      if (!st.movedBeyondTolerance && distance(st.start, pt) > st.opts.moveTolerance) {
-        st.movedBeyondTolerance = true
+      if (!dragging && Math.hypot(ev.screenX - startX, ev.screenY - startY) > tolerance) {
+        dragging = true
+        suppressNextClick = true
+        opts.onDragStart?.(ev)
       }
-
-      // 进入拖动态（只要越过阈值就算拖动，与是否已长按无关）
-      if (!st.dragging && st.movedBeyondTolerance) {
-        st.dragging = true
-        // 拖动一旦开始，就不要再触发 click
-        st.suppressNextClick = true
-        // 长按计时器仍可继续，允许“边拖边长按”按需触发
-        const state: DragState = {
-          start: st.start,
-          last,
-          current: pt,
-          totalDx: (pt.x - st.start.x),
-          totalDy: (pt.y - st.start.y),
-          duration: now() - st.downAt,
-          longPressed: st.longPressed,
-          dragging: true,
-        }
-        st.opts.onDragStart?.(ev, state)
-      }
-
-      if (st.dragging) {
-        const state: DragState = {
-          start: st.start,
-          last,
-          current: pt,
-          totalDx: (pt.x - st.start.x),
-          totalDy: (pt.y - st.start.y),
-          duration: now() - st.downAt,
-          longPressed: st.longPressed,
-          dragging: true,
-        }
-        st.opts.onDrag?.(ev, state)
-      }
+      if (dragging)
+        opts.onDrag?.(ev)
     }
 
-    const finish = (ev: PointerEvent) => {
-      if (st.pressTimer) {
-        clearTimeout(st.pressTimer)
-        st.pressTimer = null
-      }
-      const isClick = !st.longPressed && !st.dragging && !st.movedBeyondTolerance
-      if (isClick) {
-        st.opts.onClick?.(ev)
-        // 点击后不需要抑制 click
+    const finish = (ev: PointerEvent): void => {
+      if (!active)
+        return
+      if (dragging) {
+        suppressNextClick = true
+        opts.onDragEnd?.(ev)
       }
       else {
-        // 长按或拖动结束都抑制原生 click
-        st.suppressNextClick = true
+        opts.onClick?.(ev)
       }
-
-      if (st.dragging) {
-        const pt = st.last ?? (st.start as Point)
-        const state: DragState = {
-          start: st.start!,
-          last: pt,
-          current: pt,
-          totalDx: (pt.x - st.start!.x),
-          totalDy: (pt.y - st.start!.y),
-          duration: now() - st.downAt,
-          longPressed: st.longPressed,
-          dragging: false,
-        }
-        st.opts.onDragEnd?.(ev, state)
-      }
-
-      st.start = null
-      st.last = null
-      st.dragging = false
-      st.longPressed = false
-      st.movedBeyondTolerance = false
-      el.releasePointerCapture?.((ev as PointerEvent).pointerId)
+      active = false
+      dragging = false
+      el.releasePointerCapture?.(ev.pointerId)
     }
 
-    const onPointerUp = (ev: PointerEvent) => {
-      if (!st.start)
-        return
-      finish(ev)
-    }
-    const onPointerCancel = (ev: PointerEvent) => {
-      if (!st.start)
-        return
-      finish(ev)
-    }
-    const onLostCapture = (ev: PointerEvent) => {
-      if (!st.start)
-        return
-      finish(ev)
-    }
-
+    el.addEventListener('click', clickBlocker, true)
+    el.addEventListener('mouseenter', onMouseEnter)
+    el.addEventListener('mouseleave', onMouseLeave)
+    el.addEventListener('contextmenu', onContextMenu)
     el.addEventListener('pointerdown', onPointerDown)
     el.addEventListener('pointermove', onPointerMove)
-    el.addEventListener('pointerup', onPointerUp)
-    el.addEventListener('pointercancel', onPointerCancel)
-    el.addEventListener('lostpointercapture', onLostCapture)
+    el.addEventListener('pointerup', finish)
+    el.addEventListener('pointercancel', finish)
+    el.addEventListener('lostpointercapture', finish)
 
-    st.cleanup = () => {
+    ;(el as unknown as Record<symbol, () => void>)[CLEANUP_KEY] = () => {
       el.removeEventListener('click', clickBlocker, true)
       el.removeEventListener('mouseenter', onMouseEnter)
       el.removeEventListener('mouseleave', onMouseLeave)
       el.removeEventListener('contextmenu', onContextMenu)
       el.removeEventListener('pointerdown', onPointerDown)
       el.removeEventListener('pointermove', onPointerMove)
-      el.removeEventListener('pointerup', onPointerUp)
-      el.removeEventListener('pointercancel', onPointerCancel)
-      el.removeEventListener('lostpointercapture', onLostCapture)
-    }
-
-    ;(el as unknown as Record<symbol, Store>)[KEY] = st
-  },
-
-  updated(el: HTMLElement, binding: DirectiveBinding<Handlers>) {
-    // 更新配置
-    const st: Store | undefined = (el as unknown as Record<symbol, Store>)[KEY]
-    if (!st)
-      return
-    st.opts = {
-      longPressMs: binding.value?.longPressMs ?? st.opts.longPressMs,
-      moveTolerance: binding.value?.moveTolerance ?? st.opts.moveTolerance,
-      preventContextMenu: binding.value?.preventContextMenu ?? st.opts.preventContextMenu,
-      preventRightClickMenu: binding.value?.preventRightClickMenu ?? st.opts.preventRightClickMenu,
-      ...binding.value,
+      el.removeEventListener('pointerup', finish)
+      el.removeEventListener('pointercancel', finish)
+      el.removeEventListener('lostpointercapture', finish)
     }
   },
 
   unmounted(el: HTMLElement) {
-    const st: Store | undefined = (el as unknown as Record<symbol, Store>)[KEY]
-    st?.cleanup?.()
-    delete (el as unknown as Record<symbol, Store>)[KEY]
+    const store = el as unknown as Record<symbol, (() => void) | undefined>
+    store[CLEANUP_KEY]?.()
+    delete store[CLEANUP_KEY]
   },
 }

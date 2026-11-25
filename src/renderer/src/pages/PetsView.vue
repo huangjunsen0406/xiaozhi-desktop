@@ -12,6 +12,7 @@ import {
   petDisplayHeightFromWidth,
 } from '@shared/types'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { usePetSurfaceShell } from '../composables/usePetSurfaceShell'
 import { useAppStore } from '../stores/app'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -132,7 +133,6 @@ const ANIM_CLIPS: Record<PetAnimationState, AnimClip> = {
 let animationId: number | null = null
 let spritesheet: HTMLImageElement | null = null
 let spriteVersion: PetSpriteVersion = 1
-let isDragging = false
 /** 拖动期间平滑水平位移（用于建立/翻转方向） */
 let dragDeltaX = 0
 let lastDragScreenX = 0
@@ -166,12 +166,40 @@ let activeState: PetAnimationState = 'idle'
 let currentFrame = 0
 let frameElapsedMs = 0
 let lastTimestamp = 0
-/** 最近一次 click-through 状态，避免每帧重复 IPC */
-let lastClickThroughIgnore: boolean | null = null
-let removeChangedListener: (() => void) | null = null
-let removeDisplayWidthListener: (() => void) | null = null
-let stopDeviceStateWatch: (() => void) | null = null
-let stopEmotionWatch: (() => void) | null = null
+const cleanups: Array<() => void> = []
+
+const shell = usePetSurfaceShell({
+  surface: 'pets',
+  isHit: isPointerOnCanvas,
+  onDisplayWidthChange: applyDisplayWidth,
+  onHoverEnter: applyPointerHoverState,
+  onHoverMove: applyPointerHoverState,
+  onHoverLeave: () => {
+    if (isHovered)
+      lastHoverLeftAt = Date.now()
+    isHovered = false
+    lookFrame = null
+  },
+  onDragStart: (e) => {
+    isHovered = true
+    lookFrame = null
+    clearTransient()
+    dragDeltaX = 0
+    lastDragDir = null
+    lastDragScreenX = e.screenX
+  },
+  onDragMove: (ev) => {
+    const dx = ev.screenX - lastDragScreenX
+    lastDragScreenX = ev.screenX
+    dragDeltaX = dragDeltaX * 0.35 + dx
+    updateDragDirection()
+  },
+  onDragEnd: (ev) => {
+    dragDeltaX = 0
+    lastDragDir = null
+    applyPointerHoverState(ev)
+  },
+})
 
 /**
  * deviceState → 基础动画（无 drag / look / transient 时）
@@ -227,7 +255,7 @@ function clearTransient(): void {
 function resolveEffectivePlayback():
   | { mode: 'anim', state: PetAnimationState }
   | { mode: 'look', index: number } {
-  if (isDragging) {
+  if (shell.isDragging()) {
     // 粘滞方向：拖动全程保持 run，慢速/停顿不再回 idle
     if (lastDragDir === 'right')
       return { mode: 'anim', state: 'running-right' }
@@ -368,13 +396,6 @@ function reportContentSize(): void {
 function applyDisplayWidth(width: number): void {
   displayWidthPx.value = clampPetDisplayWidth(width)
   reportContentSize()
-}
-
-function setPetsClickThrough(ignore: boolean): void {
-  if (lastClickThroughIgnore === ignore)
-    return
-  lastClickThroughIgnore = ignore
-  window.api.setClickThrough('pets', ignore)
 }
 
 /**
@@ -588,7 +609,7 @@ function maybeTriggerReview(from: DeviceState, to: DeviceState): void {
   const now = Date.now()
   if (now - lastReviewAt < REVIEW_COOLDOWN_MS)
     return
-  if (isDragging)
+  if (shell.isDragging())
     return
 
   if (requestTransient('review'))
@@ -606,7 +627,7 @@ function maybeTriggerFailed(emotion: string): void {
   const now = Date.now()
   if (now - lastFailedAt < FAILED_COOLDOWN_MS)
     return
-  if (isDragging)
+  if (shell.isDragging())
     return
 
   if (requestTransient('failed'))
@@ -623,27 +644,13 @@ function maybeWaveOnRehover(wasHovered: boolean, nowHovered: boolean): void {
     return
   if (Date.now() - lastHoverLeftAt < WAVE_ON_REHOVER_IDLE_MS)
     return
-  if (isDragging)
+  if (shell.isDragging())
     return
   // look 优先；v2 有 look 时不抢招手
   if (spriteVersion >= 2 && lookFrame !== null)
     return
 
   requestTransient('waving')
-}
-
-/**
- * 双击窗口区域切换通话状态
- */
-async function toggleCall() {
-  if (appStore.isConversationPending)
-    return
-  try {
-    await appStore.toggleAutoConversation()
-  }
-  catch (error) {
-    console.error('[Pets] 切换通话状态失败', error)
-  }
 }
 
 /**
@@ -677,188 +684,45 @@ function applyPointerHoverState(e: MouseEvent): void {
   maybeWaveOnRehover(wasHovered, onCanvas)
 
   // 只在精灵上吃点击；canvas 外保持穿透
-  setPetsClickThrough(!onCanvas)
-}
-
-/**
- * 鼠标进入：立即进入 hover（jumping / look），不依赖首次 move
- */
-function handleMouseEnter(e: MouseEvent): void {
-  if (isDragging)
-    return
-  applyPointerHoverState(e)
-}
-
-/**
- * 鼠标移动：内容命中穿透 + v2 look / v1 hover
- */
-function handleMouseMove(e: MouseEvent): void {
-  if (isDragging)
-    return
-  applyPointerHoverState(e)
-}
-
-function handleMouseLeave(): void {
-  if (isDragging)
-    return
-  if (isHovered)
-    lastHoverLeftAt = Date.now()
-  isHovered = false
-  lookFrame = null
-  setPetsClickThrough(true)
-}
-
-/**
- * 鼠标按下处理（拖拽 + 粘滞方向动画）
- */
-function handleMouseDown(e: MouseEvent): void {
-  if (e.button !== 0)
-    return
-  // 仅在精灵上开始拖动
-  if (!isPointerOnCanvas(e))
-    return
-
-  isDragging = true
-  isHovered = true
-  lookFrame = null
-  // 拖动优先：取消未完成的 one-shot，避免松手后半截 transient
-  clearTransient()
-  dragDeltaX = 0
-  lastDragDir = null
-  lastDragScreenX = e.screenX
-  setPetsClickThrough(false)
-  window.api.hideHover()
-  window.api.dragStart()
-
-  const handleMouseMoveGlobal = (ev: MouseEvent): void => {
-    if (!isDragging)
-      return
-    const dx = ev.screenX - lastDragScreenX
-    lastDragScreenX = ev.screenX
-    // 平滑一点：最近位移主导，保留少量惯性
-    dragDeltaX = dragDeltaX * 0.35 + dx
-    updateDragDirection()
-    window.api.dragMove()
-  }
-
-  const handleMouseUpGlobal = (ev: MouseEvent): void => {
-    if (!isDragging)
-      return
-    isDragging = false
-    dragDeltaX = 0
-    lastDragDir = null
-    window.api.dragEnd()
-    window.removeEventListener('mousemove', handleMouseMoveGlobal)
-    window.removeEventListener('mouseup', handleMouseUpGlobal)
-
-    // 松手后按当前指针位置恢复 look / hover / 穿透
-    applyPointerHoverState(ev)
-  }
-
-  window.addEventListener('mousemove', handleMouseMoveGlobal)
-  window.addEventListener('mouseup', handleMouseUpGlobal)
-}
-
-/**
- * 精灵上右键：独立 Hover 菜单窗（与 Mini 同一套，避免父窗裁切）
- */
-function handleContextMenu(e: MouseEvent): void {
-  e.preventDefault()
-  e.stopPropagation()
-
-  if (isDragging)
-    return
-  if (!isPointerOnCanvas(e))
-    return
-
-  setPetsClickThrough(false)
-  window.api.showHoverFor('pets', e.screenX, e.screenY)
-}
-
-function handleDblClick(e: MouseEvent): void {
-  if (!isPointerOnCanvas(e))
-    return
-  void toggleCall()
+  shell.setClickThrough(!onCanvas)
 }
 
 onMounted(async () => {
-  if (containerRef.value) {
-    containerRef.value.addEventListener('mousedown', handleMouseDown)
-    containerRef.value.addEventListener('mouseenter', handleMouseEnter)
-    containerRef.value.addEventListener('mousemove', handleMouseMove)
-    containerRef.value.addEventListener('mouseleave', handleMouseLeave)
-    containerRef.value.addEventListener('dblclick', handleDblClick)
-    containerRef.value.addEventListener('contextmenu', handleContextMenu)
-  }
-
-  removeChangedListener = window.api.petsOnChanged(handlePetChange)
-  removeDisplayWidthListener = window.api.petsOnDisplayWidthChanged((width) => {
-    applyDisplayWidth(width)
-  })
-
   prevDeviceState = appStore.deviceState
-  stopDeviceStateWatch = watch(
-    () => appStore.deviceState,
-    (next, prev) => {
-      const from = prev ?? prevDeviceState
-      prevDeviceState = next
-      maybeTriggerReview(from, next)
-    },
+  cleanups.push(
+    window.api.petsOnChanged(handlePetChange),
+    watch(
+      () => appStore.deviceState,
+      (next, prev) => {
+        const from = prev ?? prevDeviceState
+        prevDeviceState = next
+        maybeTriggerReview(from, next)
+      },
+    ),
+    watch(
+      () => appStore.emotion,
+      (emotion) => {
+        if (emotion)
+          maybeTriggerFailed(emotion)
+      },
+    ),
   )
 
-  stopEmotionWatch = watch(
-    () => appStore.emotion,
-    (emotion) => {
-      if (emotion)
-        maybeTriggerFailed(emotion)
-    },
-  )
-
-  setPetsClickThrough(true)
-
-  try {
-    const width = await window.api.petsGetDisplayWidth()
-    applyDisplayWidth(width)
-  }
-  catch {
-    applyDisplayWidth(PET_DISPLAY_WIDTH_DEFAULT)
-  }
-
+  shell.setClickThrough(true)
+  applyDisplayWidth(await shell.initDisplayWidth())
   loadSpritesheet()
 })
 
 onUnmounted(() => {
   stopAnimation()
   clearTransient()
-  if (containerRef.value) {
-    containerRef.value.removeEventListener('mousedown', handleMouseDown)
-    containerRef.value.removeEventListener('mouseenter', handleMouseEnter)
-    containerRef.value.removeEventListener('mousemove', handleMouseMove)
-    containerRef.value.removeEventListener('mouseleave', handleMouseLeave)
-    containerRef.value.removeEventListener('dblclick', handleDblClick)
-    containerRef.value.removeEventListener('contextmenu', handleContextMenu)
-  }
-  if (removeChangedListener) {
-    removeChangedListener()
-    removeChangedListener = null
-  }
-  if (removeDisplayWidthListener) {
-    removeDisplayWidthListener()
-    removeDisplayWidthListener = null
-  }
-  if (stopDeviceStateWatch) {
-    stopDeviceStateWatch()
-    stopDeviceStateWatch = null
-  }
-  if (stopEmotionWatch) {
-    stopEmotionWatch()
-    stopEmotionWatch = null
-  }
+  for (const cleanup of cleanups.splice(0))
+    cleanup()
 })
 </script>
 
 <template>
-  <div ref="containerRef" class="pets-container">
+  <div ref="containerRef" class="pets-container" v-on="shell.handlers">
     <!-- 精灵 Canvas：内部 buffer = 显示 CSS 尺寸；atlas 仍按 192×208 采样后缩放 -->
     <canvas
       ref="canvasRef"

@@ -116,14 +116,9 @@ async function loadCatalog() {
     applyCatalog(items)
     await loadInstalledPlugins()
 
-    try {
-      const cfg = await window.api.mcpToolsGetPluginsConfig()
-      mediaPlayerAllowed.value = cfg.allowHostGet.includes('media_player')
-      subtitleAllowed.value = cfg.allowHostGet.includes('subtitle')
-    }
-    catch (cfgErr) {
+    await rereadPermissions().catch((cfgErr) => {
       console.warn('读取外挂 Host 配置失败', cfgErr)
-    }
+    })
   }
   catch (error) {
     message.error(error instanceof Error ? error.message : '加载 MCP 工具失败')
@@ -133,64 +128,48 @@ async function loadCatalog() {
   }
 }
 
-/**
- * 开关：允许外挂使用应用内媒体播放（host.get('media_player')）
- */
-async function handleMediaPlayerAllow(enabled: boolean) {
-  mediaPlayerSaving.value = true
+async function toggleHostPermission(
+  key: 'media_player' | 'subtitle',
+  enabled: boolean,
+  savingRef: typeof mediaPlayerSaving,
+  allowedRef: typeof mediaPlayerAllowed,
+  messages: { on: string, off: string, error: string },
+) {
+  savingRef.value = true
   try {
     const cfg = await window.api.mcpToolsGetPluginsConfig()
-    const set = new Set(cfg.allowHostGet.filter(k => k !== 'media_player'))
-    set.add('logger')
-    set.add('config_readonly')
-    if (enabled) {
-      set.add('media_player')
-    }
-    const next = await window.api.mcpToolsSetPluginsConfig({
-      allowHostGet: Array.from(set),
-    })
-    showSyncResult(next.sync)
-    mediaPlayerAllowed.value = next.allowHostGet.includes('media_player')
-    // 重载后刷新 catalog（新工具可能出现）
-    const items = await window.api.mcpToolsGetCatalog()
-    applyCatalog(items)
-    await loadInstalledPlugins()
-    message.success(
-      enabled
-        ? '已允许外挂使用应用内播放（media_player）'
-        : '已关闭外挂应用内播放权限',
-    )
-  }
-  catch (error) {
-    message.error(error instanceof Error ? error.message : '保存失败')
-    await rereadPermissions().catch(() => {})
-  }
-  finally {
-    mediaPlayerSaving.value = false
-  }
-}
-
-async function handleSubtitleAllow(enabled: boolean) {
-  subtitleSaving.value = true
-  try {
-    const cfg = await window.api.mcpToolsGetPluginsConfig()
-    const allowHostGet = cfg.allowHostGet.filter(k => k !== 'subtitle')
+    const allowHostGet = cfg.allowHostGet.filter(k => k !== key)
     if (enabled)
-      allowHostGet.push('subtitle')
+      allowHostGet.push(key)
     const next = await window.api.mcpToolsSetPluginsConfig({ allowHostGet })
     await refreshLocalSnapshot()
     showSyncResult(next.sync)
-    subtitleAllowed.value = next.allowHostGet.includes('subtitle')
-    message.success(enabled ? '已允许外挂显示字幕' : '已关闭外挂字幕权限')
+    allowedRef.value = next.allowHostGet.includes(key)
+    message.success(enabled ? messages.on : messages.off)
   }
   catch (error) {
-    message.error(error instanceof Error ? error.message : '保存字幕权限失败')
-    // 配置可能已经保存：重新读取实际状态，避免显示错误授权状态。
+    message.error(error instanceof Error ? error.message : messages.error)
     await rereadPermissions().catch(() => {})
   }
   finally {
-    subtitleSaving.value = false
+    savingRef.value = false
   }
+}
+
+function handleMediaPlayerAllow(enabled: boolean) {
+  return toggleHostPermission('media_player', enabled, mediaPlayerSaving, mediaPlayerAllowed, {
+    on: '已允许外挂使用应用内播放（media_player）',
+    off: '已关闭外挂应用内播放权限',
+    error: '保存失败',
+  })
+}
+
+function handleSubtitleAllow(enabled: boolean) {
+  return toggleHostPermission('subtitle', enabled, subtitleSaving, subtitleAllowed, {
+    on: '已允许外挂显示字幕',
+    off: '已关闭外挂字幕权限',
+    error: '保存字幕权限失败',
+  })
 }
 
 function setToolEnabled(name: string, enabled: boolean) {
@@ -225,11 +204,7 @@ async function handleImport(kind: 'zip' | 'folder') {
     const imported = await window.api.mcpToolsImportPlugin(result.filePaths[0])
     message.success(`已导入插件：${imported.name}`)
     showSyncResult(imported.sync)
-    // 导入后刷新 catalog（服务端已 reload）
-    const items = await window.api.mcpToolsGetCatalog()
-    // 保留本地未保存的开关；新工具默认跟随服务端 enabled
-    applyCatalog(items)
-    await loadInstalledPlugins()
+    await refreshLocalSnapshot()
   }
   catch (error) {
     message.error(error instanceof Error ? error.message : '导入插件失败')

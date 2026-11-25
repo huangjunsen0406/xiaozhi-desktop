@@ -1,23 +1,9 @@
-/**
- * 剪贴板 API
- */
-import { ipcRenderer } from 'electron'
-import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
+import { invokeData, invokeVoid } from '../utils/ipc'
 
 export const clipboardApi = {
-  /**
-   * 复制文本到剪贴板
-   */
-  writeText: async (text: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('clipboard:write-text', text)
-    assertIpcSuccess(result, '复制到剪贴板失败')
-  },
+  writeText: (text: string): Promise<void> =>
+    invokeVoid('clipboard:write-text', '复制到剪贴板失败', text),
 
-  /**
-   * 从剪贴板读取文本
-   */
-  readText: async (): Promise<string> => {
-    const result: unknown = await ipcRenderer.invoke('clipboard:read-text')
-    return unwrapIpcResult<string>(result, '从剪贴板读取失败') ?? ''
-  },
+  readText: async (): Promise<string> =>
+    (await invokeData<string | undefined>('clipboard:read-text', '从剪贴板读取失败')) ?? '',
 }

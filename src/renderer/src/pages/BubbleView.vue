@@ -47,11 +47,7 @@ const isSingleLineBubble = ref(true)
 type BubbleSource = 'session' | 'local' | null
 let bubbleSource: BubbleSource = null
 
-let removeStateListener: (() => void) | null = null
-let removeMessageListener: (() => void) | null = null
-let removeArrowListener: (() => void) | null = null
-let removeLocalShowListener: (() => void) | null = null
-let removeLocalHideListener: (() => void) | null = null
+const cleanups: Array<() => void> = []
 let bubbleTimer: ReturnType<typeof setTimeout> | null = null
 let measureTimer: ReturnType<typeof setTimeout> | null = null
 /** 上次已上报尺寸，避免同文案重复 IPC */
@@ -295,39 +291,23 @@ watch(bubbleText, (newVal) => {
 })
 
 onMounted(() => {
-  removeStateListener = window.api.appOnStateChanged(handleStateChanged)
-  removeMessageListener = window.api.appOnServerMessage(handleServerMessage)
-  // 主进程下发箭头位置：只滑动箭头，不 remeasure（避免反馈环）
-  removeArrowListener = window.api.bubbleOnSetArrowX((x) => {
-    arrowX.value = x
-  })
-  removeLocalShowListener = window.api.bubbleOnShowLocal(handleLocalShow)
-  removeLocalHideListener = window.api.bubbleOnHideLocal(() => {
-    hideBubble('local')
-  })
+  cleanups.push(
+    window.api.appOnStateChanged(handleStateChanged),
+    window.api.appOnServerMessage(handleServerMessage),
+    // 主进程下发箭头位置：只滑动箭头，不 remeasure（避免反馈环）
+    window.api.bubbleOnSetArrowX((x) => {
+      arrowX.value = x
+    }),
+    window.api.bubbleOnShowLocal(handleLocalShow),
+    window.api.bubbleOnHideLocal(() => {
+      hideBubble('local')
+    }),
+  )
 })
 
 onUnmounted(() => {
-  if (removeStateListener) {
-    removeStateListener()
-    removeStateListener = null
-  }
-  if (removeMessageListener) {
-    removeMessageListener()
-    removeMessageListener = null
-  }
-  if (removeArrowListener) {
-    removeArrowListener()
-    removeArrowListener = null
-  }
-  if (removeLocalShowListener) {
-    removeLocalShowListener()
-    removeLocalShowListener = null
-  }
-  if (removeLocalHideListener) {
-    removeLocalHideListener()
-    removeLocalHideListener = null
-  }
+  for (const cleanup of cleanups.splice(0))
+    cleanup()
   if (bubbleTimer) {
     clearTimeout(bubbleTimer)
     bubbleTimer = null

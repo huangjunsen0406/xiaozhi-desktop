@@ -1,47 +1,14 @@
 <script setup lang="ts">
 import type { ChatMessage } from '../types/chat'
-import hljs from 'highlight.js'
-import MarkdownIt from 'markdown-it'
 import { computed } from 'vue'
+import { renderMarkdown } from '../utils/markdown'
 import ChatImage from './ChatImage.vue'
 
 const props = defineProps<{
   message: ChatMessage
 }>()
 
-// 配置 markdown-it：代码高亮 + 外部链接新窗口打开
-const md = new MarkdownIt({
-  html: false, // 禁止原始 HTML，防 XSS
-  linkify: true, // 自动识别链接
-  breaks: true, // 换行转 <br>
-  highlight(code: string, lang: string): string {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return `<pre><code class="hljs language-${lang}">${hljs.highlight(code, { language: lang, ignoreIllegals: true }).value}</code></pre>`
-      }
-      catch {}
-    }
-    return `<pre><code class="hljs">${md.utils.escapeHtml(code)}</code></pre>`
-  },
-})
-
-// 为所有链接添加 target="_blank"
-const defaultRender = md.renderer.rules.link_open || function (tokens, idx, options, _env, self) {
-  return self.renderToken(tokens, idx, options)
-}
-md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
-  tokens[idx].attrSet('target', '_blank')
-  tokens[idx].attrSet('rel', 'noopener noreferrer')
-  return defaultRender(tokens, idx, options, env, self)
-}
-
-// 计算渲染后的 HTML（仅在非流式时使用）
-const renderedHtml = computed(() => {
-  const content = props.message.content
-  if (!content)
-    return ''
-  return md.render(content)
-})
+const renderedHtml = computed(() => renderMarkdown(props.message.content))
 </script>
 
 <template>

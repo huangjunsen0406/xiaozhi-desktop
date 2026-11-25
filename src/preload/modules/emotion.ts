@@ -1,45 +1,22 @@
-/**
- * Emotion (表情) API 模块
- */
 import type { FileDialogResult } from '@shared/types'
-import { ipcRenderer } from 'electron'
-import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
+import { invokeData, invokeVoid, subscribeChannel } from '../utils/ipc'
 
 export const emotionApi = {
-  // 打开文件选择器
-  selectImage: async (): Promise<FileDialogResult> => {
-    const result: unknown = await ipcRenderer.invoke('emotion:select-image')
-    return unwrapIpcResult(result, '选择表情图片失败')
-  },
+  selectImage: (): Promise<FileDialogResult> =>
+    invokeData('emotion:select-image', '选择表情图片失败'),
 
-  // 上传自定义表情
-  uploadCustom: async (emotionType: string, sourcePath: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('emotion:upload-custom', emotionType, sourcePath)
-    assertIpcSuccess(result, '上传表情失败')
-  },
+  uploadCustom: (emotionType: string, sourcePath: string): Promise<void> =>
+    invokeVoid('emotion:upload-custom', '上传表情失败', emotionType, sourcePath),
 
-  // 获取映射配置
-  getMapping: async (): Promise<Record<string, string>> => {
-    const result: unknown = await ipcRenderer.invoke('emotion:get-mapping')
-    return unwrapIpcResult<Record<string, string>>(result, '获取表情映射失败') ?? {}
-  },
+  getMapping: async (): Promise<Record<string, string>> =>
+    (await invokeData<Record<string, string> | undefined>('emotion:get-mapping', '获取表情映射失败')) ?? {},
 
-  // 获取自定义图片路径
-  getCustomPath: async (emotionType: string): Promise<string | null> => {
-    const result: unknown = await ipcRenderer.invoke('emotion:get-custom-path', emotionType)
-    return unwrapIpcResult<string | null>(result, '获取自定义表情路径失败') ?? null
-  },
+  getCustomPath: async (emotionType: string): Promise<string | null> =>
+    (await invokeData<string | null | undefined>('emotion:get-custom-path', '获取自定义表情路径失败', emotionType)) ?? null,
 
-  // 重置表情（删除自定义）
-  reset: async (emotionType: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('emotion:reset', emotionType)
-    assertIpcSuccess(result, '重置表情失败')
-  },
+  reset: (emotionType: string): Promise<void> =>
+    invokeVoid('emotion:reset', '重置表情失败', emotionType),
 
-  // 监听表情变更事件
-  onEmotionChanged: (callback: (emotionType: string) => void): () => void => {
-    const handler = (_event: Electron.IpcRendererEvent, emotionType: string) => callback(emotionType)
-    ipcRenderer.on('emotion:changed', handler)
-    return () => ipcRenderer.off('emotion:changed', handler)
-  },
+  onEmotionChanged: (callback: (emotionType: string) => void): () => void =>
+    subscribeChannel('emotion:changed', callback),
 }
