@@ -26,10 +26,7 @@ function createFixture() {
     eventBus,
     getDeviceState: () => 'listening',
     getListeningMode: () => 'auto',
-    isListening: () => true,
-    isSpeaking: () => false,
     isKeepListening: () => true,
-    isIdle: () => false,
     isAudioChannelOpened: () => true,
     shouldCaptureAudio: () => true,
   }
@@ -38,11 +35,8 @@ function createFixture() {
     stopListening: async () => {},
     abortSpeaking: async () => {},
     sendAudio: async (data) => { uploaded.push(data) },
-    sendText: async () => {},
-    connectProtocol: async () => true,
     sendMcpMessage: async () => {},
     sendWakeWordDetected: async () => {},
-    track: promise => promise,
   }
   const plugin = new AudioPlugin()
   plugin.setBackgroundAudioWindow(window)

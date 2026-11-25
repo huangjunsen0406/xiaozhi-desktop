@@ -94,6 +94,17 @@ function desktopBoundaries(testFile) {
       'windows/behaviors/DragBehavior': `export const isWindowDragging = () => false`,
     })
   }
+  if (path.basename(testFile) === 'mqtt-protocol.test.ts') {
+    Object.assign(stubs, {
+      'mqtt': `export const connect = (...args) => globalThis.__mqttTestRuntime.connect(...args)`,
+      'node:dgram': `export default { createSocket: (...args) => globalThis.__mqttTestRuntime.createSocket(...args) }`,
+      'services/configManagerDB': `export const getConfigManager = () => globalThis.__mqttTestRuntime.configManager`,
+      'audio/AudioRuntime': `export const getAudioRuntime = () => globalThis.__mqttTestRuntime.audioRuntime`,
+    })
+  }
+  if (path.basename(testFile) === 'wake-word-detector.test.ts') {
+    stubs['sherpa-onnx-node'] = `export default { KeywordSpotter: class { constructor(cfg) { return globalThis.__wakeWordTestRuntime.createSpotter(cfg) } } }`
+  }
   if (path.basename(testFile) === 'care-reminder.test.ts') {
     Object.assign(stubs, {
       'electron': `
