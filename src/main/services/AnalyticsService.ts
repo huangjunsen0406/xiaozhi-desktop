@@ -193,14 +193,6 @@ export async function trackAppClosedAndFlush(timeoutMs = 1500): Promise<void> {
   }
 }
 
-export function isAnalyticsEnabled(): boolean {
-  return enabled
-}
-
-export function getAnalyticsInstallId(): string {
-  return installId
-}
-
 /**
  * 设置页开关。关闭后不再 track；重新开启会 ready() 并放行后续事件。
  */

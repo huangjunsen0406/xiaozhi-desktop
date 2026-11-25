@@ -3,20 +3,15 @@
  */
 
 import type { ChatPlugin } from '../../../plugins/ChatPlugin'
-
 import { getServiceContainer } from '../../../core/ServiceContainer'
-import { getDatabase } from '../../../services/database'
 import { getLogger } from '../../../utils/logger'
 import { PropertyList, PropertyType } from '../../types'
 import { defineTool } from '../registry'
 import { analyzeImage } from '../visionAnalyze'
-import { getCameraInstance } from './index'
+import { captureCameraImage } from './index'
 
 const logger = getLogger('CameraTools')
 
-/**
- * 拍照工具
- */
 defineTool({
   name: 'self.camera.take_photo',
   description: `Take a photo using the system camera and analyze it with vision AI. This tool captures an image from the user's webcam and can answer questions about what's in the image.
@@ -51,23 +46,9 @@ Examples:
   callback: async (args: Record<string, unknown>): Promise<string> => {
     try {
       const question = (args.question as string) || ''
-
       logger.info(`拍照, 问题: ${question}`)
 
-      const db = getDatabase()
-      const cameraConfig = db.getFormattedCameraConfig()
-
-      const cameraOptions = {
-        vlApiKey: cameraConfig.useLocalVision ? cameraConfig.vlApiKey : '',
-        vlUrl: cameraConfig.useLocalVision ? cameraConfig.vlUrl : '',
-        vlModel: cameraConfig.vlModel || 'glm-4v-plus',
-        deviceId: cameraConfig.deviceId || '',
-        clientId: '',
-      }
-
-      const camera = getCameraInstance(cameraOptions)
-      const captureResult = await camera.capture()
-
+      const captureResult = await captureCameraImage()
       if (!captureResult.success || !captureResult.data) {
         logger.error('拍照失败:', captureResult.message)
         return JSON.stringify({
@@ -77,10 +58,8 @@ Examples:
       }
 
       logger.info('拍照成功，开始分析...')
-
       const imageBase64 = captureResult.data.toString('base64')
-      const container = getServiceContainer()
-      const chatPlugin = container.getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
+      const chatPlugin = getServiceContainer().getPluginManager().getPlugin<ChatPlugin>('ChatPlugin')
       await chatPlugin?.saveImage(imageBase64, 'camera')
 
       return await analyzeImage(imageBase64, question || '请描述这张照片的内容')

@@ -78,10 +78,7 @@ export class AppLauncher {
     // 2) 输入已是 .app / 路径
     if (this.looksLikeFilesystemPath(appName) || appName.endsWith('.app')) {
       try {
-        const p = appName.endsWith('.app') || this.looksLikeFilesystemPath(appName)
-          ? appName
-          : `${appName}.app`
-        await this.openPathOrThrow(p)
+        await this.openPathOrThrow(appName)
         return { success: true, message: `成功启动应用: ${appName}` }
       }
       catch (error) {
@@ -354,14 +351,5 @@ export class AppLauncher {
         done()
       })
     })
-  }
-
-  static isSupported(): boolean {
-    const platform = os.platform()
-    return platform === 'darwin' || platform === 'win32' || platform === 'linux'
-  }
-
-  static getPlatform(): Platform {
-    return os.platform() as Platform
   }
 }

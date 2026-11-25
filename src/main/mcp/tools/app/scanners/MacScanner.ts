@@ -9,6 +9,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { getLogger } from '../../../../utils/logger'
+import { cleanAppName } from './utils'
 
 const logger = getLogger('MacScanner')
 
@@ -66,7 +67,7 @@ export class MacScanner {
         if (file.endsWith('.app')) {
           const appPath = path.join(directory, file)
           const appName = file.replace('.app', '')
-          const cleanName = this.cleanAppName(appName)
+          const cleanName = cleanAppName(appName)
 
           apps.push({
             name: cleanName,
@@ -84,23 +85,6 @@ export class MacScanner {
     }
 
     return apps
-  }
-
-  /**
-   * 清理应用名称
-   * 移除版本号、特殊字符等
-   */
-  private static cleanAppName(appName: string): string {
-    // 移除版本号（如 "Chrome 2.0" -> "Chrome"）
-    let clean = appName.replace(/\s+\d+(\.\d+)*$/, '')
-
-    // 移除特殊字符
-    clean = clean.replace(/[™®©]/g, '')
-
-    // 移除多余空格
-    clean = clean.trim()
-
-    return clean || appName
   }
 
   /**

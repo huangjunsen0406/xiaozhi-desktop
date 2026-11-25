@@ -1,7 +1,6 @@
 import type { BackgroundAudioStateUpdate, BackgroundAudioStatus } from '@shared/types'
 import { ipcMain } from 'electron'
 import { getLogger } from '../utils/logger'
-import { getBackgroundAudioWindow } from '../windows/windowManager'
 import { createIpcHandler, success } from './middleware'
 import { optionalBoolean, optionalString, parseObject } from './middleware/validation'
 
@@ -14,48 +13,11 @@ let audioStatus: BackgroundAudioStatus = {
 }
 
 export function registerBackgroundAudioIpc(): void {
-  function sendAudioCommand(command: string, data?: Record<string, unknown>): void {
-    const audioWindow = getBackgroundAudioWindow()
-    if (audioWindow && !audioWindow.isDestroyed()) {
-      if (data !== undefined) {
-        audioWindow.webContents.send('audio:command', command, data)
-      }
-      else {
-        audioWindow.webContents.send('audio:command', command)
-      }
-    }
-    else {
-      logger.warn('后台音频窗口不存在或已销毁')
-    }
-  }
-
-  // 切换音频设备（用户在设置中更改设备时调用）
-  createIpcHandler({
-    channel: 'background-audio:switch-devices',
-    handler: async () => {
-      sendAudioCommand('switchDevices')
-      return success()
-    },
-  })
-
-  // 清理资源（仅在应用退出时调用）
-  createIpcHandler({
-    channel: 'background-audio:cleanup',
-    handler: async () => {
-      sendAudioCommand('cleanup')
-      return success()
-    },
-  })
-
-  // 获取音频状态
   createIpcHandler({
     channel: 'background-audio:get-status',
-    handler: async () => {
-      return success(audioStatus)
-    },
+    handler: () => success(audioStatus),
   })
 
-  // 监听音频状态更新（事件推送，非 handle）
   ipcMain.on('audio:state', (_, value: unknown) => {
     try {
       const input = parseObject(value)
@@ -78,7 +40,6 @@ export function registerBackgroundAudioIpc(): void {
         outputDeviceId: state.outputDeviceId ?? audioStatus.outputDeviceId,
         currentInputDeviceId: state.currentInputDeviceId ?? audioStatus.currentInputDeviceId,
         currentOutputDeviceId: state.currentOutputDeviceId ?? audioStatus.currentOutputDeviceId,
-        // A normal report clears a previous error; omitted device/state fields keep their values.
         error: state.error,
       }
       if (state.error) {

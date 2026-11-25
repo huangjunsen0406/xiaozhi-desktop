@@ -1,3 +1,4 @@
+import type { UIPlugin } from '../plugins/UIPlugin'
 import type { IpcContext } from '../types/ipc'
 import process from 'node:process'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
@@ -58,81 +59,58 @@ export function registerBasicIpcChannels(): void {
   // 注册窗口拖动行为（提取到独立模块）
   registerDragBehavior()
 
-  // 窗口控制
-  ipcMain.on('window:minimize', (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize()
-  })
-
-  ipcMain.on('window:maximize', (event) => {
+  function withSenderWindow(event: Electron.IpcMainEvent, action: (win: BrowserWindow) => void): void {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || win.isDestroyed())
-      return
-    // 已在系统全屏时先退出，再走 maximize，避免卡在全屏无法还原
-    if (win.isFullScreen()) {
+    if (win && !win.isDestroyed())
+      action(win)
+  }
+
+  ipcMain.on('window:minimize', event => withSenderWindow(event, win => win.minimize()))
+
+  ipcMain.on('window:maximize', event => withSenderWindow(event, (win) => {
+    if (win.isFullScreen())
       win.setFullScreen(false)
-      return
-    }
-    if (!win.isMaximized())
+    else if (!win.isMaximized())
       win.maximize()
-  })
+  }))
 
-  ipcMain.on('window:unmaximize', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || win.isDestroyed())
-      return
-    if (win.isFullScreen()) {
+  ipcMain.on('window:unmaximize', event => withSenderWindow(event, (win) => {
+    if (win.isFullScreen())
       win.setFullScreen(false)
-      return
-    }
-    if (win.isMaximized())
+    else if (win.isMaximized())
       win.unmaximize()
-  })
+  }))
 
-  ipcMain.on('window:toggle-maximize', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || win.isDestroyed())
-      return
-    // 全屏优先退出；否则在 maximize / unmaximize 间切换
-    if (win.isFullScreen()) {
+  ipcMain.on('window:toggle-maximize', event => withSenderWindow(event, (win) => {
+    if (win.isFullScreen())
       win.setFullScreen(false)
-      return
-    }
-    win.isMaximized() ? win.unmaximize() : win.maximize()
-  })
+    else if (win.isMaximized())
+      win.unmaximize()
+    else
+      win.maximize()
+  }))
 
-  ipcMain.on('window:close', (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.close()
-  })
+  ipcMain.on('window:close', event => withSenderWindow(event, win => win.close()))
 
   ipcMain.on('window:open-external', (_, url) => {
     if (/^https?:\/\/.+/i.test(url))
       void shell.openExternal(url)
   })
 
-  // 打开 macOS「录屏与系统录音」设置（系统级 AEC 引导）
   createIpcHandler({
     channel: 'app:open-screen-recording-settings',
     handler: async () => {
-      if (process.platform !== 'darwin') {
+      if (process.platform !== 'darwin')
         return success({ opened: false, reason: 'not_darwin' as const })
-      }
-      // 经典深链在较新 macOS 仍可用，落到「隐私与安全性 → 录屏」
-      const url = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+
       try {
-        await shell.openExternal(url)
+        await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
         return success({ opened: true as const })
       }
       catch (error) {
-        logger.warn('打开录屏隐私设置失败', error)
-        // 退到隐私与安全性总页
-        try {
-          await shell.openExternal('x-apple.systempreferences:com.apple.preference.security')
-          return success({ opened: true as const, fallback: true as const })
-        }
-        catch (fallbackError) {
-          logger.error('打开系统隐私设置失败', fallbackError)
-          throw fallbackError
-        }
+        logger.warn('打开录屏隐私设置失败，回退至隐私总页', error)
+        await shell.openExternal('x-apple.systempreferences:com.apple.preference.security')
+        return success({ opened: true as const, fallback: true as const })
       }
     },
   })
@@ -189,27 +167,11 @@ export function registerBasicIpcChannels(): void {
     app.quit()
   })
 
-  // Live2D 窗口
-  ipcMain.on('window:toggle-live2d', () => {
-    toggleToLive2d()
-  })
-
-  // 统一 click-through（live2d / pets）。
-  const setPetClickThrough = (target: 'live2d' | 'pets', ignore: boolean): void => {
-    const win = target === 'live2d' ? getLive2dWindow() : getPetsWindow()
-    if (win)
-      win.setIgnoreMouseEvents(ignore, { forward: ignore })
-  }
-
   ipcMain.on('window:set-click-through', (_, target: unknown, ignore: unknown) => {
     if ((target !== 'live2d' && target !== 'pets') || typeof ignore !== 'boolean')
       return
-    setPetClickThrough(target, ignore)
-  })
-
-  // 精灵宠物窗口
-  ipcMain.on('window:toggle-pets', () => {
-    toggleToPets()
+    const win = target === 'live2d' ? getLive2dWindow() : getPetsWindow()
+    win?.setIgnoreMouseEvents(ignore, { forward: ignore })
   })
 
   // 读取当前显示模式
@@ -268,18 +230,13 @@ export function registerAppIpcChannels(context: IpcContext): void {
   logger.info('注册应用 IPC 通道...')
   registerAppIpc(context)
 
-  // 注入表情广播回调（通过 UIPlugin）
-  const pluginManager = context.container.getPluginManager()
-  const uiPlugin = pluginManager.getPlugin('UIPlugin')
-  const uiPluginWithEmotion = uiPlugin as unknown as { broadcastEmotion?: (emotionType: string) => void }
-  if (uiPluginWithEmotion && typeof uiPluginWithEmotion.broadcastEmotion === 'function') {
-    setEmotionBroadcastCallback((emotionType: string) => {
-      uiPluginWithEmotion.broadcastEmotion!(emotionType)
-    })
+  const uiPlugin = context.container.getPluginManager().getPlugin<UIPlugin>('UIPlugin')
+  if (uiPlugin) {
+    setEmotionBroadcastCallback(emotionType => uiPlugin.broadcastEmotion(emotionType))
     logger.info('表情广播回调已注入到 emotionIpc')
   }
   else {
-    logger.warn('UIPlugin 未找到或不支持 broadcastEmotion，表情广播将使用降级方案')
+    logger.warn('UIPlugin 未找到，表情广播将使用降级方案')
   }
 
   logger.info('应用 IPC 通道已注册')

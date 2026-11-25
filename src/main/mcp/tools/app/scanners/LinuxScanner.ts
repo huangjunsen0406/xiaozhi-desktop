@@ -9,6 +9,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { getLogger } from '../../../../utils/logger'
+import { cleanAppName, dedupeApps } from './utils'
 
 const logger = getLogger('LinuxScanner')
 
@@ -19,33 +20,20 @@ export class LinuxScanner {
    */
   static async scanInstalled(): Promise<AppInfo[]> {
     const apps: AppInfo[] = []
-    const appNames = new Set<string>() // 去重
 
     try {
-      // 1. 扫描系统应用目录
-      const systemDirs = [
-        '/usr/share/applications',
-        '/usr/local/share/applications',
-      ]
+      for (const dir of ['/usr/share/applications', '/usr/local/share/applications'])
+        apps.push(...await this.scanDesktopFiles(dir, 'application'))
 
-      for (const dir of systemDirs) {
-        const systemApps = await this.scanDesktopFiles(dir, 'application')
-        this.addUniqueApps(apps, systemApps, appNames)
-      }
-
-      // 2. 扫描用户应用目录
       const userAppsDir = path.join(os.homedir(), '.local', 'share', 'applications')
-      if (fs.existsSync(userAppsDir)) {
-        const userApps = await this.scanDesktopFiles(userAppsDir, 'user_application')
-        this.addUniqueApps(apps, userApps, appNames)
-      }
+      if (fs.existsSync(userAppsDir))
+        apps.push(...await this.scanDesktopFiles(userAppsDir, 'user_application'))
 
-      // 3. 添加常用系统工具
-      const systemTools = this.getSystemTools()
-      this.addUniqueApps(apps, systemTools, appNames)
+      apps.push(...this.getSystemTools())
 
-      logger.info(`扫描完成，找到 ${apps.length} 个应用`)
-      return apps
+      const unique = dedupeApps(apps)
+      logger.info(`扫描完成，找到 ${unique.length} 个应用`)
+      return unique
     }
     catch (error) {
       logger.error('扫描应用失败', error)
@@ -143,7 +131,7 @@ export class LinuxScanner {
       name = path.basename(execPath)
 
       // 清理名称
-      const cleanName = this.cleanAppName(name)
+      const cleanName = cleanAppName(name)
 
       return {
         name: cleanName,
@@ -155,39 +143,6 @@ export class LinuxScanner {
     catch (error) {
       logger.error(`解析 desktop 文件失败 (${filePath}):`, error)
       return null
-    }
-  }
-
-  /**
-   * 清理应用名称
-   */
-  private static cleanAppName(appName: string): string {
-    // 移除版本号
-    let clean = appName.replace(/\s+\d+(\.\d+)*$/, '')
-
-    // 移除特殊字符
-    clean = clean.replace(/[™®©]/g, '')
-
-    // 移除多余空格
-    clean = clean.trim()
-
-    return clean || appName
-  }
-
-  /**
-   * 添加唯一应用（去重）
-   */
-  private static addUniqueApps(
-    apps: AppInfo[],
-    newApps: AppInfo[],
-    appNames: Set<string>,
-  ): void {
-    for (const app of newApps) {
-      const key = app.name.toLowerCase()
-      if (!appNames.has(key)) {
-        apps.push(app)
-        appNames.add(key)
-      }
     }
   }
 

@@ -4,5 +4,4 @@
  */
 
 export { MusicPlayer } from './MusicPlayer'
-export { MusicToolsManager } from './MusicToolsManager'
 export type * from './types'

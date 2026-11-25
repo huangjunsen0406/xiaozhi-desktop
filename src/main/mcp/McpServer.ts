@@ -1,4 +1,3 @@
-import type { ImageSourceType } from '@shared/types'
 import type { McpInstalledPlugin } from '../../shared/types/mcp'
 import type { LoadPluginsResult } from './plugins/loader'
 import type { McpHostGetKey, McpToolCatalogItem } from './plugins/types'
@@ -9,16 +8,16 @@ import type {
   McpTool,
   McpToolJson,
   McpToolResult,
+  PropertyList,
   ToolCallback,
 } from './types'
 import path from 'node:path'
 import fs from 'fs-extra'
 import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
-import { getConfigManager } from '../services/configManagerDB'
 import { getDatabase } from '../services/database'
 import { getLogger } from '../utils/logger'
 import { getMcpPluginsDir } from '../utils/paths'
-import { resetMcpContext, setMcpContext, setMcpToolRuntime } from './McpContext'
+import { getMcpToolRuntime, resetMcpContext, setMcpContext, setMcpToolRuntime } from './McpContext'
 import {
   createBubbleFacade,
   createMediaPlayerFacade,
@@ -29,11 +28,9 @@ import {
   McpPluginRegistry,
 } from './plugins'
 import { resolveInstalledPluginDirectory, scanInstalledMcpPlugins } from './plugins/inventory'
-import { getCameraInstance } from './tools/camera'
+import { getAllTools } from './tools'
 import { ScreenshotTool } from './tools/screenshot/ScreenshotTool'
-import { SystemToolsManager } from './tools/SystemToolsManager'
 import { TimerService } from './tools/timer/TimerService'
-import { PropertyList, PropertyType } from './types'
 
 const logger = getLogger('MCP')
 
@@ -49,11 +46,7 @@ const logger = getLogger('MCP')
 export class McpServer {
   private tools: McpTool[] = []
   private sendCallback: ((message: string) => Promise<void>) | null = null
-  private visionConfig: { url?: string, token?: string } = {} // 存储 vision 配置供截图工具使用
-  private imageBroadcastCallback:
-    | ((imageBase64: string, sourceType: ImageSourceType) => void)
-    | null = null
-
+  private visionConfig: { url?: string, token?: string } = {}
   private themeBroadcastCallback: ((theme: 'light' | 'dark' | 'auto') => void) | null = null
   /** 容器注入的 MusicPlayer（addCommonTools 时使用） */
   private musicPlayer: MusicPlayer | null = null
@@ -84,8 +77,8 @@ export class McpServer {
    */
   async detach(): Promise<void> {
     await this.unloadAllExternalPlugins()
+    await getMcpToolRuntime().timerService?.cleanupAll()
     this.sendCallback = null
-    this.imageBroadcastCallback = null
     this.themeBroadcastCallback = null
     this.tools = []
     this.visionConfig = {}
@@ -360,9 +353,12 @@ export class McpServer {
       this.tools = []
       this.pluginRegistry.clear()
 
-      // 注册系统工具（常用工具将被优先添加）；注入 MusicPlayer
-      const systemManager = new SystemToolsManager(this.musicPlayer)
-      await systemManager.init(this.addTool.bind(this), PropertyList, PropertyType)
+      // 注册内置工具（未注入 MusicPlayer 时跳过 self.music.*）
+      for (const tool of getAllTools()) {
+        if (!this.musicPlayer && tool.name.startsWith('self.music.'))
+          continue
+        this.addTool(tool)
+      }
 
       // 将原有工具恢复到列表末尾
       this.tools.push(...originalTools)
@@ -517,10 +513,9 @@ export class McpServer {
     id: string | number,
     params?: Record<string, unknown>,
   ): Promise<void> {
-    // 解析 capabilities（如 vision URL）
     const capabilities = params?.capabilities as Record<string, unknown> | undefined
     if (capabilities) {
-      await this.parseCapabilities(capabilities)
+      this.parseCapabilities(capabilities)
     }
 
     // 返回服务器信息
@@ -633,99 +628,39 @@ export class McpServer {
 
     logger.debug('开始执行工具', { toolName, args })
 
-    // 调用工具
-    try {
-      const result = await this.callTool(tool, args)
-      logger.info('工具执行成功', { toolName })
-      await this.replyResult(id, JSON.parse(result))
-    }
-    catch (error) {
-      logger.error('工具执行失败', error, { toolName })
-      await this.replyError(id, -32603, String(error))
-    }
+    // 调用工具（callTool 内部捕获异常并封装为 isError: true 的 McpToolResult）
+    const result = await this.callTool(tool, args)
+    logger.info('工具执行完成', { toolName, isError: result.isError })
+    await this.replyResult(id, result)
   }
 
-  /**
-   * 调用工具
-   */
-  private async callTool(tool: McpTool, args: Record<string, unknown>): Promise<string> {
+  private async callTool(tool: McpTool, args: Record<string, unknown>): Promise<McpToolResult> {
     try {
-      // 解析参数
       const parsedArgs = tool.properties.parseArguments(args)
-
-      // 调用回调函数
       const result = await tool.callback(parsedArgs)
-
-      // 格式化返回值
-      let text: string
-      if (typeof result === 'boolean') {
-        text = result ? 'true' : 'false'
-      }
-      else if (typeof result === 'number') {
-        text = String(result)
-      }
-      else {
-        text = String(result)
-      }
-
-      const mcpResult: McpToolResult = {
-        content: [{ type: 'text', text }],
+      return {
+        content: [{ type: 'text', text: String(result) }],
         isError: false,
       }
-
-      return JSON.stringify(mcpResult)
     }
     catch (error) {
       logger.error('调用工具异常', error, { toolName: tool.name })
-      const mcpResult: McpToolResult = {
+      return {
         content: [{ type: 'text', text: String(error) }],
         isError: true,
       }
-      return JSON.stringify(mcpResult)
     }
   }
 
-  /**
-   * 解析 capabilities
-   */
-  private async parseCapabilities(capabilities: Record<string, unknown>): Promise<void> {
+  private parseCapabilities(capabilities: Record<string, unknown>): void {
     const vision = capabilities.vision as Record<string, unknown> | undefined
     if (vision && typeof vision === 'object') {
       const url = vision.url as string | undefined
       const token = vision.token as string | undefined
       if (url) {
-        // 保存 vision 配置（供截图等工具使用）
         this.visionConfig.url = url
         this.visionConfig.token = token
-
-        // 同时直接设置到 Camera 实例（与 C++ 版本保持一致）
-        const configManager = getConfigManager()
-        const allConfig = configManager.getAll()
-
-        const cameraOptions = {
-          vlApiKey: allConfig.VLapi_key as string | undefined,
-          vlUrl: allConfig.Local_VL_url as string | undefined,
-          vlModel: allConfig.models as string | undefined,
-          explainUrl: url,
-          explainToken: token,
-          deviceId: configManager.getDeviceId(),
-          clientId: configManager.getClientId(),
-        }
-
-        const camera = getCameraInstance(cameraOptions)
-
-        // 如果是 WebCamera，直接设置 URL 和 Token
-        if ('setExplainUrl' in camera && typeof camera.setExplainUrl === 'function') {
-          camera.setExplainUrl(url)
-          if (
-            token
-            && 'setExplainToken' in camera
-            && typeof camera.setExplainToken === 'function'
-          ) {
-            camera.setExplainToken(token)
-          }
-          logger.info('Vision 服务已配置', { url })
-        }
+        logger.info('Vision 服务已配置', { url })
       }
     }
   }
@@ -779,32 +714,7 @@ export class McpServer {
   }
 
   /**
-   * 设置图片广播回调
-   * 由 McpPlugin 在 setup 时注入，用于将图片数据发送到 UIPlugin
-   */
-  setImageBroadcastCallback(
-    callback: (imageBase64: string, sourceType: ImageSourceType) => void,
-  ): void {
-    this.imageBroadcastCallback = callback
-    logger.info('图片广播回调已设置')
-  }
-
-  /**
-   * 广播图片到 UI
-   * 供 SystemToolsManager 等工具调用
-   */
-  broadcastImage(imageBase64: string, sourceType: ImageSourceType): void {
-    if (this.imageBroadcastCallback) {
-      this.imageBroadcastCallback(imageBase64, sourceType)
-    }
-    else {
-      logger.warn('图片广播回调未设置，无法广播图片')
-    }
-  }
-
-  /**
    * 设置主题广播回调
-   * 由 McpPlugin 在 setup 时注入，用于将主题变更发送到 UIPlugin
    */
   setThemeBroadcastCallback(callback: (theme: 'light' | 'dark' | 'auto') => void): void {
     this.themeBroadcastCallback = callback

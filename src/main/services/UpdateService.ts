@@ -16,8 +16,9 @@ import type {
 } from '@shared/types'
 import process from 'node:process'
 import { extractReleaseNotes } from '@shared/releaseNotes'
-import { app, BrowserWindow } from 'electron'
+import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { broadcastToWindows } from '../utils/broadcast'
 import { getLogger } from '../utils/logger'
 import { setIsQuitting } from '../windows/windowManager'
 import { getDatabase } from './database'
@@ -75,8 +76,34 @@ let downloadFinishedResolve: (() => void) | null = null
 let downloadFinishedReject: ((err: Error) => void) | null = null
 let downloadFinishedPromise: Promise<void> | null = null
 
-type ProgressListener = (p: UpdateDownloadProgress) => void
-const progressListeners = new Set<ProgressListener>()
+function recordAvailableUpdate(remoteVersion: string, releaseNotes: string, emitEvent: boolean): UpdateCheckResult {
+  const currentVersion = app.getVersion()
+  const normalized = remoteVersion.replace(/^v/i, '')
+  const prefs = readPrefs()
+
+  if (prefs.skippedVersion && prefs.skippedVersion === normalized) {
+    writeMeta(META_AVAILABLE, '')
+    lastCheck = {
+      available: false,
+      currentVersion,
+      version: normalized,
+      releaseNotes,
+      skipped: true,
+    }
+    return lastCheck
+  }
+
+  writeMeta(META_AVAILABLE, normalized)
+  lastCheck = {
+    available: true,
+    currentVersion,
+    version: normalized,
+    releaseNotes,
+  }
+  if (emitEvent)
+    broadcast('update:available', lastCheck)
+  return lastCheck
+}
 
 function beginDownloadWait(): Promise<void> {
   if (updateDownloaded)
@@ -128,16 +155,7 @@ function writeMeta(key: string, value: string): void {
 }
 
 function broadcast(channel: string, payload?: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed())
-      continue
-    try {
-      win.webContents.send(channel, payload)
-    }
-    catch {
-      // ignore
-    }
-  }
+  broadcastToWindows(channel, payload)
 }
 
 function mapError(error: unknown): string {
@@ -193,15 +211,7 @@ export function initUpdateService(): void {
 
     autoUpdater.on('update-available', (info) => {
       logger.info('发现新版本', { version: info.version })
-      writeMeta(META_AVAILABLE, info.version)
-      const result: UpdateCheckResult = {
-        available: true,
-        currentVersion: app.getVersion(),
-        version: info.version,
-        releaseNotes: extractReleaseNotes(info.releaseNotes),
-      }
-      lastCheck = result
-      broadcast('update:available', result)
+      recordAvailableUpdate(info.version, extractReleaseNotes(info.releaseNotes), true)
     })
 
     autoUpdater.on('update-not-available', (info) => {
@@ -223,8 +233,6 @@ export function initUpdateService(): void {
         transferred: p.transferred,
         total: p.total,
       }
-      for (const fn of progressListeners)
-        fn(downloadProgress)
       broadcast('update:download-progress', downloadProgress)
     })
 
@@ -277,11 +285,6 @@ export function skipUpdateVersion(version: string): UpdatePrefs {
   return readPrefs()
 }
 
-export function clearSkippedVersion(): UpdatePrefs {
-  writeMeta(META_SKIPPED, '')
-  return readPrefs()
-}
-
 export function getUpdateStatus(): UpdateStatusSnapshot {
   return {
     currentVersion: app.getVersion(),
@@ -297,22 +300,22 @@ export function getUpdateStatus(): UpdateStatusSnapshot {
 
 /** HEAD 测速单个节点，返回耗时 ms；失败/超时返回 null */
 async function probeAccelerator(prefix: string, probeUrl: string): Promise<number | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
     const t0 = Date.now()
     const resp = await fetch(prefix + probeUrl, {
       method: 'HEAD',
       redirect: 'follow',
       signal: controller.signal,
     })
-    clearTimeout(timer)
-    if (!resp.ok)
-      return null
-    return Date.now() - t0
+    return resp.ok ? Date.now() - t0 : null
   }
   catch {
     return null
+  }
+  finally {
+    clearTimeout(timer)
   }
 }
 
@@ -395,31 +398,11 @@ export async function checkForUpdates(options?: { silent?: boolean }): Promise<U
     const info = result?.updateInfo
     const remote = (info?.version || '').replace(/^v/i, '')
     const current = currentVersion.replace(/^v/i, '')
-    const prefs = readPrefs()
 
     const notes = extractReleaseNotes(info?.releaseNotes)
 
     if (remote && isRemoteNewer(current, remote)) {
-      if (prefs.skippedVersion && prefs.skippedVersion === remote) {
-        const skipped: UpdateCheckResult = {
-          available: false,
-          currentVersion,
-          version: remote,
-          releaseNotes: notes,
-          skipped: true,
-        }
-        lastCheck = skipped
-        writeMeta(META_AVAILABLE, '')
-        return skipped
-      }
-      writeMeta(META_AVAILABLE, remote)
-      lastCheck = {
-        available: true,
-        currentVersion,
-        version: remote,
-        releaseNotes: notes,
-      }
-      return lastCheck
+      return recordAvailableUpdate(remote, notes, false)
     }
 
     writeMeta(META_AVAILABLE, '')
@@ -534,45 +517,25 @@ export function quitAndInstallUpdate(): void {
 /**
  * 检查 → 下载 → 安装重启（设置页一键）
  */
-export async function checkDownloadInstallAndRestart(
-  onProgress?: ProgressListener,
-): Promise<void> {
-  if (onProgress)
-    progressListeners.add(onProgress)
-  try {
-    const check = await checkForUpdates()
-    if (!check.available)
-      throw new Error(check.skipped ? `已忽略版本 v${check.version}` : '当前已是最新版本')
+export async function checkDownloadInstallAndRestart(): Promise<void> {
+  const check = await checkForUpdates()
+  if (!check.available)
+    throw new Error(check.skipped ? `已忽略版本 v${check.version}` : '当前已是最新版本')
 
-    await downloadUpdate()
-    await waitDownloadFinished()
-    quitAndInstallUpdate()
-  }
-  finally {
-    if (onProgress)
-      progressListeners.delete(onProgress)
-  }
+  await downloadUpdate()
+  await waitDownloadFinished()
+  quitAndInstallUpdate()
 }
 
-/**
- * 启动后静默检查（有更新才广播 / 写 available）
- */
 export function scheduleSilentUpdateCheck(delayMs = 5000): void {
   setTimeout(() => {
     void (async () => {
       try {
-        if (!app.isPackaged)
-          return
-        const prefs = readPrefs()
-        if (!prefs.autoCheck)
+        if (!app.isPackaged || !readPrefs().autoCheck)
           return
         const result = await checkForUpdates({ silent: true })
-        if (!result.available)
-          return
-        if (prefs.skippedVersion && prefs.skippedVersion === result.version)
-          return
-        broadcast('update:available', result)
-        logger.info('静默检查：发现新版本', { version: result.version })
+        if (result.available)
+          logger.info('静默检查：发现新版本', { version: result.version })
       }
       catch (error) {
         logger.debug('静默检查更新失败（忽略）', error)

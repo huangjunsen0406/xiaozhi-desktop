@@ -7,7 +7,7 @@ import * as os from 'node:os'
 import { getLogger } from '../../../utils/logger'
 import { LinuxScanner } from './scanners/LinuxScanner'
 import { MacScanner } from './scanners/MacScanner'
-
+import { dedupeApps } from './scanners/utils'
 import { WindowsScanner } from './scanners/WindowsScanner'
 
 const logger = getLogger('AppScanner')
@@ -51,7 +51,8 @@ export class AppScanner {
         return []
       }
 
-      // 按名称排序
+      // 统一去重并按名称排序
+      apps = dedupeApps(apps)
       apps.sort((a, b) => a.name.localeCompare(b.name))
 
       // 更新缓存
@@ -96,13 +97,5 @@ export class AppScanner {
    */
   static getPlatform(): Platform {
     return os.platform() as Platform
-  }
-
-  /**
-   * 检查平台是否支持
-   */
-  static isSupported(): boolean {
-    const platform = os.platform()
-    return platform === 'darwin' || platform === 'win32' || platform === 'linux'
   }
 }

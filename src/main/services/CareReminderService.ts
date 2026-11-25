@@ -284,10 +284,8 @@ async function tryFireSleep(): Promise<void> {
 }
 
 function clearAllTimers(): void {
-  for (const timer of timers.values()) {
-    clearTimeout(timer as ReturnType<typeof setTimeout>)
+  for (const timer of timers.values())
     clearInterval(timer as ReturnType<typeof setInterval>)
-  }
   timers.clear()
 }
 
@@ -337,37 +335,29 @@ export function startDemoRound(): CareReminderDemoResult {
   }
 }
 
-function schedulePeriodic(type: Exclude<CareReminderTypeId, 'sleep'>): void {
-  const def = REMINDER_DEFS[type]
-  const firstKey = `${type}:first`
-  const loopKey = `${type}:loop`
-
+function scheduleWithOffset(
+  keyPrefix: string,
+  startOffsetMs: number,
+  intervalMs: number,
+  fire: () => Promise<void>,
+): void {
+  const firstKey = `${keyPrefix}:first`
+  const loopKey = `${keyPrefix}:loop`
   const first = setTimeout(() => {
     timers.delete(firstKey)
-    void tryFirePeriodic(type)
-    const loop = setInterval(() => {
-      void tryFirePeriodic(type)
-    }, def.intervalMs)
-    timers.set(loopKey, loop)
-  }, def.startOffsetMs)
-
+    void fire()
+    timers.set(loopKey, setInterval(() => void fire(), intervalMs))
+  }, startOffsetMs)
   timers.set(firstKey, first)
 }
 
+function schedulePeriodic(type: Exclude<CareReminderTypeId, 'sleep'>): void {
+  const def = REMINDER_DEFS[type]
+  scheduleWithOffset(type, def.startOffsetMs, def.intervalMs, () => tryFirePeriodic(type))
+}
+
 function scheduleSleep(): void {
-  const firstKey = 'sleep:first'
-  const loopKey = 'sleep:loop'
-
-  const first = setTimeout(() => {
-    timers.delete(firstKey)
-    void tryFireSleep()
-    const loop = setInterval(() => {
-      void tryFireSleep()
-    }, SLEEP_CHECK_MS)
-    timers.set(loopKey, loop)
-  }, SLEEP_START_OFFSET_MS)
-
-  timers.set(firstKey, first)
+  scheduleWithOffset('sleep', SLEEP_START_OFFSET_MS, SLEEP_CHECK_MS, tryFireSleep)
 }
 
 /**

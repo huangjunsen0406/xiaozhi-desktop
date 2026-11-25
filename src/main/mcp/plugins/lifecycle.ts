@@ -1,4 +1,5 @@
 import type { McpPluginDispose } from './types'
+import { withTimeout } from '../tools/util/withTimeout'
 
 /** Tracks one plugin generation. Cancellation is cooperative for in-process code. */
 export class McpPluginLifecycle {
@@ -58,22 +59,14 @@ export class McpPluginLifecycle {
   }
 }
 
-export async function runWithDeadline<T>(
+export function runWithDeadline<T>(
   work: () => T | Promise<T>,
   timeoutMs: number,
   message: string,
 ): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      Promise.resolve().then(work),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), timeoutMs)
-      }),
-    ])
-  }
-  finally {
-    if (timer)
-      clearTimeout(timer)
-  }
+  return withTimeout(
+    Promise.resolve().then(work),
+    timeoutMs,
+    () => new Error(message),
+  )
 }

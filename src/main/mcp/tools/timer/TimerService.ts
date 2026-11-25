@@ -51,16 +51,13 @@ class TimerTask {
    */
   start(): void {
     this.timeout = setTimeout(async () => {
-      if (!this.cancelled) {
-        try {
-          await this.onExecute(this)
-        }
-        catch (error) {
-          logger.error(`Timer ${this.timerId} execution failed:`, error)
-        }
-        finally {
-          this.onComplete(this.timerId)
-        }
+      if (this.cancelled)
+        return
+      try {
+        await this.onExecute(this)
+      }
+      finally {
+        this.onComplete(this.timerId)
       }
     }, this.delay * 1000)
 

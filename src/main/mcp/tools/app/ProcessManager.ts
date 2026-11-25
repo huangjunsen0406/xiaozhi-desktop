@@ -180,226 +180,160 @@ export class ProcessManager {
     return Array.from(grouped.values())
   }
 
-  /**
-   * 过滤用户应用程序（排除系统进程）
-   */
+  private static readonly SYSTEM_KEYWORDS = [
+    'com.apple.',
+    'mdworker',
+    'kernel_task',
+    'launchd',
+    'usereventagent',
+    'cfprefsd',
+    'commcenter',
+    'windowserver',
+    'dock',
+    'finder',
+    'loginwindow',
+    'systemuiserver',
+    'notifyd',
+    'syslogd',
+    'coreservicesd',
+    'mds',
+    'bluetoothd',
+    'airportd',
+    'coreaudiod',
+    'fontd',
+    'imagent',
+    'identityservicesd',
+    'softwareupdated',
+    'liquiddetectiond',
+    'helper (renderer)',
+    'helper (gpu)',
+    'helper (plugin)',
+    'helper',
+    'systemd',
+    'dbus',
+    'xorg',
+    'kworker',
+  ]
+
+  private static readonly EXCLUDE_PATTERNS = [
+    '.appex/',
+    'plugins/',
+    'xpcservices/',
+    'frameworks/',
+    '/system/library/coreservices/',
+    '/system/library/privateframeworks/',
+    'widgetextension',
+    'extension.appex',
+    'lsp_server',
+    'lsp_runner',
+    '.venv/bin/',
+    '.vscode/extensions/',
+    'node_modules/',
+    'applelanguages',
+    '--seatbelt-client',
+    'loginitems/',
+  ]
+
+  private static readonly LINUX_SYSTEM_PATHS = [
+    '/lib/systemd/',
+    '/usr/lib/systemd/',
+    '/usr/libexec/',
+    '/usr/sbin/',
+    '/sbin/',
+  ]
+
+  private static readonly LINUX_SYSTEM_DAEMONS = [
+    'dbus-daemon',
+    'systemd',
+    'gvfsd',
+    'at-spi-bus-launcher',
+    'at-spi2-registryd',
+    'gnome-keyring-daemon',
+    'pulseaudio',
+    'pipewire',
+    'xdg-desktop-portal',
+    'xdg-permission-store',
+    'gdm',
+    'snapd',
+  ]
+
+  private static readonly WINDOWS_SYSTEM_PATHS = [
+    'c:\\windows\\system32\\',
+    'c:\\windows\\syswow64\\',
+    'c:\\windows\\explorer.exe',
+  ]
+
+  private static readonly WINDOWS_SYSTEM_PROCESSES = new Set([
+    'svchost.exe',
+    'dwm.exe',
+    'csrss.exe',
+    'wininit.exe',
+    'services.exe',
+    'lsass.exe',
+    'winlogon.exe',
+    'taskhostw.exe',
+    'sihost.exe',
+    'runtimebroker.exe',
+    'searchui.exe',
+    'startmenuexperiencehost.exe',
+    'shellexperiencehost.exe',
+    'textinputhost.exe',
+    'securityhealthsystray.exe',
+    'securityhealthservice.exe',
+    'fontdrvhost.exe',
+    'conhost.exe',
+    'wmiprvse.exe',
+    'searchhost.exe',
+    'widgets.exe',
+    'smartscreen.exe',
+    'applicationframehost.exe',
+    'backgroundtaskhost.exe',
+    'audiodg.exe',
+    'spoolsv.exe',
+    'ctfmon.exe',
+  ])
+
+  private static isMacUserApp(lowerCommand: string): boolean {
+    if (!lowerCommand.includes('.app/contents/macos/') || lowerCommand.startsWith('/system/'))
+      return false
+    return !['helper', 'widget', 'extension', 'plugin', 'service'].some(tag => lowerCommand.includes(tag))
+  }
+
+  private static isLinuxUserApp(lowerName: string, lowerCommand: string): boolean {
+    if (lowerName.startsWith('['))
+      return false
+    if (this.LINUX_SYSTEM_PATHS.some(p => lowerCommand.includes(p)))
+      return false
+    if (this.LINUX_SYSTEM_DAEMONS.some(d => lowerName === d || lowerCommand.includes(d)))
+      return false
+    return ['/opt/', '/usr/bin/', '/home/', 'firefox', 'chrome', 'code', 'electron']
+      .some(token => lowerCommand.includes(token))
+  }
+
+  private static isWindowsUserApp(lowerName: string, lowerCommand: string): boolean {
+    if (!lowerCommand.includes('.exe'))
+      return false
+    if (this.WINDOWS_SYSTEM_PATHS.some(p => lowerCommand.includes(p)))
+      return false
+    return !this.WINDOWS_SYSTEM_PROCESSES.has(lowerName)
+  }
+
   private static filterUserApplications(processes: ProcessInfo[], platform: Platform): ProcessInfo[] {
-    // 系统进程关键词黑名单
-    const systemKeywords = [
-      // macOS 系统进程
-      'com.apple.',
-      'mdworker',
-      'kernel_task',
-      'launchd',
-      'UserEventAgent',
-      'cfprefsd',
-      'CommCenter',
-      'WindowServer',
-      'Dock',
-      'Finder',
-      'loginwindow',
-      'SystemUIServer',
-      'notifyd',
-      'syslogd',
-      'coreservicesd',
-      'mds',
-      'bluetoothd',
-      'airportd',
-      'coreaudiod',
-      'fontd',
-      'imagent',
-      'identityservicesd',
-      'softwareupdated',
-      'liquiddetectiond',
-      // Chrome/Electron Helper 进程
-      'Helper (Renderer)',
-      'Helper (GPU)',
-      'Helper (Plugin)',
-      'Helper',
-      // 通用系统进程
-      'systemd',
-      'dbus',
-      'Xorg',
-      'kworker',
-    ]
-
-    // macOS 排除的路径和扩展
-    const excludePatterns = [
-      '.appex/', // 应用扩展
-      'PlugIns/', // 插件
-      'XPCServices/', // XPC 服务
-      'Frameworks/', // 框架（通常是子进程）
-      '/System/Library/CoreServices/', // 系统核心服务
-      '/System/Library/PrivateFrameworks/', // 系统私有框架
-      'WidgetExtension', // 小组件
-      'Extension.appex', // 扩展
-      'lsp_server', // LSP 服务器
-      'lsp_runner', // LSP 运行器
-      '.venv/bin/', // Python 虚拟环境
-      '.vscode/extensions/', // VSCode 扩展
-      'node_modules/', // Node 模块（排除开发工具）
-      'AppleLanguages', // 系统语言服务
-      '--seatbelt-client', // 沙盒客户端
-      'LoginItems/', // 登录项
-    ]
-
     return processes.filter((proc) => {
       const lowerCommand = proc.command.toLowerCase()
       const lowerName = proc.name.toLowerCase()
 
-      // 检查是否包含系统进程关键词
-      for (const keyword of systemKeywords) {
-        if (lowerCommand.includes(keyword.toLowerCase()) || lowerName.includes(keyword.toLowerCase())) {
-          return false
-        }
-      }
-
-      // 检查排除模式
-      for (const pattern of excludePatterns) {
-        if (lowerCommand.includes(pattern.toLowerCase())) {
-          return false
-        }
-      }
-
-      // macOS: 只保留主应用程序
-      if (platform === 'darwin') {
-        // 必须包含 .app/Contents/MacOS/
-        if (!lowerCommand.includes('.app/contents/macos/'))
-          return false
-
-        // 排除系统应用路径
-        if (lowerCommand.startsWith('/system/'))
-          return false
-
-        // 必须是主应用程序（不是 Helper、Widget 等）
-        if (lowerCommand.includes('helper')
-          || lowerCommand.includes('widget')
-          || lowerCommand.includes('extension')
-          || lowerCommand.includes('plugin')
-          || lowerCommand.includes('service')) {
-          return false
-        }
-
-        return true
-      }
-
-      // Linux: 保留用户级应用程序
-      if (platform === 'linux') {
-        // 排除内核进程
-        if (lowerName.startsWith('['))
-          return false
-
-        // 排除系统守护进程和服务
-        const linuxSystemPaths = [
-          '/lib/systemd/',
-          '/usr/lib/systemd/',
-          '/usr/libexec/',
-          '/usr/sbin/',
-          '/sbin/',
-        ]
-
-        for (const systemPath of linuxSystemPaths) {
-          if (lowerCommand.includes(systemPath))
-            return false
-        }
-
-        // 排除常见系统守护进程
-        const linuxSystemDaemons = [
-          'dbus-daemon',
-          'systemd',
-          'gvfsd',
-          'at-spi-bus-launcher',
-          'at-spi2-registryd',
-          'gnome-keyring-daemon',
-          'pulseaudio',
-          'pipewire',
-          'xdg-desktop-portal',
-          'xdg-permission-store',
-          'gdm',
-          'snapd',
-        ]
-
-        for (const daemon of linuxSystemDaemons) {
-          if (lowerName === daemon || lowerCommand.includes(daemon))
-            return false
-        }
-
-        // 只保留常见用户应用（通常在 /usr/bin/ 或 /opt/ 或用户目录）
-        // 或者是明确的图形界面应用
-        if (lowerCommand.includes('/opt/')
-          || lowerCommand.includes('/usr/bin/')
-          || lowerCommand.includes('/home/')
-          || lowerCommand.includes('firefox')
-          || lowerCommand.includes('chrome')
-          || lowerCommand.includes('code')
-          || lowerCommand.includes('electron')) {
-          return true
-        }
-
+      if (this.SYSTEM_KEYWORDS.some(kw => lowerCommand.includes(kw) || lowerName.includes(kw)))
         return false
-      }
+      if (this.EXCLUDE_PATTERNS.some(pat => lowerCommand.includes(pat)))
+        return false
 
-      // Windows: 保留用户应用程序（黑名单法）
-      if (platform === 'win32') {
-        // 基础健全性检查：必须是 exe
-        if (!lowerCommand.includes('.exe'))
-          return false
-
-        // 排除 Windows 系统进程路径（仅当 command 真包含路径时生效）
-        const windowsSystemPaths = [
-          'c:\\windows\\system32\\',
-          'c:\\windows\\syswow64\\',
-          'c:\\windows\\explorer.exe',
-        ]
-
-        for (const systemPath of windowsSystemPaths) {
-          if (lowerCommand.includes(systemPath))
-            return false
-        }
-
-        // 排除常见系统进程（名称黑名单）
-        const windowsSystemProcesses = [
-          'svchost.exe',
-          'dwm.exe',
-          'csrss.exe',
-          'wininit.exe',
-          'services.exe',
-          'lsass.exe',
-          'winlogon.exe',
-          'taskhostw.exe',
-          'sihost.exe',
-          'RuntimeBroker.exe',
-          'SearchUI.exe',
-          'StartMenuExperienceHost.exe',
-          'ShellExperienceHost.exe',
-          'TextInputHost.exe',
-          'SecurityHealthSystray.exe',
-          'SecurityHealthService.exe',
-          // 增补常见系统进程
-          'fontdrvhost.exe',
-          'conhost.exe',
-          'WmiPrvSE.exe',
-          'SearchHost.exe',
-          'Widgets.exe',
-          'smartscreen.exe',
-          'ApplicationFrameHost.exe',
-          'backgroundTaskHost.exe',
-          'audiodg.exe',
-          'spoolsv.exe',
-          'ctfmon.exe',
-        ]
-
-        for (const sysProc of windowsSystemProcesses) {
-          if (lowerName === sysProc.toLowerCase())
-            return false
-        }
-
-        // 不再要求 command 必须包含 \program files\ / \users\ / \appdata\
-        // tasklist 默认不输出路径，依赖路径白名单会把所有用户应用过滤光。
-        // 通过黑名单的 .exe 都保留。
-        return true
-      }
-
+      if (platform === 'darwin')
+        return this.isMacUserApp(lowerCommand)
+      if (platform === 'linux')
+        return this.isLinuxUserApp(lowerName, lowerCommand)
+      if (platform === 'win32')
+        return this.isWindowsUserApp(lowerName, lowerCommand)
       return true
     })
   }
