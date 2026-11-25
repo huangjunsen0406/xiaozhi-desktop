@@ -2,13 +2,11 @@
  * 状态管理器
  *
  * 集中管理设备状态，通过事件总线广播状态变更。
- * 使用互斥锁（async-mutex）确保状态变更的原子性，锁外广播事件避免死锁。
  */
 
 import type { AppStateSnapshot, DeviceState, ListeningMode } from '@shared/types'
 import type { EventBus } from './EventBus'
 import { DeviceStateValue, ListeningModeValue } from '@shared/types'
-import { Mutex } from 'async-mutex'
 import { getLogger } from '../utils/logger'
 import { Events } from './EventBus'
 
@@ -41,9 +39,6 @@ export interface StateChangeData {
  * ```
  */
 export class StateManager {
-  /** 互斥锁，保护状态变更的原子性 */
-  private mutex = new Mutex()
-
   /** 事件总线引用 */
   private eventBus: EventBus
 
@@ -82,34 +77,21 @@ export class StateManager {
    * @param state 新的设备状态
    */
   async setDeviceState(state: DeviceState): Promise<void> {
-    let oldState: DeviceState | undefined
+    if (this.deviceState === state)
+      return
 
-    // 锁内完成状态变更
-    const release = await this.mutex.acquire()
-    try {
-      if (this.deviceState === state)
-        return
+    const oldState = this.deviceState
+    this.deviceState = state
+    logger.info(`设备状态变更: ${oldState} -> ${state}`)
 
-      oldState = this.deviceState
-      this.deviceState = state
-      logger.info(`设备状态变更: ${oldState} -> ${state}`)
-
-      // 进入监听状态时重置中止标志
-      if (state === DeviceStateValue.LISTENING) {
-        this.aborted = false
-      }
-    }
-    finally {
-      release()
+    if (state === DeviceStateValue.LISTENING) {
+      this.aborted = false
     }
 
-    // 锁外广播，避免死锁
-    if (oldState !== undefined) {
-      await this.eventBus.emit(Events.DEVICE_STATE_CHANGED, {
-        oldState,
-        newState: state,
-      } satisfies StateChangeData)
-    }
+    await this.eventBus.emit(Events.DEVICE_STATE_CHANGED, {
+      oldState,
+      newState: state,
+    } satisfies StateChangeData)
   }
 
   /**

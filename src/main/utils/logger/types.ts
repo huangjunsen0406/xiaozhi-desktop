@@ -73,10 +73,6 @@ export interface LoggerConfig {
   maxFileSize?: number
   /** 最多保留日志文件数量，默认 7 */
   maxFiles?: number
-  /** 是否启用 IPC 输出（发送到渲染进程） */
-  enableIPC?: boolean
-  /** 是否在生产环境 */
-  isProduction?: boolean
 }
 
 /**

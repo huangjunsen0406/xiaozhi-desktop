@@ -71,40 +71,27 @@ export class AudioPlugin extends Plugin {
    */
   async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
     await super.setup(ctx, cmd)
-
     logger.info('初始化...')
 
-    try {
-      // 初始化 OpusCodec
-      initOpusCodec()
-      logger.info('OpusCodec 已初始化')
+    initOpusCodec()
+    logger.info('OpusCodec 已初始化')
 
-      // 监听来自后台音频窗口的 PCM 数据（保存引用以便精确移除）
-      this.pcmHandler = (_event, pcmData: Int16Array) => {
-        this.handlePCMFromRenderer(pcmData)
-      }
-      ipcMain.on('audio:pcm', this.pcmHandler)
-
-      // 订阅音频接收事件（EventBus fallback；生产路径由 protocol.setAudioHandler 直连）
-      ctx.eventBus.on(Events.INCOMING_AUDIO, (data) => {
-        this.onIncomingAudio(data)
-      })
-
-      // 订阅设备状态变更事件
-      ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, (data) => {
-        const { newState } = data
-        this.onDeviceStateChanged(newState)
-      })
-
-      powerMonitor.on('suspend', this.onSystemSuspend)
-      powerMonitor.on('resume', this.onSystemResume)
-
-      logger.info('初始化完成')
+    this.pcmHandler = (_event, pcmData: Int16Array) => {
+      this.handlePCMFromRenderer(pcmData)
     }
-    catch (error) {
-      logger.error('初始化失败', error)
-      throw error
-    }
+    ipcMain.on('audio:pcm', this.pcmHandler)
+
+    ctx.eventBus.on(Events.INCOMING_AUDIO, (data) => {
+      this.onIncomingAudio(data)
+    })
+
+    ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, ({ newState }) => {
+      this.onDeviceStateChanged(newState)
+    })
+
+    powerMonitor.on('suspend', this.onSystemSuspend)
+    powerMonitor.on('resume', this.onSystemResume)
+    logger.info('初始化完成')
   }
 
   /**

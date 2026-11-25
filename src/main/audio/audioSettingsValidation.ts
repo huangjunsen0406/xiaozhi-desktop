@@ -1,4 +1,5 @@
 import type { AudioSettings, ValidSampleRate } from '@shared/types'
+import { isAecMode } from './AecPolicy'
 
 export const AUDIO_SAMPLE_RATES = [8000, 12000, 16000, 24000, 48000] as const
 const FRAME_DURATIONS = [2.5, 5, 10, 20, 40, 60]
@@ -54,7 +55,7 @@ export function parseAudioSettingsUpdate(value: unknown): Partial<AudioSettings>
     result.frameDuration = input.frameDuration
   }
   if (input.aecMode !== undefined) {
-    if (input.aecMode !== 'off' && input.aecMode !== 'app' && input.aecMode !== 'system')
+    if (!isAecMode(input.aecMode))
       throw new Error('aecMode 必须是 off、app 或 system')
     result.aecMode = input.aecMode
   }

@@ -58,25 +58,18 @@ export function initLogger(options?: {
   minLevel?: LogLevel
   enableConsole?: boolean
   enableFile?: boolean
-  enableIPC?: boolean
 }): void {
-  // 延迟导入 electron，避免循环依赖
-  // const { app } = require('electron')
   const isDev = !app.isPackaged
 
   const config = {
     minLevel: options?.minLevel ?? (isDev ? LogLevel.DEBUG : LogLevel.INFO),
     enableConsole: options?.enableConsole ?? true,
     enableFile: options?.enableFile ?? true,
-    enableIPC: options?.enableIPC ?? false,
-    isProduction: !isDev,
-    // 注入日志目录路径（经 paths API，支持 env/配置覆盖）
     logDir: getLogDir(),
   }
 
   Logger.initialize(config)
 
-  // 确保 rootLogger 已创建
   if (!_rootLogger) {
     _rootLogger = createLogger('App')
   }
@@ -85,7 +78,6 @@ export function initLogger(options?: {
     minLevel: LogLevel[config.minLevel],
     enableConsole: config.enableConsole,
     enableFile: config.enableFile,
-    enableIPC: config.enableIPC,
     logDir: config.logDir,
     isDev,
   })

@@ -9,31 +9,23 @@ const logger = getLogger('EventBus')
 export const Events = {
   DEVICE_STATE_CHANGED: 'device:state_changed',
   PROTOCOL_CONNECTED: 'protocol:connected',
-  PROTOCOL_DISCONNECTED: 'protocol:disconnected',
   NETWORK_ERROR: 'protocol:network_error',
   INCOMING_AUDIO: 'audio:incoming',
   AUDIO_DECODED: 'audio:decoded',
   AUDIO_CHANNEL_OPENED: 'audio:channel_opened',
   AUDIO_CHANNEL_CLOSED: 'audio:channel_closed',
   INCOMING_JSON: 'message:incoming_json',
-  MUSIC_PAUSE_REQUEST: 'music:pause_request',
-  MUSIC_RESUME_REQUEST: 'music:resume_request',
-  APP_SHUTDOWN: 'app:shutdown',
 } as const
 
 export interface EventPayloads {
   'device:state_changed': StateChangeData
   'protocol:connected': Protocol
-  'protocol:disconnected': void
   'protocol:network_error': string
   'audio:incoming': Buffer
   'audio:decoded': Buffer
   'audio:channel_opened': void
   'audio:channel_closed': void
   'message:incoming_json': ServerMessage
-  'music:pause_request': void
-  'music:resume_request': void
-  'app:shutdown': void
 }
 
 export type EventName = keyof EventPayloads

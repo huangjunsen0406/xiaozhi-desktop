@@ -127,24 +127,11 @@ export class ConversationSession {
     ]
   }
 
-  /**
-   * 取消事件订阅
-   */
   unbindEvents(): void {
-    for (const off of this.unsubscribers) {
-      try {
-        off()
-      }
-      catch {
-        // ignore
-      }
-    }
+    for (const off of this.unsubscribers)
+      off()
     this.unsubscribers = []
   }
-
-  // -------------------------
-  // 事件处理器
-  // -------------------------
 
   private async onAudioChannelOpened(): Promise<void> {
     if (this.keepIdleOnChannelOpen) {
@@ -164,35 +151,20 @@ export class ConversationSession {
 
   private async onNetworkError(_errorMessage: string): Promise<void> {
     this.state.setKeepListening(false)
-    try {
-      if (!this.state.isIdle()) {
-        await this.state.setDeviceState(DeviceStateValue.IDLE)
-      }
-    }
-    catch (error) {
-      logger.error('网络错误后复位设备状态失败', error)
+    if (!this.state.isIdle()) {
+      await this.state.setDeviceState(DeviceStateValue.IDLE)
     }
   }
 
-  /**
-   * 处理 TTS 状态迁移（由 ProtocolManager 广播 INCOMING_JSON 后调用）
-   */
   private async onIncomingJson(jsonData: ServerMessage): Promise<void> {
-    try {
-      if (!isServerTtsMessage(jsonData)) {
-        return
-      }
+    if (!isServerTtsMessage(jsonData))
+      return
 
-      const { state } = jsonData
-      if (state === 'start') {
-        await this.handleTtsStart()
-      }
-      else if (state === 'stop') {
-        await this.handleTtsStop()
-      }
+    if (jsonData.state === 'start') {
+      await this.handleTtsStart()
     }
-    catch (error) {
-      logger.error('处理 TTS 消息失败', error)
+    else if (jsonData.state === 'stop') {
+      await this.handleTtsStop()
     }
   }
 
@@ -208,14 +180,7 @@ export class ConversationSession {
     }
   }
 
-  private async handleTtsStop(): Promise<void> {
-    if (!this.state.isKeepListening()) {
-      if (!this.state.isListening()) {
-        await this.state.setDeviceState(DeviceStateValue.IDLE)
-      }
-      return
-    }
-
+  private async resumeListeningIfNeeded(reason: string): Promise<void> {
     // realtime 一般还在 listen 里，不用再发一遍
     if (this.state.getListeningMode() !== ListeningModeValue.REALTIME) {
       if (this.protocol.isAudioChannelOpened()) {
@@ -223,15 +188,25 @@ export class ConversationSession {
           await this.protocol.sendStartListening(this.state.getListeningMode())
         }
         catch (error) {
-          logger.warn('TTS 结束后重新 listen 失败', error)
+          logger.warn(`${reason}重新 listen 失败`, error)
         }
       }
       else {
-        logger.warn('TTS 结束但协议通道已关闭，跳过重新 listen')
+        logger.warn(`${reason}但协议通道已关闭，跳过重新 listen`)
       }
     }
 
     await this.state.setDeviceState(DeviceStateValue.LISTENING)
+  }
+
+  private async handleTtsStop(): Promise<void> {
+    if (!this.state.isKeepListening()) {
+      if (!this.state.isListening()) {
+        await this.state.setDeviceState(DeviceStateValue.IDLE)
+      }
+      return
+    }
+    await this.resumeListeningIfNeeded('TTS 结束后')
   }
 
   // -------------------------
@@ -357,17 +332,7 @@ export class ConversationSession {
     }
 
     if (this.state.isKeepListening()) {
-      if (this.state.getListeningMode() !== ListeningModeValue.REALTIME) {
-        if (this.protocol.isAudioChannelOpened()) {
-          try {
-            await this.protocol.sendStartListening(this.state.getListeningMode())
-          }
-          catch (error) {
-            logger.warn('打断后重新 listen 失败', error)
-          }
-        }
-      }
-      await this.state.setDeviceState(DeviceStateValue.LISTENING)
+      await this.resumeListeningIfNeeded('打断后')
       this.state.setAborted(false)
       logger.debug('打断后已恢复持续监听')
     }

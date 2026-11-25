@@ -32,7 +32,7 @@ import { getLogger, initLogger, shutdownLogger } from './utils/logger'
 import { buildAppMenu, buildDisplayModeMenu } from './utils/menuBuilder'
 import { migrateFromEnvIfNeeded, resolveAllPaths } from './utils/paths'
 import { registerModelProtocolHandler, registerModelProtocolScheme } from './utils/registerModelProtocol'
-import { ensureBackgroundAudioWindow, ensureMainWindow, getBackgroundAudioWindow, getCurrentDisplayMode, getCurrentModeWindow, onDisplayModeChange, setIsQuitting, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from './windows/windowManager'
+import { ensureBackgroundAudioWindow, ensureMainWindow, getCurrentDisplayMode, getCurrentModeWindow, onDisplayModeChange, setIsQuitting, toggleToChat, toggleToLive2d, toggleToMain, toggleToMini, toggleToPets } from './windows/windowManager'
 
 const logger = getLogger('Index')
 const APP_DISPLAY_NAME = '小智'
@@ -90,6 +90,21 @@ function ensureDockVisible(): void {
   }
 }
 
+function focusOrCreateCurrentWindow(): void {
+  const targetWindow = getCurrentModeWindow()
+  if (targetWindow && !targetWindow.isDestroyed()) {
+    if (targetWindow.isMinimized())
+      targetWindow.restore()
+    if (!targetWindow.isVisible())
+      targetWindow.show()
+    targetWindow.focus()
+  }
+  else {
+    ensureMainWindow().show()
+  }
+  ensureDockVisible()
+}
+
 app.on('ready', () => {
   setDevDockIconOnce()
 })
@@ -126,28 +141,7 @@ else {
     }
 
     logger.info('检测到第二个实例启动，唤醒现有窗口')
-
-    // 获取当前显示模式对应的窗口
-    const targetWindow = getCurrentModeWindow()
-
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      // 如果窗口最小化，恢复它
-      if (targetWindow.isMinimized()) {
-        targetWindow.restore()
-      }
-
-      // 显示并聚焦窗口
-      targetWindow.show()
-      targetWindow.focus()
-
-      // macOS: 确保 Dock 图标显示
-      ensureDockVisible()
-    }
-    else {
-      // 如果窗口不存在，创建并显示主窗口
-      const main = ensureMainWindow()
-      main.show()
-    }
+    focusOrCreateCurrentWindow()
   })
 }
 
@@ -241,7 +235,7 @@ app.whenReady().then(async () => {
   logger.info('创建后台音频窗口...')
   const backgroundAudioWindow = ensureBackgroundAudioWindow()
 
-  // 显式创建并初始化 ServiceContainer（进程唯一根）
+  // 显式创建并初始化 ServiceContainer（进程唯一根，使用 WebSocket 协议）
   const container = createServiceContainer()
   await container.initialize('websocket')
 
@@ -284,14 +278,9 @@ app.whenReady().then(async () => {
   trackAppOpened(getCurrentDisplayMode())
 
   // 协议连上后报一次 session_connected（质量粗信号，非对话粒度）
-  try {
-    container.eventBus.on(Events.PROTOCOL_CONNECTED, () => {
-      trackSessionConnected('websocket')
-    })
-  }
-  catch (error) {
-    logger.warn('订阅 PROTOCOL_CONNECTED 失败', error)
-  }
+  container.eventBus.on(Events.PROTOCOL_CONNECTED, () => {
+    trackSessionConnected('websocket')
+  })
 
   // 桌宠本地关怀提醒（无语音/不写对话；依赖 display mode + deviceState）
   try {
@@ -309,7 +298,7 @@ app.whenReady().then(async () => {
     else {
       logger.info('激活状态检查完成', result.message)
     }
-    // OTA 可能更新了 websocket_url，通知 ProtocolManager 刷新内存配置
+    // OTA 可能更新了 MQTT 配置，通知 ProtocolManager 刷新内存配置
     container.reloadProtocolConfig()
   }).catch((error) => {
     logger.error('激活状态检查出错（已忽略）', error)
@@ -317,28 +306,12 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => {
     // macOS 点击 Dock 图标时，显示当前模式对应的窗口
-    const windows = BrowserWindow.getAllWindows()
-    if (windows.length === 0) {
-      const main = ensureMainWindow()
-      main.show()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      ensureMainWindow().show()
+      ensureDockVisible()
+      return
     }
-    else {
-      // 获取当前显示模式对应的窗口
-      const targetWindow = getCurrentModeWindow()
-
-      if (targetWindow && !targetWindow.isDestroyed()) {
-        if (!targetWindow.isVisible()) {
-          targetWindow.show()
-        }
-        targetWindow.focus()
-      }
-      else {
-        // 如果当前模式的窗口不存在，创建并显示主窗口
-        const main = ensureMainWindow()
-        main.show()
-      }
-    }
-    ensureDockVisible()
+    focusOrCreateCurrentWindow()
   })
 })
 
@@ -359,21 +332,6 @@ app.on('before-quit', async (event) => {
   setIsQuitting(true) // 设置退出标志，允许窗口关闭
   logger.info('应用正在退出...')
 
-  // 清理后台音频系统
-  try {
-    const backgroundAudioWindow = getBackgroundAudioWindow()
-    if (backgroundAudioWindow && !backgroundAudioWindow.isDestroyed()) {
-      logger.info('正在清理后台音频系统...')
-      backgroundAudioWindow.webContents.send('audio:command', 'cleanup')
-      // 等待一小段时间让 cleanup 完成
-      await new Promise(resolve => setTimeout(resolve, 100))
-      logger.info('后台音频系统已清理')
-    }
-  }
-  catch (error) {
-    logger.error('清理后台音频系统失败', error)
-  }
-
   // 停止本地关怀提醒调度
   try {
     stopCareReminderService()
@@ -382,7 +340,7 @@ app.on('before-quit', async (event) => {
     logger.error('停止关怀提醒服务失败', error)
   }
 
-  // 关闭 ServiceContainer（插件、协议、任务等）
+  // 关闭 ServiceContainer（含 AudioPlugin 清理后台音频窗口、协议、任务等）
   try {
     const container = getServiceContainer()
     await container.shutdown()
