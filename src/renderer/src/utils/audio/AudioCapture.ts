@@ -1,3 +1,6 @@
+import type { AudioSettings } from '@shared/types'
+import { resolveAecMode } from './deviceUtils'
+
 /**
  * 音频采集类
  * 负责从麦克风采集音频,通过 AudioWorklet 处理,并发送到主进程
@@ -23,14 +26,14 @@ export class AudioCapture {
    * 初始化音频采集
    * @param deviceId 可选的设备ID，用于指定麦克风设备
    */
-  async initialize(deviceId?: string): Promise<void> {
+  async initialize(deviceId?: string, existingConfig?: AudioSettings): Promise<void> {
     try {
       console.log('初始化 AudioCapture...', deviceId ? `设备ID: ${deviceId}` : '使用默认设备')
 
       this.deviceId = deviceId
 
       // 加载音频配置
-      const audioConfig = await window.api.audioGetConfig()
+      const audioConfig = existingConfig ?? await window.api.audioGetConfig()
       this.sampleRate = audioConfig.inputSampleRate || 16000
       this.channels = audioConfig.channels || 1
       this.frameDuration = audioConfig.frameDuration || 20
@@ -101,7 +104,7 @@ export class AudioCapture {
    * 开始采集音频
    * @param deviceId 可选的设备ID，如果提供则覆盖初始化时的设备ID
    */
-  async start(deviceId?: string): Promise<void> {
+  async start(deviceId?: string, existingConfig?: AudioSettings): Promise<void> {
     const generation = ++this.generation
     if (!this.audioContext || !this.workletNode) {
       throw new Error('AudioCapture 未初始化')
@@ -116,11 +119,10 @@ export class AudioCapture {
       console.log('请求麦克风权限...', this.deviceId ? `设备ID: ${this.deviceId}` : '使用默认设备')
 
       // 获取音频配置
-      const audioConfig = await window.api.audioGetConfig()
+      const audioConfig = existingConfig ?? await window.api.audioGetConfig()
       if (generation !== this.generation)
         return
-      const aecMode = audioConfig.aecMode
-        ?? (audioConfig.enableEchoCancellation === false ? 'off' : 'app')
+      const aecMode = resolveAecMode(audioConfig)
 
       // 构建音频约束（Chromium AEC：off 关 EC；app/system 开 EC）
       // system 先尝试 ideal:'all'（新规范），失败再 boolean true
@@ -226,12 +228,12 @@ export class AudioCapture {
    * 更新配置（动态更新采样率和帧长度）
    * 用于配置变更时无需重启应用
    */
-  async updateConfig(): Promise<void> {
+  async updateConfig(existingConfig?: AudioSettings): Promise<void> {
     console.log('更新音频采集配置...')
 
     try {
       // 重新加载配置
-      const audioConfig = await window.api.audioGetConfig()
+      const audioConfig = existingConfig ?? await window.api.audioGetConfig()
       const newSampleRate = audioConfig.inputSampleRate || 16000
       const newFrameDuration = audioConfig.frameDuration || 20
 
@@ -289,52 +291,32 @@ export class AudioCapture {
   stop(): void {
     this.accepting = false
     this.generation++
-    console.log('停止音频采集...')
 
-    try {
-      // 断开连接
-      if (this.source) {
-        try {
-          this.source.disconnect()
-        }
-        catch (e) {
-          // 忽略断开连接错误
-          console.log(e)
-        }
-        this.source = null
+    if (this.source) {
+      try {
+        this.source.disconnect()
       }
-
-      if (this.workletNode) {
-        try {
-          this.workletNode.disconnect()
-        }
-        catch (e) {
-          console.log(e)
-          // 忽略断开连接错误
-        }
-      }
-
-      // 停止媒体流
-      if (this.stream) {
-        this.stream.getTracks().forEach((track) => {
-          track.onended = null
-          try {
-            if (track.readyState !== 'ended') {
-              track.stop()
-            }
-          }
-          catch (e) {
-            // 忽略停止错误
-            console.log(e)
-          }
-        })
-        this.stream = null
-      }
-
-      console.log('音频采集已停止')
+      catch {}
+      this.source = null
     }
-    catch (error) {
-      console.warn('停止音频采集时发生错误（已忽略）:', error)
+
+    if (this.workletNode) {
+      try {
+        this.workletNode.disconnect()
+      }
+      catch {}
+    }
+
+    if (this.stream) {
+      for (const track of this.stream.getTracks()) {
+        track.onended = null
+        try {
+          if (track.readyState !== 'ended')
+            track.stop()
+        }
+        catch {}
+      }
+      this.stream = null
     }
   }
 

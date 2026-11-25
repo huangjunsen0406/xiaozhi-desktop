@@ -102,15 +102,8 @@ function validateArgs(args: unknown[], schema: ValidationSchema): string | null 
     }
     else {
       const actualType = typeof value
-      const expectedType = rule.type
-
-      const validTypes = ['string', 'number', 'boolean', 'object'] as const
-      if (!validTypes.includes(expectedType as typeof validTypes[number])) {
-        return `参数 ${key} 类型配置错误`
-      }
-
-      if (actualType !== expectedType) {
-        return `参数 ${key} 类型错误，期望 ${expectedType}，实际 ${actualType}`
+      if (actualType !== rule.type) {
+        return `参数 ${key} 类型错误，期望 ${rule.type}，实际 ${actualType}`
       }
     }
 
@@ -227,38 +220,7 @@ export function createIpcHandler<T = unknown>(config: IpcHandlerConfig<NoInfer<T
 }
 
 /**
- * 创建简单的 IPC 处理器（无参数校验）
- * 适用于不需要参数校验的简单场景
- *
- * @param channel IPC 通道名称
- * @param handler 处理函数
- */
-export function createSimpleHandler<T>(
-  channel: string,
-  handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<T> | T,
-): void {
-  createIpcHandler({
-    channel,
-    handler: async (event, ...args) => success(await handler(event, ...args)),
-  })
-}
-
-/**
- * 批量注册 IPC 处理器
- * 用于一次性注册多个 IPC 通道处理器
- *
- * @param configs IPC 处理器配置数组
- */
-export function registerIpcHandlers(configs: IpcHandlerConfig[]): void {
-  for (const config of configs) {
-    createIpcHandler(config)
-  }
-}
-
-/**
  * 创建成功响应（带数据）
- * @param data 响应数据
- * @returns IpcResponse<T> 成功响应对象
  */
 export function success<T>(data: T): IpcResponse<T>
 /**

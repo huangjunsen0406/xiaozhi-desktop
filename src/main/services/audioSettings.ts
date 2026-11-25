@@ -54,10 +54,6 @@ function settingsToDbUpdates(
     dbUpdates.aec_mode = nextMode
     dbUpdates.enable_echo_cancellation = legacyEchoFlagFromAecMode(nextMode)
   }
-  else if ('enableEchoCancellation' in config) {
-    // 仅旧字段且上面未解析到 mode 时（不应发生）；兜底双写
-    dbUpdates.enable_echo_cancellation = config.enableEchoCancellation
-  }
 
   if ('conversationMode' in config) {
     dbUpdates.conversation_mode = config.conversationMode
@@ -99,13 +95,10 @@ function mergeAudioSettingsSnapshot(
   partial: Partial<AudioSettings>,
 ): AudioSettings {
   const merged: AudioSettings = { ...previous, ...partial }
-  // 若 partial 只带 legacy 布尔，确保 aecMode 与之一致，便于 classify
-  if ('enableEchoCancellation' in partial && partial.aecMode === undefined) {
-    merged.aecMode = aecModeFromLegacyEchoFlag(partial.enableEchoCancellation)
-  }
-  if (partial.aecMode !== undefined) {
-    merged.aecMode = normalizeAecMode(partial.aecMode, previous.aecMode ?? 'app')
-    merged.enableEchoCancellation = legacyEchoFlagFromAecMode(merged.aecMode)
+  const nextMode = resolveAecModeFromPartial(partial, previous.aecMode ?? 'app')
+  if (nextMode !== undefined) {
+    merged.aecMode = nextMode
+    merged.enableEchoCancellation = legacyEchoFlagFromAecMode(nextMode)
   }
   return merged
 }

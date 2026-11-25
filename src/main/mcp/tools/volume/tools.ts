@@ -31,14 +31,7 @@ Parameter:
   callback: async (args: Record<string, unknown>): Promise<string> => {
     try {
       const volume = args.volume as number
-
       logger.info(`设置音量到 ${volume}`)
-
-      if (volume < 0 || volume > 100) {
-        logger.warn(`音量值超出范围: ${volume}`)
-        return 'false'
-      }
-
       await volumeController.setVolume(volume)
       logger.info(`音量设置成功: ${volume}`)
       return 'true'

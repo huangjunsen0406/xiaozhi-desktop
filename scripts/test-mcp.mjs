@@ -14,10 +14,9 @@ const stubs = {
   '/services/database': 'export const getDatabase = () => globalThis.__mcpRuntime.database',
   '/core/ServiceContainer': 'export const getServiceContainer = () => globalThis.__mcpRuntime.container',
   '/windows/windowManager': 'export const ensureBubbleWindow = () => {}; export const hideBubbleWindow = () => {}',
-  '/tools/camera': 'export const getCameraInstance = () => ({})',
+  '/tools': 'export const getAllTools = () => []',
   '/tools/screenshot/ScreenshotTool': 'export class ScreenshotTool { static create() { return {} } }',
-  '/tools/timer/TimerService': 'export class TimerService { static create() { return {} } }',
-  '/tools/SystemToolsManager': 'export class SystemToolsManager { async init() {} }',
+  '/tools/timer/TimerService': 'export class TimerService { static create() { return { cleanupAll: async () => {} } } }',
   'electron': `export const app = { getPath: () => process.env.TMPDIR || '/tmp' };
     export const BrowserWindow = { getAllWindows: () => [] };
     export const dialog = { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) };

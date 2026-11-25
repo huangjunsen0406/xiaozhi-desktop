@@ -262,19 +262,7 @@ export class ChatPlugin extends Plugin {
       logger.info('TTS 结束')
 
       if (this.messageAccumulator.pendingImageData) {
-        const sessionId = await this.ensureActiveSession(message)
-        const db = getDatabase()
-        const imageResult = db.addChatMessage({
-          session_id: sessionId,
-          role: 'assistant',
-          content: '[图片]',
-          source_type: 'image',
-          image_data: Buffer.from(this.messageAccumulator.pendingImageData.data, 'base64'),
-          timestamp: Math.floor(Date.now() / 1000),
-        })
-
-        logger.info(`已保存图片消息 [${imageResult.id}]`)
-        this.getUIPlugin()?.broadcastMessageAdded(imageResult.id, sessionId, 'assistant')
+        await this.persistImageMessage(this.messageAccumulator.pendingImageData.data, message)
       }
 
       this.resetMessageAccumulator()
@@ -286,23 +274,25 @@ export class ChatPlugin extends Plugin {
     this.messageAccumulator.pendingImageData = null
   }
 
+  private async persistImageMessage(imageBase64: string, message?: ServerMessage): Promise<void> {
+    const sessionId = await this.ensureActiveSession(message)
+    const result = getDatabase().addChatMessage({
+      session_id: sessionId,
+      role: 'assistant',
+      content: '[图片]',
+      source_type: 'image',
+      image_data: Buffer.from(imageBase64, 'base64'),
+      timestamp: Math.floor(Date.now() / 1000),
+    })
+
+    logger.info(`已保存图片消息 [${result.id}] 到会话 ${sessionId}`)
+    this.getUIPlugin()?.broadcastMessageAdded(result.id, sessionId, 'assistant')
+  }
+
   async saveImage(imageBase64: string, sourceType: ImageSourceType): Promise<void> {
     try {
       logger.info(`保存 ${sourceType} 图片到数据库`)
-      const sessionId = await this.ensureActiveSession(undefined)
-
-      const db = getDatabase()
-      const result = db.addChatMessage({
-        session_id: sessionId,
-        role: 'assistant',
-        content: '[图片]',
-        source_type: 'image',
-        image_data: Buffer.from(imageBase64, 'base64'),
-        timestamp: Math.floor(Date.now() / 1000),
-      })
-
-      logger.info(`已保存图片消息 [${result.id}] 到会话 ${sessionId}`)
-      this.getUIPlugin()?.broadcastMessageAdded(result.id, sessionId, 'assistant')
+      await this.persistImageMessage(imageBase64)
     }
     catch (error) {
       logger.error('保存图片失败', error)

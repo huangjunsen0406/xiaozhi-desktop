@@ -106,36 +106,25 @@ export class WakeWordDetector implements AudioListener {
     }
   }
 
+  private clearPendingProcessing(): void {
+    if (this.processingHandle) {
+      clearImmediate(this.processingHandle)
+      this.processingHandle = null
+    }
+    this.processing = false
+  }
+
   reload(config: WakeWordDetectorConfig): void {
     logger.info('重新加载模型...')
 
     this.shuttingDown = true
     this.enabled = false
+    this.clearPendingProcessing()
 
-    if (this.processingHandle) {
-      clearImmediate(this.processingHandle)
-      this.processingHandle = null
-    }
-
-    const waitForProcessing = () => {
-      return new Promise<void>((resolve) => {
-        if (!this.processing) {
-          resolve()
-        }
-        else {
-          setTimeout(() => {
-            waitForProcessing().then(resolve)
-          }, 50)
-        }
-      })
-    }
-
-    waitForProcessing().then(() => {
-      this.audioQueue = []
-      this.stream = null
-      this.keywordSpotter = null
-      this.initKeywordSpotter(config)
-    })
+    this.audioQueue = []
+    this.stream = null
+    this.keywordSpotter = null
+    this.initKeywordSpotter(config)
   }
 
   onAudioData(pcmData: Int16Array): void {
@@ -239,24 +228,11 @@ export class WakeWordDetector implements AudioListener {
     logger.info('正在关闭...')
     this.shuttingDown = true
     this.enabled = false
+    this.clearPendingProcessing()
 
-    if (this.processingHandle) {
-      clearImmediate(this.processingHandle)
-      this.processingHandle = null
-    }
-
-    const waitForProcessing = () => {
-      if (!this.processing) {
-        this.audioQueue = []
-        this.stream = null
-        this.keywordSpotter = null
-        logger.info('已关闭')
-      }
-      else {
-        setTimeout(() => waitForProcessing(), 50)
-      }
-    }
-
-    waitForProcessing()
+    this.audioQueue = []
+    this.stream = null
+    this.keywordSpotter = null
+    logger.info('已关闭')
   }
 }

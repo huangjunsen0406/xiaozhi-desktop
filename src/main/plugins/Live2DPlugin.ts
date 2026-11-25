@@ -109,45 +109,22 @@ export class Live2DPlugin extends Plugin {
    * @returns 音量值 (0-1)
    */
   private calculateVolume(pcmBuffer: Buffer): number {
-    try {
-      // Buffer -> Int16Array
-      const int16Array = new Int16Array(
-        pcmBuffer.buffer,
-        pcmBuffer.byteOffset,
-        pcmBuffer.byteLength / 2,
-      )
-
-      if (int16Array.length === 0) {
-        return 0
-      }
-
-      // 计算 RMS (Root Mean Square)
-      let sumSquares = 0
-      for (let i = 0; i < int16Array.length; i++) {
-        // 归一化到 [-1, 1]
-        const normalized = int16Array[i] / 32768
-        sumSquares += normalized * normalized
-      }
-
-      const rms = Math.sqrt(sumSquares / int16Array.length)
-
-      // 增强音量表现力
-      // 1. 放大倍数从 3 提升到 8，让音量更明显
-      let volume = rms * 8
-
-      // 2. 应用幂次曲线，增强小音量的表现
-      // 使用 0.6 次方可以让小音量更明显，同时保持大音量不失真
-      volume = volume ** 0.6
-
-      // 3. 限制到 [0, 1] 范围
-      volume = Math.min(1, Math.max(0, volume))
-
-      return volume
-    }
-    catch (error) {
-      logger.error('计算音量失败', error)
+    const int16Array = new Int16Array(
+      pcmBuffer.buffer,
+      pcmBuffer.byteOffset,
+      pcmBuffer.byteLength / 2,
+    )
+    if (int16Array.length === 0)
       return 0
+
+    let sumSquares = 0
+    for (let i = 0; i < int16Array.length; i++) {
+      const normalized = int16Array[i] / 32768
+      sumSquares += normalized * normalized
     }
+
+    const rms = Math.sqrt(sumSquares / int16Array.length)
+    return Math.min(1, Math.max(0, (rms * 8) ** 0.6))
   }
 
   /**

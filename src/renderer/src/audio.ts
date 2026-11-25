@@ -48,20 +48,23 @@ async function rebuild(): Promise<void> {
     return
   updateState('initializing')
   try {
-    const devices = await getDeviceIdsFromConfig()
+    const audioConfig = await window.api.audioGetConfig()
     if (cancelled())
       return
-    await capture.initialize(devices.inputDeviceId)
+    const devices = await getDeviceIdsFromConfig(audioConfig)
+    if (cancelled())
+      return
+    await capture.initialize(devices.inputDeviceId, audioConfig)
     if (cancelled()) {
       await disposeResources()
       return
     }
-    await playback.initialize(devices.outputDeviceId)
+    await playback.initialize(devices.outputDeviceId, audioConfig)
     if (cancelled()) {
       await disposeResources()
       return
     }
-    await capture.start()
+    await capture.start(undefined, audioConfig)
     if (cancelled()) {
       await disposeResources()
       return
@@ -121,10 +124,13 @@ async function execute(command: AudioCommand): Promise<void> {
     case 'updateConfig':
       if (state === 'capturing') {
         const version = generation
-        await capture.updateConfig()
+        const audioConfig = await window.api.audioGetConfig()
         if (version !== generation || sleeping || closed)
           return
-        await playback.updateConfig()
+        await capture.updateConfig(audioConfig)
+        if (version !== generation || sleeping || closed)
+          return
+        await playback.updateConfig(audioConfig)
       }
       break
   }

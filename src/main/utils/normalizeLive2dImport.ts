@@ -709,9 +709,6 @@ export async function importNormalizedLive2dModel(options: {
       importedAt: new Date().toISOString(),
     })
 
-    // 缺失引用仅记结果，不阻断导入（贴图路径偶发大小写差异由运行时暴露）
-    await listMissingModelReferences(targetPath)
-
     return {
       success: true,
       data: {

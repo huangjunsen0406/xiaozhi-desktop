@@ -2,8 +2,8 @@
  * 音频设备管理 Composable
  * 统一设备枚举、选择和配置逻辑
  */
+import type { AudioSettings } from '@shared/types'
 import { ref } from 'vue'
-import { getDeviceIdByName } from '../utils/audio/deviceUtils'
 
 /**
  * 设备选项类型
@@ -186,47 +186,33 @@ export function useDevices() {
   }
 
   /**
-   * 从配置加载设备并选择
+   * 从配置加载设备并选择（直接复用本次枚举结果，避免重复 enumerateDevices / audioGetConfig）
    */
-  async function loadDevicesFromConfig(): Promise<{
+  async function loadDevicesFromConfig(existingConfig?: AudioSettings): Promise<{
     inputDeviceId?: string
     outputDeviceId?: string
   }> {
     try {
-      // 枚举设备
       const result = await enumerateDevices()
+      const audioConfig = existingConfig ?? await window.api.audioGetConfig()
 
-      // 获取音频配置
-      const audioConfig = await window.api.audioGetConfig()
-
-      let inputDeviceId: string | undefined
-      let outputDeviceId: string | undefined
-
-      // 匹配输入设备
-      if (audioConfig.inputDeviceName) {
-        inputDeviceId = await getDeviceIdByName(audioConfig.inputDeviceName, 'audioinput')
-        if (inputDeviceId) {
-          selectedInputDevice.value = inputDeviceId
-          console.log('✓ 从配置匹配到输入设备:', audioConfig.inputDeviceName, '→', inputDeviceId)
-        }
+      let inputDeviceId = audioConfig.inputDeviceName
+        ? result.inputs.find(d => d.label === audioConfig.inputDeviceName)?.value
+        : undefined
+      if (inputDeviceId) {
+        selectedInputDevice.value = inputDeviceId
       }
-
-      // 如果配置中没有设备或匹配失败，自动选择
-      if (!inputDeviceId) {
+      else {
         inputDeviceId = autoSelectInputDevice(result.defaultInputName, result.currentInputDeviceId) || undefined
       }
 
-      // 匹配输出设备
-      if (audioConfig.outputDeviceName) {
-        outputDeviceId = await getDeviceIdByName(audioConfig.outputDeviceName, 'audiooutput')
-        if (outputDeviceId) {
-          selectedOutputDevice.value = outputDeviceId
-          console.log('✓ 从配置匹配到输出设备:', audioConfig.outputDeviceName, '→', outputDeviceId)
-        }
+      let outputDeviceId = audioConfig.outputDeviceName
+        ? result.outputs.find(d => d.label === audioConfig.outputDeviceName)?.value
+        : undefined
+      if (outputDeviceId) {
+        selectedOutputDevice.value = outputDeviceId
       }
-
-      // 如果配置中没有设备或匹配失败，自动选择
-      if (!outputDeviceId) {
+      else {
         outputDeviceId = autoSelectOutputDevice(result.defaultOutputName) || undefined
       }
 

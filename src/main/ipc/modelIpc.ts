@@ -8,9 +8,10 @@ import type { ModelInfo } from '@shared/types'
  */
 import path from 'node:path'
 import process from 'node:process'
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, dialog, shell } from 'electron'
 import fs from 'fs-extra'
 
+import { broadcastToWindows } from '../utils/broadcast'
 import { getLogger } from '../utils/logger'
 import {
   ensureModelJson,
@@ -379,14 +380,8 @@ export function registerModelIpc(): void {
       await saveConfig(config)
       logger.info(`切换模型: ${modelId}`)
 
-      // 广播模型切换事件给所有窗口
-      const windows = BrowserWindow.getAllWindows()
-      for (const win of windows) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('model:changed', modelId)
-        }
-      }
-      logger.info(`已广播模型切换事件到 ${windows.length} 个窗口`)
+      const sent = broadcastToWindows('model:changed', modelId)
+      logger.info(`已广播模型切换事件到 ${sent} 个窗口`)
 
       return success()
     },

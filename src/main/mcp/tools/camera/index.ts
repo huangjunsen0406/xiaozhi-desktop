@@ -1,138 +1,76 @@
-/**
- * Camera 工具统一入口
- * 根据配置返回对应的摄像头实现
- *
- * 工厂模块级 current 实例；配置变更时重建。无 class 静态懒单例。
- */
-import type { BaseCamera } from './BaseCamera'
+import type { CameraToolConfig, CaptureResult } from './types'
+import { Buffer } from 'node:buffer'
+import { BrowserWindow, ipcMain } from 'electron'
 import { getLogger } from '../../../utils/logger'
-import { VLCamera } from './VLCamera'
-
-import { WebCamera } from './WebCamera'
+import { getSharp } from '../../../utils/sharp'
 
 const logger = getLogger('Camera')
 
-/** 摄像头配置 */
-interface CameraOptions {
-  /** VL API Key（可选） */
-  vlApiKey?: string
-  /** VL URL（可选） */
-  vlUrl?: string
-  /** VL 模型（可选） */
-  vlModel?: string
-  /** Explain URL（用于 WebCamera） */
-  explainUrl?: string
-  /** Explain Token（用于 WebCamera） */
-  explainToken?: string
-  /** Device ID */
-  deviceId?: string
-  /** Client ID */
-  clientId?: string
+function findAvailableWindow(): BrowserWindow | null {
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused && !focused.isDestroyed())
+    return focused
+
+  const allWindows = BrowserWindow.getAllWindows()
+  return allWindows.find(w => !w.isDestroyed() && w.isVisible())
+    ?? allWindows.find(w => !w.isDestroyed())
+    ?? null
 }
 
-let currentCamera: BaseCamera | null = null
-let lastCameraType: 'vl' | 'web' | null = null
-let lastVlConfig: { apiKey: string, url: string, model: string } | null = null
-
-/**
- * 获取摄像头实例
- * 根据配置返回 VLCamera 或 WebCamera，配置变更时重建实例
- */
-export function getCameraInstance(options: CameraOptions): BaseCamera {
-  if (options.vlApiKey && options.vlUrl) {
-    const model = options.vlModel || 'glm-4v-plus'
-    const configChanged = lastCameraType !== 'vl'
-      || lastVlConfig?.apiKey !== options.vlApiKey
-      || lastVlConfig?.url !== options.vlUrl
-      || lastVlConfig?.model !== model
-
-    if (configChanged || !(currentCamera instanceof VLCamera)) {
-      currentCamera = VLCamera.create(options.vlApiKey, options.vlUrl, model)
-      logger.info(`使用 VL Camera，URL: ${options.vlUrl}`)
+function waitForCaptureResult(): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout>
+    const handler = (_event: Electron.IpcMainEvent, data: { success: boolean, data?: Uint8Array, message?: string }) => {
+      clearTimeout(timer)
+      if (data.success && data.data)
+        resolve(Buffer.from(data.data))
+      else
+        reject(new Error(data.message || '捕获失败'))
     }
 
-    lastCameraType = 'vl'
-    lastVlConfig = { apiKey: options.vlApiKey, url: options.vlUrl, model }
+    timer = setTimeout(() => {
+      ipcMain.removeListener('camera:capture-result', handler)
+      reject(new Error('捕获图像超时'))
+    }, 10000)
 
-    return currentCamera
-  }
-
-  if (lastCameraType !== 'web' || !(currentCamera instanceof WebCamera)) {
-    logger.info('VL 配置未找到，使用 WebCamera 实现')
-    currentCamera = WebCamera.create()
-  }
-  lastCameraType = 'web'
-  lastVlConfig = null
-
-  const camera = currentCamera as WebCamera
-
-  if (options.explainUrl) {
-    camera.setExplainUrl(options.explainUrl)
-  }
-
-  if (options.explainToken) {
-    camera.setExplainToken(options.explainToken)
-  }
-
-  if (options.deviceId) {
-    camera.setDeviceId(options.deviceId)
-  }
-
-  if (options.clientId) {
-    camera.setClientId(options.clientId)
-  }
-
-  return camera
+    ipcMain.once('camera:capture-result', handler)
+  })
 }
 
-/**
- * 重置工厂当前实例（测试用）
- */
-export function resetCameraInstance(): void {
-  currentCamera = null
-  lastCameraType = null
-  lastVlConfig = null
-}
+export async function captureCameraImage(config?: Partial<CameraToolConfig>): Promise<CaptureResult> {
+  const maxDimension = config?.maxDimension ?? 320
+  const jpegQuality = config?.jpegQuality ?? 80
 
-/**
- * 拍照并分析的工具函数
- */
-export async function takePhoto(
-  question: string,
-  options: CameraOptions,
-): Promise<string> {
   try {
-    const camera = getCameraInstance(options)
-    logger.info(`使用摄像头实现: ${camera.constructor.name}`)
-    logger.info(`拍照问题: ${question}`)
-
-    // 拍照
-    const captureResult = await camera.capture()
-    if (!captureResult.success) {
-      logger.error('拍照失败', captureResult.message)
-      return JSON.stringify({
-        success: false,
-        message: captureResult.message || 'Failed to capture photo',
-      })
+    logger.info('开始捕获图像...')
+    const win = findAvailableWindow()
+    if (!win) {
+      logger.error('未找到可用窗口')
+      return { success: false, message: '未找到可用窗口' }
     }
 
-    logger.info('拍照成功，开始分析...')
+    win.webContents.send('camera:request-capture')
+    const imageData = await waitForCaptureResult()
 
-    // 分析图片
-    const analyzeResult = await camera.analyze(question)
-    return JSON.stringify(analyzeResult)
+    const sharp = await getSharp()
+    const resizedBuffer = await sharp(imageData)
+      .resize(maxDimension, maxDimension, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: jpegQuality })
+      .toBuffer()
+
+    logger.info(`图像捕获成功 (大小: ${resizedBuffer.length} 字节)`)
+    return { success: true, data: resizedBuffer }
   }
   catch (error) {
-    logger.error('拍照并分析失败', error)
-    return JSON.stringify({
+    logger.error('捕获图像失败', error)
+    return {
       success: false,
-      message: error instanceof Error ? error.message : 'Unknown error',
-    })
+      message: error instanceof Error ? error.message : '捕获图像失败',
+    }
   }
 }
 
-// 导出类型和类
-export { BaseCamera } from './BaseCamera'
-export type * from './types'
-export { VLCamera } from './VLCamera'
-export { WebCamera } from './WebCamera'
+export type { CameraToolConfig, CaptureResult } from './types'

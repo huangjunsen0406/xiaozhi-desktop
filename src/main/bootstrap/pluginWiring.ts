@@ -5,7 +5,6 @@
  * 对齐 py-xiaozhi bootstrap/plugin_wiring。
  */
 
-import type { BrowserWindow } from 'electron'
 import type { PluginCommands, PluginContext } from '../core/interfaces'
 import type { ServiceContainer } from '../core/ServiceContainer'
 import type { PluginSetupResult } from './health'
@@ -175,17 +174,4 @@ export async function setupShortcutManager(
   const shortcutManager = new ShortcutManager(db, container)
   await shortcutManager.registerAll()
   return shortcutManager
-}
-
-/**
- * 设置后台音频窗口到 AudioPlugin（由 index.ts 调用）
- */
-export function setAudioPluginBackgroundWindow(
-  audioPlugin: AudioPlugin | null,
-  window: BrowserWindow,
-): void {
-  if (audioPlugin) {
-    audioPlugin.setBackgroundAudioWindow(window)
-    logger.info('AudioPlugin 窗口引用已设置')
-  }
 }

@@ -6,19 +6,3 @@ export interface MqttInfo {
   publish_topic: string | null
   subscribe_topic: string | null
 }
-
-/**
- * Shared network fields used by both NetworkConfig and SystemConfig
- */
-export interface NetworkFields {
-  websocket_url: string | null
-  websocket_access_token: string | null
-  mqtt_endpoint: string | null
-  mqtt_client_id: string | null
-  mqtt_username: string | null
-  mqtt_password: string | null
-  mqtt_publish_topic: string | null
-  mqtt_subscribe_topic: string | null
-}
-
-export interface NetworkConfig extends Partial<NetworkFields> {}

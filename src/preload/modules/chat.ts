@@ -8,115 +8,42 @@ import type {
   CreateSessionParams,
   ImageCapturedEvent,
 } from '@shared/types'
-/**
- * 聊天 API 模块
- */
-import { ipcRenderer } from 'electron'
-import { unwrapIpcResult } from '../utils/ipc'
+import { invokeData, invokeVoid, subscribeChannel } from '../utils/ipc'
 
 export const chatApi = {
-  /**
-   * 获取会话列表
-   */
-  getSessions: async (limit = 50, offset = 0): Promise<ChatSession[]> => {
-    const result: unknown = await ipcRenderer.invoke('chat:get-sessions', limit, offset)
-    const data = unwrapIpcResult<ChatSession[] | undefined>(result, '获取会话列表失败')
-    return data ?? []
-  },
+  getSessions: async (limit = 50, offset = 0): Promise<ChatSession[]> =>
+    (await invokeData<ChatSession[] | undefined>('chat:get-sessions', '获取会话列表失败', limit, offset)) ?? [],
 
-  /**
-   * 获取单个会话
-   */
-  getSession: async (sessionId: string): Promise<ChatSession | null> => {
-    const result: unknown = await ipcRenderer.invoke('chat:get-session', sessionId)
-    const data = unwrapIpcResult<ChatSession | undefined>(result, '获取会话失败')
-    return data ?? null
-  },
+  getSession: async (sessionId: string): Promise<ChatSession | null> =>
+    (await invokeData<ChatSession | undefined>('chat:get-session', '获取会话失败', sessionId)) ?? null,
 
-  /**
-   * 创建会话
-   */
-  createSession: async (data: CreateSessionParams): Promise<ChatSession> => {
-    const result: unknown = await ipcRenderer.invoke('chat:create-session', data)
-    return unwrapIpcResult(result, '创建会话失败')
-  },
+  createSession: (data: CreateSessionParams): Promise<ChatSession> =>
+    invokeData('chat:create-session', '创建会话失败', data),
 
-  /**
-   * 获取消息列表
-   * @param sessionId 会话ID
-   * @param limit 限制数量，不传或传0则加载所有消息
-   * @param offset 偏移量
-   */
-  getMessages: async (sessionId: string, limit?: number, offset = 0): Promise<ChatMessage[]> => {
-    const result: unknown = await ipcRenderer.invoke('chat:get-messages', sessionId, limit, offset)
-    return unwrapIpcResult<ChatMessage[]>(result, '获取消息失败')
-  },
+  getMessages: (sessionId: string, limit?: number, offset = 0): Promise<ChatMessage[]> =>
+    invokeData('chat:get-messages', '获取消息失败', sessionId, limit, offset),
 
-  /**
-   * 添加消息
-   */
-  addMessage: async (data: AddMessageParams): Promise<ChatMessage> => {
-    const result: unknown = await ipcRenderer.invoke('chat:add-message', data)
-    return unwrapIpcResult(result, '添加消息失败')
-  },
+  addMessage: (data: AddMessageParams): Promise<ChatMessage> =>
+    invokeData('chat:add-message', '添加消息失败', data),
 
-  /**
-   * 更新会话标题
-   */
-  updateSessionTitle: async (sessionId: string, title: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('chat:update-session-title', sessionId, title)
-    unwrapIpcResult(result, '更新标题失败')
-  },
+  updateSessionTitle: (sessionId: string, title: string): Promise<void> =>
+    invokeVoid('chat:update-session-title', '更新标题失败', sessionId, title),
 
-  /**
-   * 删除会话
-   */
-  deleteSession: async (sessionId: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('chat:delete-session', sessionId)
-    unwrapIpcResult(result, '删除会话失败')
-  },
+  deleteSession: (sessionId: string): Promise<void> =>
+    invokeVoid('chat:delete-session', '删除会话失败', sessionId),
 
-  /**
-   * 清空消息
-   */
-  clearMessages: async (sessionId: string): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('chat:clear-messages', sessionId)
-    unwrapIpcResult(result, '清空消息失败')
-  },
+  clearMessages: (sessionId: string): Promise<void> =>
+    invokeVoid('chat:clear-messages', '清空消息失败', sessionId),
 
-  /**
-   * 监听图片捕获事件（截图/拍照）
-   */
-  onImageCaptured: (callback: (data: ImageCapturedEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: ImageCapturedEvent) => callback(data)
-    ipcRenderer.on('chat:image-captured', handler)
-    return () => ipcRenderer.off('chat:image-captured', handler)
-  },
+  onImageCaptured: (callback: (data: ImageCapturedEvent) => void): () => void =>
+    subscribeChannel('chat:image-captured', callback),
 
-  /**
-   * 监听单条消息添加事件
-   */
-  onMessageAdded: (callback: (data: ChatMessageAddedEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: ChatMessageAddedEvent) => callback(data)
-    ipcRenderer.on('chat:message-added', handler)
-    return () => ipcRenderer.off('chat:message-added', handler)
-  },
+  onMessageAdded: (callback: (data: ChatMessageAddedEvent) => void): () => void =>
+    subscribeChannel('chat:message-added', callback),
 
-  /**
-   * 监听批量消息添加事件
-   */
-  onMessagesBatchAdded: (callback: (data: ChatMessagesBatchAddedEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: ChatMessagesBatchAddedEvent) => callback(data)
-    ipcRenderer.on('chat:messages-batch-added', handler)
-    return () => ipcRenderer.off('chat:messages-batch-added', handler)
-  },
+  onMessagesBatchAdded: (callback: (data: ChatMessagesBatchAddedEvent) => void): () => void =>
+    subscribeChannel('chat:messages-batch-added', callback),
 
-  /**
-   * 监听会话创建事件（跨天自动创建新会话）
-   */
-  onSessionCreated: (callback: (data: ChatSessionCreatedEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: ChatSessionCreatedEvent) => callback(data)
-    ipcRenderer.on('chat:session-created', handler)
-    return () => ipcRenderer.off('chat:session-created', handler)
-  },
+  onSessionCreated: (callback: (data: ChatSessionCreatedEvent) => void): () => void =>
+    subscribeChannel('chat:session-created', callback),
 }

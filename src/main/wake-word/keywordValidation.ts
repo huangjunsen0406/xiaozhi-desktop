@@ -7,10 +7,10 @@
  */
 
 /** 中文：1–12 个汉字，不含英文/数字/符号/空格 */
-export const ZH_KEYWORD_PATTERN = /^[一-鿿]{1,12}$/
+export const ZH_KEYWORD_PATTERN = /^[\u4E00-\u9FFF]{1,12}$/
 
 /** 英文：1–4 个词，仅字母 */
-export const EN_KEYWORD_PATTERN = /^[A-Za-z]{2,32}(?:\s+[A-Za-z]{1,32}){0,3}$/
+export const EN_KEYWORD_PATTERN = /^[a-z]{2,32}(?:\s+[a-z]{1,32}){0,3}$/i
 
 export function parseTokensFile(content: string): Set<string> {
   const tokens = new Set<string>()

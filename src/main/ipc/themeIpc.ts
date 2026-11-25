@@ -2,6 +2,7 @@
  * 主题相关的 IPC 处理器（createIpcHandler + IpcResult）
  */
 import { BrowserWindow } from 'electron'
+import { broadcastToWindows } from '../utils/broadcast'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, success } from './middleware'
 
@@ -54,13 +55,6 @@ export function registerThemeIpc(): void {
  */
 export function broadcastThemeChange(theme: 'light' | 'dark' | 'auto'): void {
   currentTheme = theme
-  const windows = BrowserWindow.getAllWindows()
-
-  for (const win of windows) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('theme:set', theme)
-    }
-  }
-
+  broadcastToWindows('theme:set', theme)
   logger.info(`已广播主题变更: ${theme}`)
 }

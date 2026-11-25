@@ -1,94 +1,54 @@
-/**
- * 应用内更新 API（preload）
- */
 import type {
   UpdateCheckResult,
   UpdateDownloadProgress,
   UpdatePrefs,
   UpdateStatusSnapshot,
 } from '@shared/types'
-import { ipcRenderer } from 'electron'
-import { assertIpcSuccess, unwrapIpcResult } from '../utils/ipc'
+import { invokeData, invokeVoid, subscribeChannel } from '../utils/ipc'
 
 export const updateApi = {
-  getStatus: async (): Promise<UpdateStatusSnapshot> => {
-    const result: unknown = await ipcRenderer.invoke('update:get-status')
-    return unwrapIpcResult<UpdateStatusSnapshot>(result, '获取更新状态失败')
-  },
+  getStatus: (): Promise<UpdateStatusSnapshot> =>
+    invokeData('update:get-status', '获取更新状态失败'),
 
-  getPrefs: async (): Promise<UpdatePrefs> => {
-    const result: unknown = await ipcRenderer.invoke('update:get-prefs')
-    return unwrapIpcResult<UpdatePrefs>(result, '获取更新偏好失败')
-  },
+  getPrefs: (): Promise<UpdatePrefs> =>
+    invokeData('update:get-prefs', '获取更新偏好失败'),
 
-  setAutoCheck: async (enabled: boolean): Promise<UpdatePrefs> => {
-    const result: unknown = await ipcRenderer.invoke('update:set-auto-check', enabled)
-    return unwrapIpcResult<UpdatePrefs>(result, '设置自动检查失败')
-  },
+  setAutoCheck: (enabled: boolean): Promise<UpdatePrefs> =>
+    invokeData('update:set-auto-check', '设置自动检查失败', enabled),
 
-  check: async (): Promise<UpdateCheckResult> => {
-    const result: unknown = await ipcRenderer.invoke('update:check')
-    return unwrapIpcResult<UpdateCheckResult>(result, '检查更新失败')
-  },
+  check: (): Promise<UpdateCheckResult> =>
+    invokeData('update:check', '检查更新失败'),
 
-  download: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('update:download')
-    assertIpcSuccess(result, '下载更新失败')
-  },
+  download: (): Promise<void> =>
+    invokeVoid('update:download', '下载更新失败'),
 
-  quitAndInstall: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('update:quit-and-install')
-    assertIpcSuccess(result, '安装更新失败')
-  },
+  quitAndInstall: (): Promise<void> =>
+    invokeVoid('update:quit-and-install', '安装更新失败'),
 
-  /** 一键检查+下载+安装（进度走 onDownloadProgress） */
-  checkDownloadInstall: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('update:check-download-install')
-    assertIpcSuccess(result, '启动更新失败')
-  },
+  checkDownloadInstall: (): Promise<void> =>
+    invokeVoid('update:check-download-install', '启动更新失败'),
 
-  skipVersion: async (version: string): Promise<UpdatePrefs> => {
-    const result: unknown = await ipcRenderer.invoke('update:skip-version', version)
-    return unwrapIpcResult<UpdatePrefs>(result, '忽略版本失败')
-  },
+  skipVersion: (version: string): Promise<UpdatePrefs> =>
+    invokeData('update:skip-version', '忽略版本失败', version),
 
-  openReleases: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('update:open-releases')
-    assertIpcSuccess(result, '打开发布页失败')
-  },
+  openReleases: (): Promise<void> =>
+    invokeVoid('update:open-releases', '打开发布页失败'),
 
-  openRepo: async (): Promise<void> => {
-    const result: unknown = await ipcRenderer.invoke('update:open-repo')
-    assertIpcSuccess(result, '打开仓库失败')
-  },
+  openRepo: (): Promise<void> =>
+    invokeVoid('update:open-repo', '打开仓库失败'),
 
-  onAvailable: (cb: (info: UpdateCheckResult) => void): (() => void) => {
-    const handler = (_: Electron.IpcRendererEvent, info: UpdateCheckResult) => cb(info)
-    ipcRenderer.on('update:available', handler)
-    return () => ipcRenderer.off('update:available', handler)
-  },
+  onAvailable: (cb: (info: UpdateCheckResult) => void): (() => void) =>
+    subscribeChannel('update:available', cb),
 
-  onNotAvailable: (cb: (info: UpdateCheckResult) => void): (() => void) => {
-    const handler = (_: Electron.IpcRendererEvent, info: UpdateCheckResult) => cb(info)
-    ipcRenderer.on('update:not-available', handler)
-    return () => ipcRenderer.off('update:not-available', handler)
-  },
+  onNotAvailable: (cb: (info: UpdateCheckResult) => void): (() => void) =>
+    subscribeChannel('update:not-available', cb),
 
-  onDownloadProgress: (cb: (p: UpdateDownloadProgress) => void): (() => void) => {
-    const handler = (_: Electron.IpcRendererEvent, p: UpdateDownloadProgress) => cb(p)
-    ipcRenderer.on('update:download-progress', handler)
-    return () => ipcRenderer.off('update:download-progress', handler)
-  },
+  onDownloadProgress: (cb: (p: UpdateDownloadProgress) => void): (() => void) =>
+    subscribeChannel('update:download-progress', cb),
 
-  onDownloaded: (cb: (info: { version: string, currentVersion: string }) => void): (() => void) => {
-    const handler = (_: Electron.IpcRendererEvent, info: { version: string, currentVersion: string }) => cb(info)
-    ipcRenderer.on('update:downloaded', handler)
-    return () => ipcRenderer.off('update:downloaded', handler)
-  },
+  onDownloaded: (cb: (info: { version: string, currentVersion: string }) => void): (() => void) =>
+    subscribeChannel('update:downloaded', cb),
 
-  onError: (cb: (payload: { message: string }) => void): (() => void) => {
-    const handler = (_: Electron.IpcRendererEvent, payload: { message: string }) => cb(payload)
-    ipcRenderer.on('update:error', handler)
-    return () => ipcRenderer.off('update:error', handler)
-  },
+  onError: (cb: (payload: { message: string }) => void): (() => void) =>
+    subscribeChannel('update:error', cb),
 }

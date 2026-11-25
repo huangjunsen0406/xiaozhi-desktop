@@ -25,9 +25,9 @@ import fs from 'fs-extra'
 import { getLogger } from '../../utils/logger'
 import { getMcpPluginsDir, isPathInside } from '../../utils/paths'
 import { createMcpHost } from './host'
+import { validatePackageTree } from './inventory'
 import { McpPluginLifecycle, runWithDeadline } from './lifecycle'
 import { isPlatformAllowed, validateManifest } from './manifest'
-import { validatePackageTree } from './packagePaths'
 import { DEFAULT_MCP_PLUGINS_LOAD_CONFIG } from './types'
 
 /** 用于 CJS require 解析（兼容打包后无 import.meta 的场景） */

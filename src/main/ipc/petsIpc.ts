@@ -5,7 +5,7 @@ import {
   PET_DISPLAY_WIDTH_MAX,
   PET_DISPLAY_WIDTH_MIN,
 } from '@shared/types'
-import { BrowserWindow, dialog, shell } from 'electron'
+import { dialog, shell } from 'electron'
 import {
   deletePet,
   ensureBuiltinPetsCopied,
@@ -18,22 +18,11 @@ import {
   setCurrentPet,
   setDisplayWidth,
 } from '../services/PetsManager'
+import { broadcastToWindows } from '../utils/broadcast'
 import { getLogger } from '../utils/logger'
 import { createIpcHandler, failure, success } from './middleware'
 
 const logger = getLogger('PetsIpc')
-
-/**
- * 向所有窗口广播事件（宠物切换 / 显示尺寸）
- */
-function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
-  const windows = BrowserWindow.getAllWindows()
-  for (const win of windows) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, ...args)
-    }
-  }
-}
 
 /**
  * 注册精灵宠物管理 IPC 处理器
@@ -72,7 +61,7 @@ export function registerPetsIpc(): void {
       }
 
       // 广播宠物切换事件给所有窗口
-      broadcastToAllWindows('pets:changed', petId)
+      broadcastToWindows('pets:changed', petId)
 
       return success()
     },
@@ -102,7 +91,7 @@ export function registerPetsIpc(): void {
       }
 
       // 实时通知 pets / live2d / 设置页
-      broadcastToAllWindows('pets:display-size-changed', result.width)
+      broadcastToWindows('pets:display-size-changed', result.width)
       return success(result.width)
     },
   })

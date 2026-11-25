@@ -2,6 +2,7 @@
 import { useColorMode } from '@vueuse/core'
 import { darkTheme, lightTheme, NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
 import { computed, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAppEventBridge } from './composables/useAppEventBridge'
 import { useCameraCaptureRequests } from './composables/useCameraCaptureRequests'
 import { themeOverrides } from './theme/naiveTheme'
@@ -33,7 +34,8 @@ onUnmounted(removeThemeListener)
 const isDark = computed(() => mode.value === 'auto' ? systemIsDark.value : mode.value === 'dark')
 const theme = computed(() => isDark.value ? darkTheme : lightTheme)
 
-useAppEventBridge()
+const route = useRoute()
+useAppEventBridge(() => Boolean(route.meta.needsAppBridge))
 useCameraCaptureRequests()
 </script>
 

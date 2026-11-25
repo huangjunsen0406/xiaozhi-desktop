@@ -9,6 +9,7 @@ import * as path from 'node:path'
 import process from 'node:process'
 
 import { getLogger } from '../../../../utils/logger'
+import { cleanAppName, dedupeApps } from './utils'
 
 const logger = getLogger('WindowsScanner')
 
@@ -19,10 +20,8 @@ export class WindowsScanner {
    */
   static async scanInstalled(): Promise<AppInfo[]> {
     const apps: AppInfo[] = []
-    const appNames = new Set<string>() // 去重
 
     try {
-      // 1. 扫描开始菜单（用户）
       const userStartMenu = path.join(
         process.env.APPDATA || '',
         'Microsoft',
@@ -30,10 +29,8 @@ export class WindowsScanner {
         'Start Menu',
         'Programs',
       )
-      const userApps = await this.scanStartMenu(userStartMenu, 'user_application')
-      this.addUniqueApps(apps, userApps, appNames)
+      apps.push(...await this.scanStartMenu(userStartMenu, 'user_application'))
 
-      // 2. 扫描开始菜单（所有用户）
       const allUsersStartMenu = path.join(
         process.env.ProgramData || 'C:\\ProgramData',
         'Microsoft',
@@ -41,27 +38,20 @@ export class WindowsScanner {
         'Start Menu',
         'Programs',
       )
-      const allUsersApps = await this.scanStartMenu(allUsersStartMenu, 'application')
-      this.addUniqueApps(apps, allUsersApps, appNames)
+      apps.push(...await this.scanStartMenu(allUsersStartMenu, 'application'))
 
-      // 3. 扫描 Program Files
       const programFiles = process.env.ProgramFiles || 'C:\\Program Files'
-      const programFilesApps = await this.scanProgramFiles(programFiles, 'application')
-      this.addUniqueApps(apps, programFilesApps, appNames)
+      apps.push(...await this.scanProgramFiles(programFiles, 'application'))
 
-      // 4. 扫描 Program Files (x86)
       const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)'
-      if (fs.existsSync(programFilesX86)) {
-        const programFilesX86Apps = await this.scanProgramFiles(programFilesX86, 'application')
-        this.addUniqueApps(apps, programFilesX86Apps, appNames)
-      }
+      if (fs.existsSync(programFilesX86))
+        apps.push(...await this.scanProgramFiles(programFilesX86, 'application'))
 
-      // 5. 添加常用系统工具
-      const systemTools = this.getSystemTools()
-      this.addUniqueApps(apps, systemTools, appNames)
+      apps.push(...this.getSystemTools())
 
-      logger.info(`扫描完成，找到 ${apps.length} 个应用`)
-      return apps
+      const unique = dedupeApps(apps)
+      logger.info(`扫描完成，找到 ${unique.length} 个应用`)
+      return unique
     }
     catch (error) {
       logger.error('扫描应用失败', error)
@@ -127,7 +117,7 @@ export class WindowsScanner {
             else if (file.endsWith('.lnk')) {
               // 快捷方式文件
               const appName = file.replace('.lnk', '')
-              const cleanName = this.cleanAppName(appName)
+              const cleanName = cleanAppName(appName, { stripWindowsSuffixes: true })
 
               apps.push({
                 name: cleanName,
@@ -179,7 +169,7 @@ export class WindowsScanner {
             const exeFiles = await this.findExeFiles(folderPath)
             for (const exePath of exeFiles) {
               const exeName = path.basename(exePath, '.exe')
-              const cleanName = this.cleanAppName(exeName)
+              const cleanName = cleanAppName(exeName, { stripWindowsSuffixes: true })
 
               apps.push({
                 name: cleanName,
@@ -224,43 +214,6 @@ export class WindowsScanner {
     }
 
     return exeFiles
-  }
-
-  /**
-   * 清理应用名称
-   */
-  private static cleanAppName(appName: string): string {
-    // 移除版本号
-    let clean = appName.replace(/\s+\d+(\.\d+)*$/, '')
-
-    // 移除常见后缀
-    clean = clean.replace(/\s*-\s*Shortcut$/i, '')
-    clean = clean.replace(/\s*\(.*\)$/, '')
-
-    // 移除特殊字符
-    clean = clean.replace(/[™®©]/g, '')
-
-    // 移除多余空格
-    clean = clean.trim()
-
-    return clean || appName
-  }
-
-  /**
-   * 添加唯一应用（去重）
-   */
-  private static addUniqueApps(
-    apps: AppInfo[],
-    newApps: AppInfo[],
-    appNames: Set<string>,
-  ): void {
-    for (const app of newApps) {
-      const key = app.name.toLowerCase()
-      if (!appNames.has(key)) {
-        apps.push(app)
-        appNames.add(key)
-      }
-    }
   }
 
   /**

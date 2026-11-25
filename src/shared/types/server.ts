@@ -341,14 +341,6 @@ export function isServerTtsMessage(msg: ServerMessage): msg is ServerTtsMessage 
   return msg.type === 'tts'
 }
 
-export function isServerSttMessage(msg: ServerMessage): msg is ServerSttMessage {
-  return msg.type === 'stt'
-}
-
-export function isServerLlmMessage(msg: ServerMessage): msg is ServerLlmMessage {
-  return msg.type === 'llm'
-}
-
 export function isServerMcpMessage(msg: ServerMessage): msg is ServerMcpMessage {
   return msg.type === 'mcp'
 }

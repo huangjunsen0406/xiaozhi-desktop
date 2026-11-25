@@ -2,8 +2,6 @@
  * 应用内更新（electron-updater，对齐易翻产品流程）
  */
 
-export type UpdateProgressPhase = 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
-
 export interface UpdateCheckResult {
   available: boolean
   currentVersion: string

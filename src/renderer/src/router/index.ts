@@ -8,14 +8,17 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/main',
+    meta: { needsAppBridge: true },
     component: () => import('../pages/MainView.vue'),
   },
   {
     path: '/mini',
+    meta: { needsAppBridge: true },
     component: () => import('../pages/MiniView.vue'),
   },
   {
     path: '/panel',
+    meta: { needsAppBridge: true },
     component: () => import('../pages/PanelView.vue'),
   },
   {
@@ -32,14 +35,17 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/chat',
+    meta: { needsAppBridge: true },
     component: () => import('../pages/ChatView.vue'),
   },
   {
     path: '/live2d',
+    meta: { needsAppBridge: true },
     component: () => import('../pages/Live2dView.vue'),
   },
   {
     path: '/pets',
+    meta: { needsAppBridge: true },
     component: () => import('../pages/PetsView.vue'),
   },
   {

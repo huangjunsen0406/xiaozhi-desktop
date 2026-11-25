@@ -39,8 +39,6 @@ export interface BubbleLocalShowPayload {
   source: 'reminder' | 'plugin'
 }
 
-export type CareReminderConfigUpdate = Partial<CareReminderConfig>
-
 /**
  * 临时演示一轮提醒的结果（绕过间隔/静默/总开关，仅预览）
  */

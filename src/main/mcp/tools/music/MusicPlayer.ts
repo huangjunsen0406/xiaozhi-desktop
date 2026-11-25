@@ -92,11 +92,7 @@ export class MusicPlayer {
    */
   private getMusicConfig(): MusicConfig {
     try {
-      const db = getDatabase()
-      const dbConfig = db.getMusicConfig()
-      if (!dbConfig) {
-        return { ...DEFAULT_MUSIC_CONFIG }
-      }
+      const dbConfig = getDatabase().getOrCreateMusicConfig()
       return {
         searchUrl: dbConfig.search_url || DEFAULT_MUSIC_CONFIG.searchUrl,
         urlApi: dbConfig.url_api || DEFAULT_MUSIC_CONFIG.urlApi,
@@ -181,279 +177,122 @@ export class MusicPlayer {
   }
 
   /**
-   * 暂停播放
+   * 统一执行播放控制类 IPC 指令，消除 pause/resume/stop/setVolume/seek/setLoop/setPlaybackRate 重复样板。
    */
+  private async runControlCommand<TExtra extends Record<string, unknown> = Record<string, never>>(
+    command: string,
+    options: {
+      args?: Record<string, unknown>
+      actionLabel: string
+      successMessage: string
+      onSuccess?: () => TExtra | void
+    },
+  ): Promise<{ success: boolean, message: string } & Partial<TExtra>> {
+    try {
+      logger.info(options.actionLabel)
+      const ok = await this.sendCommand(command, options.args)
+      if (!ok) {
+        return { success: false, message: `${options.actionLabel}失败` } as {
+          success: boolean
+          message: string
+        } & Partial<TExtra>
+      }
+
+      const extra = options.onSuccess?.()
+      return {
+        success: true,
+        message: options.successMessage,
+        ...(extra ?? {}),
+      } as { success: boolean, message: string } & Partial<TExtra>
+    }
+    catch (error) {
+      logger.error(`${options.actionLabel}失败`, error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : `${options.actionLabel}失败`,
+      } as { success: boolean, message: string } & Partial<TExtra>
+    }
+  }
+
   async pause(): Promise<PauseMusicResult> {
-    try {
-      if (this.currentState !== 'playing') {
-        return {
-          success: false,
-          message: '当前没有正在播放的音乐',
-        }
-      }
-
-      logger.info('暂停播放')
-
-      const success = await this.sendCommand('pause')
-
-      if (success) {
-        return {
-          success: true,
-          message: '暂停指令已发送',
-          currentTime: this.currentTime,
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '暂停播放失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('暂停播放失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '暂停播放失败',
-      }
-    }
+    if (this.currentState !== 'playing')
+      return { success: false, message: '当前没有正在播放的音乐' }
+    return this.runControlCommand('pause', {
+      actionLabel: '暂停播放',
+      successMessage: '暂停指令已发送',
+      onSuccess: () => ({ currentTime: this.currentTime }),
+    })
   }
 
-  /**
-   * 恢复播放
-   */
   async resume(): Promise<ResumeMusicResult> {
-    try {
-      if (this.currentState !== 'paused') {
-        return {
-          success: false,
-          message: '当前没有暂停的音乐',
-        }
-      }
-
-      logger.info('恢复播放')
-
-      const success = await this.sendCommand('resume')
-
-      if (success) {
-        return {
-          success: true,
-          message: '恢复播放指令已发送',
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '恢复播放失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('恢复播放失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '恢复播放失败',
-      }
-    }
+    if (this.currentState !== 'paused')
+      return { success: false, message: '当前没有暂停的音乐' }
+    return this.runControlCommand('resume', {
+      actionLabel: '恢复播放',
+      successMessage: '恢复播放指令已发送',
+    })
   }
 
-  /**
-   * 停止播放
-   */
   async stop(): Promise<StopMusicResult> {
-    try {
-      if (this.currentState === 'idle' || this.currentState === 'stopped') {
-        return {
-          success: false,
-          message: '当前没有播放中的音乐',
-        }
-      }
-
-      logger.info('停止播放')
-
-      const success = await this.sendCommand('stop')
-
-      if (success) {
-        return {
-          success: true,
-          message: '停止播放指令已发送',
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '停止播放失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('停止播放失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '停止播放失败',
-      }
-    }
+    if (this.currentState === 'idle' || this.currentState === 'stopped')
+      return { success: false, message: '当前没有播放中的音乐' }
+    return this.runControlCommand('stop', {
+      actionLabel: '停止播放',
+      successMessage: '停止播放指令已发送',
+    })
   }
 
-  /**
-   * 设置音量
-   */
   async setVolume(volume: number): Promise<SetVolumeResult> {
-    try {
-      // 验证音量范围
-      if (volume < 0 || volume > 100) {
-        return {
-          success: false,
-          message: `音量值必须在 0-100 之间，当前值: ${volume}`,
-        }
-      }
-
-      logger.info(`设置音量: ${volume}`)
-
-      const success = await this.sendCommand('setVolume', { volume })
-
-      if (success) {
+    if (volume < 0 || volume > 100)
+      return { success: false, message: `音量值必须在 0-100 之间，当前值: ${volume}` }
+    return this.runControlCommand('setVolume', {
+      args: { volume },
+      actionLabel: `设置音量: ${volume}`,
+      successMessage: `音量已设置为 ${volume}`,
+      onSuccess: () => {
         this.volume = volume
-        return {
-          success: true,
-          message: `音量已设置为 ${volume}`,
-          volume,
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '设置音量失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('设置音量失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '设置音量失败',
-      }
-    }
+        return { volume }
+      },
+    })
   }
 
-  /**
-   * 跳转到指定位置（秒）
-   */
   async seek(position: number): Promise<SeekResult> {
-    try {
-      if (this.currentState === 'idle' || this.currentState === 'stopped') {
-        return {
-          success: false,
-          message: '当前没有播放中的音乐',
-        }
-      }
-
-      if (position < 0) {
-        return {
-          success: false,
-          message: `位置必须为非负数，当前值: ${position}`,
-        }
-      }
-
-      logger.info(`跳转到: ${position}秒`)
-
-      const success = await this.sendCommand('seek', { position })
-
-      if (success) {
-        return {
-          success: true,
-          message: `跳转指令已发送到 ${position.toFixed(1)} 秒`,
-          position,
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '跳转失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('跳转失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '跳转失败',
-      }
-    }
+    if (this.currentState === 'idle' || this.currentState === 'stopped')
+      return { success: false, message: '当前没有播放中的音乐' }
+    if (position < 0)
+      return { success: false, message: `位置必须为非负数，当前值: ${position}` }
+    return this.runControlCommand('seek', {
+      args: { position },
+      actionLabel: `跳转到: ${position}秒`,
+      successMessage: `跳转指令已发送到 ${position.toFixed(1)} 秒`,
+      onSuccess: () => ({ position }),
+    })
   }
 
-  /**
-   * 设置循环播放
-   */
   async setLoop(loop: boolean): Promise<SetLoopResult> {
-    try {
-      logger.info(`设置循环播放: ${loop}`)
-
-      const success = await this.sendCommand('setLoop', { loop })
-
-      if (success) {
+    return this.runControlCommand('setLoop', {
+      args: { loop },
+      actionLabel: `设置循环播放: ${loop}`,
+      successMessage: loop ? '已开启循环播放' : '已关闭循环播放',
+      onSuccess: () => {
         this.loop = loop
-        return {
-          success: true,
-          message: loop ? '已开启循环播放' : '已关闭循环播放',
-          loop,
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '设置循环播放失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('设置循环播放失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '设置循环播放失败',
-      }
-    }
+        return { loop }
+      },
+    })
   }
 
-  /**
-   * 设置播放速度
-   */
   async setPlaybackRate(rate: number): Promise<SetPlaybackRateResult> {
-    try {
-      // 验证播放速度范围
-      if (rate < 0.5 || rate > 2.0) {
-        return {
-          success: false,
-          message: `播放速度必须在 0.5-2.0 之间，当前值: ${rate}`,
-        }
-      }
-
-      logger.info(`设置播放速度: ${rate}`)
-
-      const success = await this.sendCommand('setPlaybackRate', { rate })
-
-      if (success) {
+    if (rate < 0.5 || rate > 2.0)
+      return { success: false, message: `播放速度必须在 0.5-2.0 之间，当前值: ${rate}` }
+    return this.runControlCommand('setPlaybackRate', {
+      args: { rate },
+      actionLabel: `设置播放速度: ${rate}`,
+      successMessage: `播放速度已设置为 ${rate}x`,
+      onSuccess: () => {
         this.playbackRate = rate
-        return {
-          success: true,
-          message: `播放速度已设置为 ${rate}x`,
-          rate,
-        }
-      }
-      else {
-        return {
-          success: false,
-          message: '设置播放速度失败',
-        }
-      }
-    }
-    catch (error) {
-      logger.error('设置播放速度失败', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '设置播放速度失败',
-      }
-    }
+        return { rate }
+      },
+    })
   }
 
   /**
@@ -533,15 +372,7 @@ export class MusicPlayer {
       let response: Response | null = null
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 10000)
-
-          response = await fetch(searchUrl, {
-            headers,
-            signal: controller.signal,
-          })
-
-          clearTimeout(timeoutId)
+          response = await this.fetchWithTimeout(searchUrl, headers, 10000)
           break
         }
         catch (err) {
@@ -612,6 +443,21 @@ export class MusicPlayer {
     }
   }
 
+  private async fetchWithTimeout(
+    url: string,
+    headers: Record<string, string>,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      return await fetch(url, { headers, signal: controller.signal })
+    }
+    finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
   /**
    * 解析实际播放 URL（落雪音乐直链 API）
    */
@@ -619,23 +465,12 @@ export class MusicPlayer {
     try {
       const config = this.getMusicConfig()
       const apiUrl = `${config.urlApi}/url/${config.defaultSource}/${songId}/${config.defaultQuality}`
-
       logger.info(`解析直链: ${apiUrl}`)
 
-      const headers = {
+      const response = await this.fetchWithTimeout(apiUrl, {
         'X-Request-Key': config.urlApiKey,
         'User-Agent': 'lx-music-request',
-      }
-
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000)
-
-      const response = await fetch(apiUrl, {
-        headers,
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
+      }, 15000)
 
       if (!response.ok) {
         logger.error(`直链 API 返回错误: HTTP ${response.status}`)
@@ -643,33 +478,11 @@ export class MusicPlayer {
       }
 
       const data = await response.json() as Record<string, unknown>
-
-      // 使用配置的路径提取 URL
-      const extractedUrl = getByPath(data, config.urlResponsePath || 'data.url')
-      let realUrl: string | null = null
-
-      if (typeof extractedUrl === 'string' && extractedUrl.startsWith('http')) {
-        realUrl = extractedUrl
-      }
-      else {
-        // fallback: 尝试常见路径
-        if (typeof data === 'object' && data !== null) {
-          if (typeof data.url === 'string') {
-            realUrl = data.url
-          }
-          else if (data.data) {
-            if (typeof data.data === 'object' && data.data !== null) {
-              const inner = data.data as Record<string, unknown>
-              if (typeof inner.url === 'string') {
-                realUrl = inner.url
-              }
-            }
-            else if (typeof data.data === 'string') {
-              realUrl = data.data
-            }
-          }
-        }
-      }
+      const candidates = [config.urlResponsePath || 'data.url', 'url', 'data.url', 'data']
+      const realUrl = candidates
+        .map(path => getByPath(data, path))
+        .find((val): val is string => typeof val === 'string' && val.startsWith('http'))
+        ?? null
 
       if (!realUrl) {
         logger.error(`未能从直链 API 提取播放 URL: ${JSON.stringify(data)}`)
@@ -691,25 +504,13 @@ export class MusicPlayer {
   async getLyrics(songId: string, _platform: MusicPlatform = 'kuwo'): Promise<GetLyricsResult> {
     try {
       logger.info(`获取歌词: ID=${songId}`)
-
       const config = this.getMusicConfig()
       const url = `${config.lyricsUrl}?musicId=${songId}`
-      logger.info(`请求 URL: ${url}`)
 
-      const headers = {
+      const response = await this.fetchWithTimeout(url, {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json, text/plain, */*',
-      }
-
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-
-      const response = await fetch(url, {
-        headers,
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
+      }, 10000)
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -726,41 +527,24 @@ export class MusicPlayer {
       }
 
       if (data.status !== 200) {
-        return {
-          success: false,
-          message: '该歌曲暂无歌词',
-        }
+        return { success: false, message: '该歌曲暂无歌词' }
       }
 
       const lrclist = data.data?.lrclist
       if (!lrclist || lrclist.length === 0) {
-        return {
-          success: false,
-          message: '未找到歌词',
-        }
+        return { success: false, message: '未找到歌词' }
       }
 
-      // 转换为 LRC 格式字符串
       const lrcLines: string[] = []
       for (const item of lrclist) {
         const text = item.lineLyric?.trim()
-        if (!text || !item.time) {
+        if (!text || !item.time)
           continue
-        }
 
-        let timeSec: number
-        try {
-          timeSec = Number.parseFloat(item.time)
-        }
-        catch {
+        const timeSec = Number.parseFloat(item.time)
+        if (Number.isNaN(timeSec))
           continue
-        }
 
-        if (Number.isNaN(timeSec)) {
-          continue
-        }
-
-        // 转换秒数为 [mm:ss.xx] 格式
         const minutes = Math.floor(timeSec / 60)
         const seconds = timeSec - minutes * 60
         const timeTag = `[${String(minutes).padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}]`
@@ -768,20 +552,12 @@ export class MusicPlayer {
       }
 
       if (lrcLines.length === 0) {
-        return {
-          success: false,
-          message: '未找到歌词',
-        }
+        return { success: false, message: '未找到歌词' }
       }
 
       const lyrics = lrcLines.join('\n')
       logger.info(`歌词获取成功，共 ${lrcLines.length} 行`)
-
-      return {
-        success: true,
-        message: '歌词获取成功',
-        lyrics,
-      }
+      return { success: true, message: '歌词获取成功', lyrics }
     }
     catch (error) {
       logger.error('获取歌词失败', error)

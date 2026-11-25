@@ -1,6 +1,5 @@
 import type {
   ChatMessageAddedEvent,
-  ChatMessagesBatchAddedEvent,
   ChatSessionCreatedEvent,
   ImageCapturedEvent,
   ImageSourceType,
@@ -38,20 +37,23 @@ export class UIPlugin extends Plugin {
     author: 'Junsen',
   }
 
-  /**
-   * 插件初始化
-   */
+  private audioPlugin: AudioPlugin | null = null
+
   async setup(ctx: PluginContext, cmd: PluginCommands): Promise<void> {
     await super.setup(ctx, cmd)
 
-    // 协议层已 parse 一次；直接广播已归一化的 ServerMessage
+    try {
+      this.audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
+    }
+    catch {
+      this.audioPlugin = null
+    }
+
     ctx.eventBus.on(Events.INCOMING_JSON, (data) => {
       this.broadcastToRenderer('server:message', data)
     })
 
-    // 订阅设备状态变化事件
-    ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, (data) => {
-      const { newState } = data
+    ctx.eventBus.on(Events.DEVICE_STATE_CHANGED, ({ newState }) => {
       this.broadcastState(newState)
     })
   }
@@ -130,24 +132,6 @@ export class UIPlugin extends Plugin {
     this.broadcastToRenderer('chat:message-added', payload)
   }
 
-  /**
-   * 广播批量消息已添加事件（图片+文本组合）
-   * @param messageIds - 消息 ID 列表
-   * @param sessionId - 会话 ID
-   */
-  broadcastMessagesBatchAdded(messageIds: number[], sessionId: string): void {
-    const payload: ChatMessagesBatchAddedEvent = {
-      messageIds,
-      sessionId,
-      timestamp: Date.now(),
-    }
-    this.broadcastToRenderer('chat:messages-batch-added', payload)
-  }
-
-  /**
-   * 广播会话创建事件（服务端 session 新建时通知前端刷新列表）
-   * @param sessionId - 会话 ID
-   */
   broadcastSessionCreated(sessionId: string): void {
     const payload: ChatSessionCreatedEvent = {
       sessionId,
@@ -157,34 +141,15 @@ export class UIPlugin extends Plugin {
     logger.info(`已广播会话创建: ${sessionId}`)
   }
 
-  /**
-   * 广播消息到渲染进程
-   * @param channel - IPC 通道名称
-   * @param data - 要发送的数据
-   */
   private broadcastToRenderer(channel: string, data: unknown): void {
-    let backgroundAudioWindow: Electron.BrowserWindow | null = null
-    try {
-      const audioPlugin = this.getDep<AudioPlugin>('AudioPlugin')
-      backgroundAudioWindow = audioPlugin.getBackgroundAudioWindow()
-    }
-    catch {
-      // AudioPlugin 依赖不可用，忽略
-    }
-
-    // 获取所有 webContents
+    const backgroundAudioWindow = this.audioPlugin?.getBackgroundAudioWindow() ?? null
     const allWebContents = webContents.getAllWebContents()
 
-    allWebContents.forEach((wc) => {
-      // 跳过后台音频窗口
-      if (backgroundAudioWindow && wc.id === backgroundAudioWindow.webContents.id) {
-        return
-      }
-
-      // 跳过已销毁的窗口
-      if (wc.isDestroyed()) {
-        return
-      }
+    for (const wc of allWebContents) {
+      if (backgroundAudioWindow && wc.id === backgroundAudioWindow.webContents.id)
+        continue
+      if (wc.isDestroyed())
+        continue
 
       try {
         wc.send(channel, data)
@@ -192,6 +157,6 @@ export class UIPlugin extends Plugin {
       catch (error) {
         logger.error(`向窗口 ${wc.id} 广播消息失败:`, error)
       }
-    })
+    }
   }
 }

@@ -75,17 +75,8 @@ export function registerWakeWordIpc(context: IpcContext): void {
       const effectiveKeyword = resolveWakeWordKeyword(finalLanguage, keywordForLanguage)
       const willEnable = updates.enabled ?? current.enabled
 
-      // 2. 启用时才写 keywords.txt。中英混写（你好moss）会生成 oss 等未知音节，
-      //    sherpa 会 abort 进程；关闭时可跳过编码，方便先关掉再打开。
       if (willEnable) {
-        try {
-          ensureWakeWordKeywordsFile(finalLanguage, effectiveKeyword)
-        }
-        catch (fileError) {
-          const message = fileError instanceof Error ? fileError.message : String(fileError)
-          logger.error('写入 userData keywords.txt 失败', fileError)
-          return failure(message)
-        }
+        ensureWakeWordKeywordsFile(finalLanguage, effectiveKeyword)
       }
 
       // 3. 再写 DB
@@ -109,14 +100,7 @@ export function registerWakeWordIpc(context: IpcContext): void {
           dbUpdates.keyword_en = updates.keyword.trim()
       }
 
-      try {
-        db.updateWakeWordConfig(dbUpdates)
-      }
-      catch (dbError) {
-        const message = dbError instanceof Error ? dbError.message : String(dbError)
-        logger.error('更新唤醒词数据库失败', dbError)
-        return failure(`更新唤醒词配置失败: ${message}`)
-      }
+      db.updateWakeWordConfig(dbUpdates)
 
       // 4. 文件与 DB 都 OK 后再热重载
       const wakeWordPlugin = context.container?.getWakeWordPlugin()

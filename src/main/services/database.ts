@@ -10,7 +10,6 @@ import type {
   DbDeviceInfo,
   DbMusicConfig,
   DbNetworkConfig,
-  DbSessionStats,
   DbShortcutConfig,
   DbWakeWordConfig,
   DbWakeWordConfigPatch,
@@ -22,36 +21,25 @@ import { normalizeMcpHostCapabilities } from '../../shared/mcpCapabilities'
 import { isAudioChannels, isAudioFrameDuration, isAudioSampleRate } from '../audio/audioSettingsValidation'
 import { getLogger } from '../utils/logger'
 import { getDatabasePath } from '../utils/paths'
+import { ChatRepository } from './chatRepository'
+import {
+  CONFIG_VERSION,
+  DEFAULT_SHORTCUTS,
+  initializeDatabaseTables,
+  runDatabaseMigrations,
+} from './databaseSchema'
 
-/**
- * 当前配置 schema 版本
- *
- * 向前迁移时递增；现有 ad-hoc 迁移收敛进版本框架后 stamp 到此基线。
- */
-export const CONFIG_VERSION = 2
+export { CONFIG_VERSION }
 
-/**
- * 进程级数据库资源（显式初始化，禁止懒 getInstance 创建）
- *
- * 启动顺序：paths migrate → initializeDatabase() → getDatabase()
- * 测试：resetDatabase()
- */
 let _database: DatabaseManager | null = null
 
-/**
- * 显式初始化进程数据库（仅启动时调用一次）
- */
 export function initializeDatabase(): DatabaseManager {
-  if (_database) {
+  if (_database)
     return _database
-  }
   _database = new DatabaseManager()
   return _database
 }
 
-/**
- * 获取已初始化的数据库；未 initializeDatabase 则抛错
- */
 export function getDatabase(): DatabaseManager {
   if (!_database) {
     throw new Error('Database not initialized. Call initializeDatabase() during app bootstrap before getDatabase().')
@@ -59,9 +47,6 @@ export function getDatabase(): DatabaseManager {
   return _database
 }
 
-/**
- * 重置进程数据库引用（仅测试用；不关闭底层连接由调用方负责）
- */
 export function resetDatabase(): void {
   if (_database) {
     try {
@@ -76,215 +61,34 @@ export function resetDatabase(): void {
 
 export class DatabaseManager {
   private db: Database.Database
-  private logger = getLogger('Database') // 移到类内部
+  private chatRepo: ChatRepository
+  private logger = getLogger('Database')
 
   /** Created by initializeDatabase(); use getDatabase() in business code. */
   constructor() {
-    // 统一使用 paths API（默认仍为 userData/data，升级无感）
     const dbPath = getDatabasePath()
     const dbDir = dirname(dbPath)
-
-    if (!existsSync(dbDir)) {
+    if (!existsSync(dbDir))
       mkdirSync(dbDir, { recursive: true })
-    }
 
     this.logger.info(`数据库路径: ${dbPath}`)
-
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
-    this.initializeTables()
-  }
+    this.chatRepo = new ChatRepository(this.db)
 
-  private initializeTables(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS device_info (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mac_address TEXT UNIQUE NOT NULL,
-        serial_number TEXT UNIQUE NOT NULL,
-        hmac_key TEXT NOT NULL,
-        machine_id TEXT,
-        system TEXT,
-        hostname TEXT,
-        activation_status INTEGER DEFAULT 0,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS network_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id TEXT UNIQUE NOT NULL,
-        device_id TEXT,
-        ota_version_url TEXT DEFAULT 'https://api.tenclass.net/xiaozhi/ota/',
-        activation_version TEXT DEFAULT 'v2',
-        authorization_url TEXT DEFAULT 'https://xiaozhi.me/',
-        websocket_url TEXT,
-        websocket_access_token TEXT,
-        mqtt_endpoint TEXT,
-        mqtt_client_id TEXT,
-        mqtt_username TEXT,
-        mqtt_password TEXT,
-        mqtt_publish_topic TEXT,
-        mqtt_subscribe_topic TEXT,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS audio_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        input_device_name TEXT,
-        output_device_name TEXT,
-        enable_noise_reduction INTEGER DEFAULT 1,
-        enable_echo_cancellation INTEGER DEFAULT 1,
-        aec_mode TEXT DEFAULT 'app',
-        conversation_mode TEXT DEFAULT 'auto',
-        input_sample_rate INTEGER DEFAULT 16000,
-        output_sample_rate INTEGER DEFAULT 24000,
-        channels INTEGER DEFAULT 1,
-        max_input_channels INTEGER DEFAULT 2,
-        max_output_channels INTEGER DEFAULT 2,
-        frame_duration INTEGER DEFAULT 20,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS wake_word_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        enabled INTEGER DEFAULT 1,
-        language TEXT DEFAULT 'zh',
-        keyword_zh TEXT DEFAULT '你好小智',
-        keyword_en TEXT DEFAULT NULL,
-        threshold REAL DEFAULT 0.2,
-        score REAL DEFAULT 1.8,
-        cooldown_ms INTEGER DEFAULT 1500,
-        greet INTEGER DEFAULT 0,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS camera_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        enabled INTEGER DEFAULT 1,
-        device_id TEXT DEFAULT NULL,
-        device_label TEXT DEFAULT NULL,
-        use_local_vision INTEGER DEFAULT 0,
-        vl_api_key TEXT DEFAULT NULL,
-        vl_url TEXT DEFAULT NULL,
-        vl_model TEXT DEFAULT 'glm-4v-plus',
-        capture_width INTEGER DEFAULT 1280,
-        capture_height INTEGER DEFAULT 720,
-        jpeg_quality INTEGER DEFAULT 80,
-        max_dimension INTEGER DEFAULT 320,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS chat_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id TEXT UNIQUE NOT NULL,
-        title TEXT,
-        message_count INTEGER DEFAULT 0,
-        started_at INTEGER NOT NULL,
-        last_message_at INTEGER,
-        created_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS chat_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id TEXT NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        emotion TEXT,
-        source_type TEXT NOT NULL,
-        image_data BLOB,
-        timestamp INTEGER NOT NULL,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id)
-      )
-    `)
-
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id)
-    `)
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp)
-    `)
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_message_at ON chat_sessions(last_message_at)
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS shortcuts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        accelerator TEXT,
-        enabled INTEGER DEFAULT 1,
-        is_global INTEGER DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS music_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        search_url TEXT DEFAULT 'http://search.kuwo.cn/r.s',
-        url_api TEXT DEFAULT 'https://lxmusicapi.onrender.com',
-        url_api_key TEXT DEFAULT 'share-v3',
-        url_response_path TEXT DEFAULT 'data.url',
-        lyrics_url TEXT DEFAULT 'http://m.kuwo.cn/newh5/singles/songinfoandlrc',
-        default_source TEXT DEFAULT 'kw',
-        default_quality TEXT DEFAULT '320k',
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS window_positions (
-        mode TEXT PRIMARY KEY,
-        x INTEGER NOT NULL,
-        y INTEGER NOT NULL,
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    // 配置版本元表（CONFIG_VERSION 框架）
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS schema_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-      )
-    `)
-
-    // 按 CONFIG_VERSION 向前迁移（含既有 ad-hoc 迁移收敛）
-    this.runConfigMigrations()
-
+    initializeDatabaseTables(this.db)
+    runDatabaseMigrations(
+      this.db,
+      this.getConfigVersion(),
+      version => this.setSchemaMeta('config_version', String(version)),
+      this.logger,
+    )
     this.logger.info('数据库表初始化完成')
   }
 
-  /**
-   * 读取当前已 stamp 的配置版本（无记录视为 0）
-   */
   getConfigVersion(): number {
     try {
-      const row = this.db.prepare(
-        `SELECT value FROM schema_meta WHERE key = 'config_version'`,
-      ).get() as { value: string } | undefined
+      const row = this.db.prepare(`SELECT value FROM schema_meta WHERE key = 'config_version'`).get() as { value: string } | undefined
       if (!row)
         return 0
       const n = Number.parseInt(row.value, 10)
@@ -295,21 +99,9 @@ export class DatabaseManager {
     }
   }
 
-  /**
-   * 写入配置版本 stamp
-   */
-  private setConfigVersion(version: number): void {
-    this.setSchemaMeta('config_version', String(version))
-  }
-
-  /**
-   * 读写 schema_meta 通用键值（配置扩展、MCP 工具禁用列表等）
-   */
   getSchemaMeta(key: string): string | null {
     try {
-      const row = this.db.prepare(
-        `SELECT value FROM schema_meta WHERE key = ?`,
-      ).get(key) as { value: string } | undefined
+      const row = this.db.prepare('SELECT value FROM schema_meta WHERE key = ?').get(key) as { value: string } | undefined
       return row?.value ?? null
     }
     catch {
@@ -327,9 +119,6 @@ export class DatabaseManager {
     `).run(key, value)
   }
 
-  /**
-   * MCP 工具黑名单（DISABLED 工具全名列表）
-   */
   getMcpDisabledTools(): string[] {
     const raw = this.getSchemaMeta('mcp_tools_disabled')
     if (!raw)
@@ -350,9 +139,6 @@ export class DatabaseManager {
     this.setSchemaMeta('mcp_tools_disabled', JSON.stringify(unique))
   }
 
-  /**
-   * MCP 外挂插件加载相关配置
-   */
   getMcpPluginsConfig(): {
     enabled: boolean
     disabledIds: string[]
@@ -377,15 +163,13 @@ export class DatabaseManager {
 
     const enabledRaw = this.getSchemaMeta('mcp_plugins_enabled')
     const enabled = enabledRaw === null ? true : enabledRaw !== '0' && enabledRaw !== 'false'
-
     const enforceRaw = this.getSchemaMeta('mcp_plugins_enforce_prefix')
     const enforcePrefix = enforceRaw === '1' || enforceRaw === 'true'
 
     const savedCapabilities = parseJsonArray('mcp_plugins_allow_host_get', ['logger', 'config_readonly'])
     const allowHostGet = normalizeMcpHostCapabilities(savedCapabilities, true)
-    if (JSON.stringify(savedCapabilities) !== JSON.stringify(allowHostGet)) {
+    if (JSON.stringify(savedCapabilities) !== JSON.stringify(allowHostGet))
       this.setSchemaMeta('mcp_plugins_allow_host_get', JSON.stringify(allowHostGet))
-    }
 
     return {
       enabled,
@@ -403,295 +187,39 @@ export class DatabaseManager {
     allowHostGet?: string[]
     enforcePrefix?: boolean
   }): void {
-    if (partial.enabled !== undefined) {
+    if (partial.enabled !== undefined)
       this.setSchemaMeta('mcp_plugins_enabled', partial.enabled ? '1' : '0')
-    }
-    if (partial.disabledIds !== undefined) {
+    if (partial.disabledIds !== undefined)
       this.setSchemaMeta('mcp_plugins_disabled_ids', JSON.stringify(partial.disabledIds))
-    }
-    if (partial.enabledIds !== undefined) {
+    if (partial.enabledIds !== undefined)
       this.setSchemaMeta('mcp_plugins_enabled_ids', JSON.stringify(partial.enabledIds))
-    }
-    if (partial.allowHostGet !== undefined) {
+    if (partial.allowHostGet !== undefined)
       this.setSchemaMeta('mcp_plugins_allow_host_get', JSON.stringify(partial.allowHostGet))
-    }
-    if (partial.enforcePrefix !== undefined) {
+    if (partial.enforcePrefix !== undefined)
       this.setSchemaMeta('mcp_plugins_enforce_prefix', partial.enforcePrefix ? '1' : '0')
-    }
   }
 
-  /**
-   * CONFIG_VERSION 向前迁移入口
-   *
-   * - 版本 0→1：跑既有 ad-hoc 迁移并 stamp 基线
-   * - 未来版本在此追加 step
-   */
-  private runConfigMigrations(): void {
-    let current = this.getConfigVersion()
-    this.logger.info(`CONFIG_VERSION: disk=${current}, target=${CONFIG_VERSION}`)
-
-    if (current >= CONFIG_VERSION) {
-      // 已是最新；仍幂等跑一遍结构修复（旧库可能 stamp 前半完成）
-      this.migrateWakeWordConfig()
-      this.migrateWakeWordGreet()
-      this.migrateNetworkConfigDefaults()
-      this.migrateMusicConfigUrlResponsePath()
-      this.migrateAudioAecMode()
+  private patchSingletonRow(
+    table: 'network_config' | 'audio_config' | 'wake_word_config' | 'camera_config' | 'music_config',
+    rowId: number,
+    updates: Record<string, unknown>,
+  ): void {
+    const entries: Array<[string, string | number | null]> = []
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined)
+        continue
+      entries.push([key, typeof value === 'boolean' ? (value ? 1 : 0) : (value as string | number | null)])
+    }
+    if (entries.length === 0)
       return
-    }
 
-    // v0 → v1：收敛历史 ad-hoc 迁移
-    if (current < 1) {
-      this.logger.info('执行配置迁移 v0 → v1...')
-      this.migrateWakeWordConfig()
-      this.migrateWakeWordGreet()
-      this.migrateNetworkConfigDefaults()
-      this.migrateMusicConfigUrlResponsePath()
-      this.setConfigVersion(1)
-      current = 1
-      this.logger.info('配置迁移 v0 → v1 完成')
-    }
-
-    // v1 → v2：audio_config.aec_mode
-    if (current < 2) {
-      this.logger.info('执行配置迁移 v1 → v2 (aec_mode)...')
-      this.migrateAudioAecMode()
-      this.setConfigVersion(2)
-      current = 2
-      this.logger.info('配置迁移 v1 → v2 完成')
-    }
-
-    if (current !== CONFIG_VERSION) {
-      this.logger.warn(`配置版本 stamp 异常: current=${current}, expected=${CONFIG_VERSION}`)
-    }
-  }
-
-  /**
-   * 为 audio_config 增加 aec_mode，并由 enable_echo_cancellation 回填（不自动升 system）
-   */
-  private migrateAudioAecMode(): void {
-    try {
-      const tableInfo = this.db.prepare('PRAGMA table_info(audio_config)').all() as Array<{
-        name: string
-      }>
-      const hasAecMode = tableInfo.some(c => c.name === 'aec_mode')
-      if (!hasAecMode) {
-        this.db.exec(`ALTER TABLE audio_config ADD COLUMN aec_mode TEXT DEFAULT 'app'`)
-        this.logger.info('audio_config 已添加 aec_mode 列')
-      }
-
-      // 仅回填 NULL/空：off←echo=0，否则 app（永不写 system）
-      this.db.prepare(`
-        UPDATE audio_config
-        SET aec_mode = CASE
-          WHEN enable_echo_cancellation = 0 THEN 'off'
-          ELSE 'app'
-        END
-        WHERE aec_mode IS NULL OR TRIM(aec_mode) = ''
-      `).run()
-    }
-    catch (error) {
-      this.logger.error('migrateAudioAecMode 失败', error)
-    }
-  }
-
-  /**
-   * 迁移唤醒词配置：keywords_list -> keyword_zh/keyword_en
-   */
-  private migrateWakeWordConfig(): void {
-    try {
-      // 检查是否存在旧字段 keywords_list
-      const tableInfo = this.db.prepare('PRAGMA table_info(wake_word_config)').all() as Array<{
-        cid: number
-        name: string
-        type: string
-        notnull: number
-        dflt_value: string | null
-        pk: number
-      }>
-
-      const hasKeywordsList = tableInfo.some(col => col.name === 'keywords_list')
-      const hasKeywordZh = tableInfo.some(col => col.name === 'keyword_zh')
-      const hasKeywordEn = tableInfo.some(col => col.name === 'keyword_en')
-
-      // 如果已经是新结构，不需要迁移
-      if (hasKeywordZh && hasKeywordEn && !hasKeywordsList) {
-        return
-      }
-
-      // 如果存在旧字段，执行迁移
-      if (hasKeywordsList) {
-        this.logger.info('检测到旧的 keywords_list 字段，开始迁移...')
-
-        const migrate = this.db.transaction(() => {
-          // 读取现有配置
-          const config = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as {
-            id: number
-            enabled: number
-            language: string
-            keywords_list: string
-            threshold: number
-            score: number
-            cooldown_ms: number
-          } | undefined
-
-          // 创建新表
-          this.db.exec(`
-            CREATE TABLE IF NOT EXISTS wake_word_config_new (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              enabled INTEGER DEFAULT 1,
-              language TEXT DEFAULT 'zh',
-              keyword_zh TEXT DEFAULT '你好小智',
-              keyword_en TEXT DEFAULT NULL,
-              threshold REAL DEFAULT 0.2,
-              score REAL DEFAULT 1.8,
-              cooldown_ms INTEGER DEFAULT 1500,
-              created_at INTEGER DEFAULT (strftime('%s', 'now')),
-              updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-            )
-          `)
-
-          // 如果有旧数据，迁移到新表
-          if (config) {
-            const keywordZh = config.language === 'zh' ? config.keywords_list : '你好小智'
-            const keywordEn = config.language === 'en' ? config.keywords_list : null
-
-            this.db.prepare(`
-              INSERT INTO wake_word_config_new (enabled, language, keyword_zh, keyword_en, threshold, score, cooldown_ms)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              config.enabled,
-              config.language,
-              keywordZh,
-              keywordEn,
-              config.threshold,
-              config.score,
-              config.cooldown_ms,
-            )
-
-            this.logger.info(`已迁移唤醒词配置: language=${config.language}, keyword=${config.keywords_list}`)
-          }
-
-          // 删除旧表，重命名新表
-          this.db.exec('DROP TABLE wake_word_config')
-          this.db.exec('ALTER TABLE wake_word_config_new RENAME TO wake_word_config')
-        })
-
-        migrate()
-        this.logger.info('唤醒词配置迁移完成')
-      }
-      // 如果缺少新字段，添加它们
-      else if (!hasKeywordZh || !hasKeywordEn) {
-        this.logger.info('添加缺失的唤醒词字段...')
-
-        if (!hasKeywordZh) {
-          this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_zh TEXT DEFAULT \'你好小智\'')
-        }
-        if (!hasKeywordEn) {
-          this.db.exec('ALTER TABLE wake_word_config ADD COLUMN keyword_en TEXT DEFAULT NULL')
-        }
-
-        this.logger.info('唤醒词字段添加完成')
-      }
-    }
-    catch (error) {
-      this.logger.error('迁移唤醒词配置失败:', error)
-    }
-  }
-
-  /**
-   * 唤醒后问候：wake_word_config.greet，默认关闭（只进入聆听）
-   */
-  private migrateWakeWordGreet(): void {
-    try {
-      const tableInfo = this.db.prepare('PRAGMA table_info(wake_word_config)').all() as Array<{
-        name: string
-      }>
-      const hasGreet = tableInfo.some(col => col.name === 'greet')
-      if (!hasGreet) {
-        this.db.exec('ALTER TABLE wake_word_config ADD COLUMN greet INTEGER DEFAULT 0')
-        this.logger.info('wake_word_config 已添加 greet 列')
-      }
-    }
-    catch (error) {
-      this.logger.error('migrateWakeWordGreet 失败', error)
-    }
-  }
-
-  /**
-   * 迁移网络配置：修复空的默认值字段
-   */
-  private migrateNetworkConfigDefaults(): void {
-    try {
-      const config = this.getNetworkConfig()
-
-      // 如果配置不存在，不需要迁移
-      if (!config) {
-        return
-      }
-
-      // 检查是否需要更新默认值
-      const needsUpdate = !config.ota_version_url || !config.authorization_url
-
-      if (needsUpdate) {
-        this.logger.info('检测到空的网络配置默认值，开始修复...')
-
-        const updates: Record<string, string> = {}
-
-        if (!config.ota_version_url) {
-          updates.ota_version_url = 'https://api.tenclass.net/xiaozhi/ota/'
-        }
-
-        if (!config.authorization_url) {
-          updates.authorization_url = 'https://xiaozhi.me/'
-        }
-
-        // 批量更新
-        if (Object.keys(updates).length > 0) {
-          const fields = Object.keys(updates)
-          const setClause = fields.map(f => `${f} = ?`).join(', ')
-          const values = fields.map(f => updates[f])
-
-          this.db.prepare(`
-            UPDATE network_config
-            SET ${setClause}, updated_at = strftime('%s', 'now')
-            WHERE id = ?
-          `).run(...values, config.id)
-
-          this.logger.info('网络配置默认值修复完成:', updates)
-        }
-      }
-    }
-    catch (error) {
-      this.logger.error('迁移网络配置失败:', error)
-    }
-  }
-
-  /**
-   * 迁移音乐配置：添加 url_response_path 列
-   */
-  private migrateMusicConfigUrlResponsePath(): void {
-    try {
-      const tableInfo = this.db.prepare('PRAGMA table_info(music_config)').all() as Array<{
-        cid: number
-        name: string
-        type: string
-        notnull: number
-        dflt_value: string | null
-        pk: number
-      }>
-
-      const hasUrlResponsePath = tableInfo.some(col => col.name === 'url_response_path')
-
-      if (!hasUrlResponsePath && tableInfo.length > 0) {
-        this.logger.info('添加 music_config.url_response_path 列...')
-        this.db.exec(`ALTER TABLE music_config ADD COLUMN url_response_path TEXT DEFAULT 'data.url'`)
-        this.logger.info('music_config.url_response_path 列添加完成')
-      }
-    }
-    catch (error) {
-      this.logger.error('迁移 music_config url_response_path 失败:', error)
-    }
+    const setClause = entries.map(([k]) => `${k} = ?`).join(', ')
+    const values = entries.map(([, v]) => v)
+    this.db.prepare(`
+      UPDATE ${table}
+      SET ${setClause}, updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `).run(...values, rowId)
   }
 
   getOrCreateDeviceInfo(data: {
@@ -703,24 +231,15 @@ export class DatabaseManager {
     system?: string
   }): DbDeviceInfo {
     const existing = this.db.prepare('SELECT * FROM device_info WHERE serial_number = ?').get(data.serial_number)
-
     if (existing) {
-      this.db.prepare('UPDATE device_info SET updated_at = strftime(\'%s\', \'now\') WHERE serial_number = ?')
-        .run(data.serial_number)
+      this.db.prepare(`UPDATE device_info SET updated_at = strftime('%s', 'now') WHERE serial_number = ?`).run(data.serial_number)
       return existing as DbDeviceInfo
     }
 
     const result = this.db.prepare(`
       INSERT INTO device_info (mac_address, serial_number, hmac_key, machine_id, hostname, system)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      data.mac_address,
-      data.serial_number,
-      data.hmac_key,
-      data.machine_id,
-      data.hostname || '',
-      data.system || '',
-    )
+    `).run(data.mac_address, data.serial_number, data.hmac_key, data.machine_id, data.hostname || '', data.system || '')
 
     return this.db.prepare('SELECT * FROM device_info WHERE id = ?').get(result.lastInsertRowid) as DbDeviceInfo
   }
@@ -738,25 +257,18 @@ export class DatabaseManager {
   }
 
   getActivationStatus(serialNumber: string): boolean {
-    const result = this.db.prepare('SELECT activation_status FROM device_info WHERE serial_number = ?').get(serialNumber) as { activation_status: number } | undefined
+    const result = this.db.prepare('SELECT activation_status FROM device_info WHERE serial_number = ?')
+      .get(serialNumber) as { activation_status: number } | undefined
     return result ? result.activation_status === 1 : false
   }
 
-  getOrCreateNetworkConfig(data: {
-    client_id: string
-    device_id?: string
-  }): DbNetworkConfig {
+  getOrCreateNetworkConfig(data: { client_id: string, device_id?: string }): DbNetworkConfig {
     const existing = this.db.prepare('SELECT * FROM network_config WHERE client_id = ?').get(data.client_id)
-
-    if (existing) {
+    if (existing)
       return existing as DbNetworkConfig
-    }
 
-    const result = this.db.prepare(`
-      INSERT INTO network_config (client_id, device_id)
-      VALUES (?, ?)
-    `).run(data.client_id, data.device_id || null)
-
+    const result = this.db.prepare('INSERT INTO network_config (client_id, device_id) VALUES (?, ?)')
+      .run(data.client_id, data.device_id || null)
     return this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid) as DbNetworkConfig
   }
 
@@ -764,87 +276,41 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM network_config ORDER BY id DESC LIMIT 1').get() as DbNetworkConfig | undefined
   }
 
-  updateNetworkConfig(field: string, value: string | null): void {
-    let config = this.getNetworkConfig()
-    if (!config) {
-      const result = this.db.prepare(`
-        INSERT INTO network_config (client_id) VALUES ('default')
-      `).run()
-      config = this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid) as DbNetworkConfig
-    }
+  private ensureNetworkConfigRow(): DbNetworkConfig {
+    return this.getNetworkConfig() ?? this.getOrCreateNetworkConfig({ client_id: 'default' })
+  }
 
-    this.db.prepare(`
-      UPDATE network_config
-      SET ${field} = ?, updated_at = strftime('%s', 'now')
-      WHERE id = ?
-    `).run(value, config.id)
+  updateNetworkConfig(field: string, value: string | null): void {
+    this.patchSingletonRow('network_config', this.ensureNetworkConfigRow().id, { [field]: value })
   }
 
   updateNetworkConfigBatch(updates: Record<string, string | null>): void {
-    let config = this.getNetworkConfig()
-    if (!config) {
-      const result = this.db.prepare(`
-        INSERT INTO network_config (client_id) VALUES ('default')
-      `).run()
-      config = this.db.prepare('SELECT * FROM network_config WHERE id = ?').get(result.lastInsertRowid) as DbNetworkConfig
-    }
-
-    const fields = Object.keys(updates)
-    const setClause = fields.map(f => `${f} = ?`).join(', ')
-    const values = fields.map(f => updates[f])
-
-    this.db.prepare(`
-      UPDATE network_config
-      SET ${setClause}, updated_at = strftime('%s', 'now')
-      WHERE id = ?
-    `).run(...values, config.id)
+    this.patchSingletonRow('network_config', this.ensureNetworkConfigRow().id, updates)
   }
 
   getAllConfig(): Record<string, string | null> {
     const config = this.getNetworkConfig()
-    if (!config) {
-      // 如果没有配置记录，返回空配置（应该不会发生，因为 ConfigManager 会创建）
-      return {
-        client_id: '',
-        device_id: '',
-        ota_version_url: '',
-        activation_version: '',
-        authorization_url: '',
-        websocket_url: null,
-        websocket_access_token: null,
-        mqtt_endpoint: null,
-        mqtt_client_id: null,
-        mqtt_username: null,
-        mqtt_password: null,
-        mqtt_publish_topic: null,
-        mqtt_subscribe_topic: null,
-      }
-    }
-
-    // 返回数据库中的实际值（包括默认值）
     return {
-      client_id: config.client_id || '',
-      device_id: config.device_id || '',
-      ota_version_url: config.ota_version_url || '',
-      activation_version: config.activation_version || '',
-      authorization_url: config.authorization_url || '',
-      websocket_url: config.websocket_url || null,
-      websocket_access_token: config.websocket_access_token || null,
-      mqtt_endpoint: config.mqtt_endpoint || null,
-      mqtt_client_id: config.mqtt_client_id || null,
-      mqtt_username: config.mqtt_username || null,
-      mqtt_password: config.mqtt_password || null,
-      mqtt_publish_topic: config.mqtt_publish_topic || null,
-      mqtt_subscribe_topic: config.mqtt_subscribe_topic || null,
+      client_id: config?.client_id || '',
+      device_id: config?.device_id || '',
+      ota_version_url: config?.ota_version_url || '',
+      activation_version: config?.activation_version || '',
+      authorization_url: config?.authorization_url || '',
+      websocket_url: config?.websocket_url || null,
+      websocket_access_token: config?.websocket_access_token || null,
+      mqtt_endpoint: config?.mqtt_endpoint || null,
+      mqtt_client_id: config?.mqtt_client_id || null,
+      mqtt_username: config?.mqtt_username || null,
+      mqtt_password: config?.mqtt_password || null,
+      mqtt_publish_topic: config?.mqtt_publish_topic || null,
+      mqtt_subscribe_topic: config?.mqtt_subscribe_topic || null,
     }
   }
 
   getOrCreateAudioSettings(): DbAudioSettings {
     const existing = this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get()
-
-    if (existing) {
+    if (existing)
       return existing as DbAudioSettings
-    }
 
     const result = this.db.prepare(`
       INSERT INTO audio_config (
@@ -857,39 +323,8 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM audio_config WHERE id = ?').get(result.lastInsertRowid) as DbAudioSettings
   }
 
-  getAudioSettings(): DbAudioSettings | undefined {
-    return this.db.prepare('SELECT * FROM audio_config ORDER BY id DESC LIMIT 1').get() as DbAudioSettings | undefined
-  }
-
   updateAudioSettings(updates: DbAudioSettingsPatch): void {
-    let config = this.getAudioSettings()
-    if (!config) {
-      config = this.getOrCreateAudioSettings()
-    }
-
-    const dbUpdates: Record<string, string | number | null> = {}
-    for (const [key, value] of Object.entries(updates)) {
-      if (typeof value === 'boolean') {
-        dbUpdates[key] = value ? 1 : 0
-      }
-      else if (value !== undefined) {
-        dbUpdates[key] = value
-      }
-    }
-
-    const fields = Object.keys(dbUpdates)
-    if (fields.length === 0) {
-      return
-    }
-
-    const setClause = fields.map(f => `${f} = ?`).join(', ')
-    const values = fields.map(f => dbUpdates[f])
-
-    this.db.prepare(`
-      UPDATE audio_config
-      SET ${setClause}, updated_at = strftime('%s', 'now')
-      WHERE id = ?
-    `).run(...values, config.id)
+    this.patchSingletonRow('audio_config', this.getOrCreateAudioSettings().id, updates)
   }
 
   getFormattedAudioSettings(): AudioSettings {
@@ -915,10 +350,8 @@ export class DatabaseManager {
 
   getOrCreateWakeWordConfig(): DbWakeWordConfig {
     const existing = this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get()
-
-    if (existing) {
+    if (existing)
       return existing as DbWakeWordConfig
-    }
 
     const result = this.db.prepare(`
       INSERT INTO wake_word_config (
@@ -931,39 +364,8 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM wake_word_config WHERE id = ?').get(result.lastInsertRowid) as DbWakeWordConfig
   }
 
-  getWakeWordConfig(): DbWakeWordConfig | undefined {
-    return this.db.prepare('SELECT * FROM wake_word_config ORDER BY id DESC LIMIT 1').get() as DbWakeWordConfig | undefined
-  }
-
   updateWakeWordConfig(updates: DbWakeWordConfigPatch): void {
-    let config = this.getWakeWordConfig()
-    if (!config) {
-      config = this.getOrCreateWakeWordConfig()
-    }
-
-    const dbUpdates: Record<string, string | number> = {}
-    for (const [key, value] of Object.entries(updates)) {
-      if (typeof value === 'boolean') {
-        dbUpdates[key] = value ? 1 : 0
-      }
-      else if (value !== undefined) {
-        dbUpdates[key] = value
-      }
-    }
-
-    const fields = Object.keys(dbUpdates)
-    if (fields.length === 0) {
-      return
-    }
-
-    const setClause = fields.map(f => `${f} = ?`).join(', ')
-    const values = fields.map(f => dbUpdates[f])
-
-    this.db.prepare(`
-      UPDATE wake_word_config
-      SET ${setClause}, updated_at = strftime('%s', 'now')
-      WHERE id = ?
-    `).run(...values, config.id)
+    this.patchSingletonRow('wake_word_config', this.getOrCreateWakeWordConfig().id, updates)
   }
 
   getFormattedWakeWordConfig(): {
@@ -977,16 +379,10 @@ export class DatabaseManager {
   } {
     const config = this.getOrCreateWakeWordConfig()
     const language = config.language || 'zh'
-
-    // 根据当前语言返回对应的唤醒词
-    const keyword = language === 'zh'
-      ? (config.keyword_zh || '你好小智')
-      : (config.keyword_en || '')
-
     return {
       enabled: Boolean(config.enabled),
       language,
-      keyword,
+      keyword: language === 'zh' ? (config.keyword_zh || '你好小智') : (config.keyword_en || ''),
       threshold: config.threshold ?? 0.2,
       score: config.score ?? 1.8,
       cooldownMs: config.cooldown_ms ?? 1500,
@@ -996,10 +392,8 @@ export class DatabaseManager {
 
   getOrCreateCameraConfig(): DbCameraConfig {
     const existing = this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get()
-
-    if (existing) {
+    if (existing)
       return existing as DbCameraConfig
-    }
 
     const result = this.db.prepare(`
       INSERT INTO camera_config (
@@ -1013,39 +407,8 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM camera_config WHERE id = ?').get(result.lastInsertRowid) as DbCameraConfig
   }
 
-  getCameraConfig(): DbCameraConfig | undefined {
-    return this.db.prepare('SELECT * FROM camera_config ORDER BY id DESC LIMIT 1').get() as DbCameraConfig | undefined
-  }
-
   updateCameraConfig(updates: DbCameraConfigPatch): void {
-    let config = this.getCameraConfig()
-    if (!config) {
-      config = this.getOrCreateCameraConfig()
-    }
-
-    const dbUpdates: Record<string, string | number> = {}
-    for (const [key, value] of Object.entries(updates)) {
-      if (typeof value === 'boolean') {
-        dbUpdates[key] = value ? 1 : 0
-      }
-      else if (value !== undefined) {
-        dbUpdates[key] = value
-      }
-    }
-
-    const fields = Object.keys(dbUpdates)
-    if (fields.length === 0) {
-      return
-    }
-
-    const setClause = fields.map(f => `${f} = ?`).join(', ')
-    const values = fields.map(f => dbUpdates[f])
-
-    this.db.prepare(`
-      UPDATE camera_config
-      SET ${setClause}, updated_at = strftime('%s', 'now')
-      WHERE id = ?
-    `).run(...values, config.id)
+    this.patchSingletonRow('camera_config', this.getOrCreateCameraConfig().id, updates)
   }
 
   getFormattedCameraConfig(): {
@@ -1062,7 +425,6 @@ export class DatabaseManager {
     maxDimension: number
   } {
     const config = this.getOrCreateCameraConfig()
-
     return {
       enabled: Boolean(config.enabled),
       deviceId: config.device_id || '',
@@ -1080,10 +442,8 @@ export class DatabaseManager {
 
   getOrCreateMusicConfig(): DbMusicConfig {
     const existing = this.db.prepare('SELECT * FROM music_config ORDER BY id DESC LIMIT 1').get()
-
-    if (existing) {
+    if (existing)
       return existing as DbMusicConfig
-    }
 
     const result = this.db.prepare(`
       INSERT INTO music_config (search_url, url_api, url_api_key, url_response_path, lyrics_url, default_source, default_quality)
@@ -1101,42 +461,14 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM music_config WHERE id = ?').get(result.lastInsertRowid) as DbMusicConfig
   }
 
-  getMusicConfig(): DbMusicConfig | undefined {
-    return this.db.prepare('SELECT * FROM music_config ORDER BY id DESC LIMIT 1').get() as DbMusicConfig | undefined
-  }
-
   updateMusicConfig(updates: Partial<Omit<DbMusicConfig, 'id' | 'created_at' | 'updated_at'>>): void {
-    let config = this.getMusicConfig()
-    if (!config) {
-      config = this.getOrCreateMusicConfig()
-    }
-
-    const fields = Object.keys(updates).filter(k => updates[k as keyof typeof updates] !== undefined)
-    if (fields.length === 0) {
-      return
-    }
-
-    const setClause = fields.map(f => `${f} = ?`).join(', ')
-    const values = fields.map(f => updates[f as keyof typeof updates])
-
-    this.db.prepare(`
-      UPDATE music_config
-      SET ${setClause}, updated_at = strftime('%s', 'now')
-      WHERE id = ?
-    `).run(...values, config.id)
+    this.patchSingletonRow('music_config', this.getOrCreateMusicConfig().id, updates)
   }
 
-  /**
-   * 读取窗口位置
-   */
   getWindowPosition(mode: string): { x: number, y: number } | undefined {
-    const row = this.db.prepare('SELECT x, y FROM window_positions WHERE mode = ?').get(mode) as { x: number, y: number } | undefined
-    return row
+    return this.db.prepare('SELECT x, y FROM window_positions WHERE mode = ?').get(mode) as { x: number, y: number } | undefined
   }
 
-  /**
-   * 写入/更新窗口位置（UPSERT）
-   */
   setWindowPosition(mode: string, x: number, y: number): void {
     this.db.prepare(`
       INSERT INTO window_positions (mode, x, y, updated_at)
@@ -1148,70 +480,28 @@ export class DatabaseManager {
     `).run(mode, Math.round(x), Math.round(y))
   }
 
-  createChatSession(data: {
-    session_id: string
-    title?: string
-    started_at?: number
-  }): DbChatSession {
-    const startedAt = data.started_at || Math.floor(Date.now() / 1000)
-
-    const result = this.db.prepare(`
-      INSERT INTO chat_sessions (session_id, title, started_at, last_message_at)
-      VALUES (?, ?, ?, ?)
-    `).run(data.session_id, data.title || null, startedAt, startedAt)
-
-    return this.db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(result.lastInsertRowid) as DbChatSession
+  createChatSession(data: { session_id: string, title?: string, started_at?: number }): DbChatSession {
+    return this.chatRepo.createSession(data)
   }
 
   getChatSessions(limit = 50, offset = 0): DbChatSession[] {
-    return this.db.prepare(`
-      SELECT cs.*,
-        (SELECT content FROM chat_messages
-         WHERE session_id = cs.session_id
-         ORDER BY timestamp ASC, id ASC
-         LIMIT 1) AS preview
-      FROM chat_sessions cs
-      ORDER BY cs.last_message_at DESC
-      LIMIT ? OFFSET ?
-    `).all(limit, offset) as DbChatSession[]
+    return this.chatRepo.getSessions(limit, offset)
   }
 
   getChatSession(sessionId: string): DbChatSession | undefined {
-    return this.db.prepare('SELECT * FROM chat_sessions WHERE session_id = ?').get(sessionId) as DbChatSession | undefined
+    return this.chatRepo.getSession(sessionId)
   }
 
   updateChatSessionTitle(sessionId: string, title: string): void {
-    this.db.prepare(`
-      UPDATE chat_sessions
-      SET title = ?
-      WHERE session_id = ?
-    `).run(title, sessionId)
+    this.chatRepo.updateSessionTitle(sessionId, title)
   }
 
   updateChatSessionStats(sessionId: string): void {
-    const stats = this.db.prepare(`
-      SELECT COUNT(*) as count, MAX(timestamp) as last_ts
-      FROM chat_messages
-      WHERE session_id = ?
-    `).get(sessionId) as DbSessionStats
-
-    this.db.prepare(`
-      UPDATE chat_sessions
-      SET message_count = ?, last_message_at = ?
-      WHERE session_id = ?
-    `).run(stats.count, stats.last_ts, sessionId)
+    this.chatRepo.updateSessionStats(sessionId)
   }
 
   deleteChatSession(sessionId: string): void {
-    const deleteMessages = this.db.prepare('DELETE FROM chat_messages WHERE session_id = ?')
-    const deleteSession = this.db.prepare('DELETE FROM chat_sessions WHERE session_id = ?')
-
-    const transaction = this.db.transaction(() => {
-      deleteMessages.run(sessionId)
-      deleteSession.run(sessionId)
-    })
-
-    transaction()
+    this.chatRepo.deleteSession(sessionId)
   }
 
   addChatMessage(data: {
@@ -1223,130 +513,54 @@ export class DatabaseManager {
     image_data?: Buffer
     timestamp?: number
   }): DbChatMessage {
-    const timestamp = data.timestamp ?? Math.floor(Date.now() / 1000)
-
-    const result = this.db.prepare(`
-      INSERT INTO chat_messages (session_id, role, content, emotion, source_type, image_data, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.session_id,
-      data.role,
-      data.content,
-      data.emotion || null,
-      data.source_type,
-      data.image_data || null,
-      timestamp,
-    )
-
-    this.updateChatSessionStats(data.session_id)
-
-    return this.db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(result.lastInsertRowid) as DbChatMessage
+    return this.chatRepo.addMessage(data)
   }
 
   getChatMessages(sessionId: string, limit?: number, offset = 0): DbChatMessage[] {
-    // 如果不指定 limit，则加载所有消息
-    if (limit === undefined || limit === null || limit <= 0) {
-      return this.db.prepare(`
-        SELECT * FROM chat_messages
-        WHERE session_id = ?
-        ORDER BY timestamp ASC
-      `).all(sessionId) as DbChatMessage[]
-    }
-
-    // 如果指定了 limit，则使用分页查询
-    return this.db.prepare(`
-      SELECT * FROM chat_messages
-      WHERE session_id = ?
-      ORDER BY timestamp ASC
-      LIMIT ? OFFSET ?
-    `).all(sessionId, limit, offset) as DbChatMessage[]
+    return this.chatRepo.getMessages(sessionId, limit, offset)
   }
 
   getChatMessageCount(sessionId: string): number {
-    const result = this.db.prepare(`
-      SELECT COUNT(*) as count
-      FROM chat_messages
-      WHERE session_id = ?
-    `).get(sessionId) as { count: number }
-    return result.count
+    return this.chatRepo.getMessageCount(sessionId)
   }
 
   deleteChatMessage(messageId: number): void {
-    const message = this.db.prepare('SELECT session_id FROM chat_messages WHERE id = ?').get(messageId) as { session_id: string } | undefined
-
-    if (message) {
-      this.db.prepare('DELETE FROM chat_messages WHERE id = ?').run(messageId)
-      this.updateChatSessionStats(message.session_id)
-    }
+    this.chatRepo.deleteMessage(messageId)
   }
 
   clearChatMessages(sessionId: string): void {
-    this.db.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(sessionId)
-    this.updateChatSessionStats(sessionId)
+    this.chatRepo.clearMessages(sessionId)
   }
 
-  /**
-   * 插入默认快捷键
-   */
   insertDefaultShortcuts(): void {
-    const defaults = [
-      { action: 'settings.toggle', name: '打开设置', category: 'window', accelerator: 'CommandOrControl+,' },
-      { action: 'window.main', name: '标准窗口', category: 'window', accelerator: 'CommandOrControl+1' },
-      { action: 'window.mini', name: '迷你悬浮球', category: 'window', accelerator: 'CommandOrControl+2' },
-      { action: 'window.chat', name: '聊天视图', category: 'window', accelerator: 'CommandOrControl+3' },
-      { action: 'window.live2d', name: 'Live2D 桌宠', category: 'window', accelerator: 'CommandOrControl+4' },
-      { action: 'conversation.manual', name: '手动监听', category: 'conversation', accelerator: 'CommandOrControl+M' },
-      { action: 'conversation.auto', name: '自动对话', category: 'conversation', accelerator: 'CommandOrControl+Shift+M' },
-      { action: 'conversation.interrupt', name: '打断对话', category: 'conversation', accelerator: 'CommandOrControl+.' },
-      { action: 'app.activate', name: '唤起应用', category: 'quick', accelerator: 'CommandOrControl+Shift+X' },
-    ]
-
     const stmt = this.db.prepare(`
       INSERT INTO shortcuts (action, name, category, accelerator, enabled, is_global, created_at, updated_at)
       VALUES (?, ?, ?, ?, 1, 1, ?, ?)
     `)
-
     const now = Math.floor(Date.now() / 1000)
-    for (const shortcut of defaults) {
+    for (const shortcut of DEFAULT_SHORTCUTS)
       stmt.run(shortcut.action, shortcut.name, shortcut.category, shortcut.accelerator, now, now)
-    }
-
     this.logger.info('已插入默认快捷键')
   }
 
-  /**
-   * 获取所有快捷键
-   */
   getShortcuts(): DbShortcutConfig[] {
     return this.db.prepare('SELECT * FROM shortcuts').all() as DbShortcutConfig[]
   }
 
-  /**
-   * 获取单个快捷键
-   */
   getShortcut(action: string): DbShortcutConfig | undefined {
     return this.db.prepare('SELECT * FROM shortcuts WHERE action = ?').get(action) as DbShortcutConfig | undefined
   }
 
-  /**
-   * 更新快捷键
-   */
   updateShortcut(action: string, accelerator: string | null): void {
     const now = Math.floor(Date.now() / 1000)
     this.db.prepare('UPDATE shortcuts SET accelerator = ?, updated_at = ? WHERE action = ?')
       .run(accelerator, now, action)
   }
 
-  /**
-   * 删除所有快捷键
-   */
   deleteAllShortcuts(): void {
     this.db.prepare('DELETE FROM shortcuts').run()
   }
 
-  /**
-   * 检查快捷键表是否为空
-   */
   isShortcutsEmpty(): boolean {
     const count = this.db.prepare('SELECT COUNT(*) as count FROM shortcuts').get() as { count: number }
     return count.count === 0

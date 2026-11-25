@@ -119,15 +119,6 @@ function persistKeywordsFile(language: string, encoded: EncodedWakeWord): string
 }
 
 /**
- * 将 keywords.txt 写入 userData，失败抛错（调用方应 fail IPC）
- *
- * @returns 写入的绝对路径
- */
-export function writeWakeWordKeywordsFile(language: string, keyword: string): string {
-  return persistKeywordsFile(language, encodeAndValidateWakeWord(language, keyword))
-}
-
-/**
  * 确保 userData 下存在与当前配置一致的 keywords.txt
  *
  * - 用于 detector 初始化 / reload 前
@@ -135,7 +126,7 @@ export function writeWakeWordKeywordsFile(language: string, keyword: string): st
  * - 非法词直接抛错（IPC 保存路径）
  */
 export function ensureWakeWordKeywordsFile(language: string, keyword?: string | null): string {
-  return writeWakeWordKeywordsFile(language, resolveWakeWordKeyword(language, keyword))
+  return persistKeywordsFile(language, encodeAndValidateWakeWord(language, keyword))
 }
 
 export interface SafeKeywordsFileResult {

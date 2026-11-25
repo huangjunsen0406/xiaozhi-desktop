@@ -2,8 +2,9 @@
 import type { AecMode, AecStatus, AudioSettings as AudioSettingsDto } from '@shared/types'
 import type { SettingsPanelHandle } from '../../types/settings'
 import { NButton, NForm, NFormItem, NSelect, NSlider, NSwitch, useDialog, useMessage } from 'naive-ui'
-import { computed, h, onMounted, ref, watch } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useDevices } from '../../composables/useDevices'
+import { resolveAecMode } from '../../utils/audio/deviceUtils'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -130,6 +131,8 @@ async function refreshAecStatus(): Promise<void> {
   }
 }
 
+let volumeHydrated = false
+
 async function loadConfig(): Promise<void> {
   try {
     systemVolumeSupported.value = await window.api.audioSystemVolumeSupported()
@@ -137,12 +140,7 @@ async function loadConfig(): Promise<void> {
     const config = await window.api.audioGetConfig()
 
     enableNoiseReduction.value = config.enableNoiseReduction !== false
-    if (config.aecMode === 'off' || config.aecMode === 'app' || config.aecMode === 'system') {
-      aecMode.value = config.aecMode
-    }
-    else {
-      aecMode.value = config.enableEchoCancellation === false ? 'off' : 'app'
-    }
+    aecMode.value = resolveAecMode(config)
     enableRealtimeConversation.value = config.conversationMode === 'realtime'
 
     inputSampleRate.value = config.inputSampleRate || 16000
@@ -150,7 +148,7 @@ async function loadConfig(): Promise<void> {
     channels.value = config.channels || 1
     frameDuration.value = config.frameDuration || 20
 
-    await loadDevicesFromConfig()
+    await loadDevicesFromConfig(config)
 
     if (systemVolumeSupported.value) {
       try {
@@ -160,6 +158,7 @@ async function loadConfig(): Promise<void> {
         console.warn('读取系统音量失败:', error)
         speakerVolume.value = 70
       }
+      volumeHydrated = true
     }
 
     await refreshAecStatus()
@@ -273,8 +272,7 @@ async function handleSave(): Promise<void> {
   try {
     saving.value = true
     const previousConfig = await window.api.audioGetConfig()
-    const previousMode = previousConfig.aecMode
-      ?? (previousConfig.enableEchoCancellation === false ? 'off' : 'app')
+    const previousMode = resolveAecMode(previousConfig)
 
     const crossingSystem = (previousMode === 'system') !== (aecMode.value === 'system')
     if (crossingSystem) {
@@ -357,7 +355,7 @@ async function refreshDeviceList(): Promise<void> {
 let volumeDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(speakerVolume, (newVolume) => {
-  if (!systemVolumeSupported.value)
+  if (!systemVolumeSupported.value || !volumeHydrated)
     return
 
   if (volumeDebounceTimer)
@@ -371,6 +369,13 @@ watch(speakerVolume, (newVolume) => {
       console.warn('设置系统音量失败:', error)
     }
   }, 300)
+})
+
+onUnmounted(() => {
+  if (volumeDebounceTimer) {
+    clearTimeout(volumeDebounceTimer)
+    volumeDebounceTimer = null
+  }
 })
 
 onMounted(async () => {

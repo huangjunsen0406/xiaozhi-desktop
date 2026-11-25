@@ -1,4 +1,4 @@
-import type { PcmAudioData } from '@shared/types'
+import type { AudioSettings, PcmAudioData } from '@shared/types'
 
 /** PCM playback owns scheduled sources, the output context and its IPC subscription. */
 export class AudioPlayback {
@@ -10,9 +10,9 @@ export class AudioPlayback {
   private sampleRate = 24000
   private channels = 1
 
-  async initialize(deviceId?: string): Promise<void> {
+  async initialize(deviceId?: string, existingConfig?: AudioSettings): Promise<void> {
     await this.dispose()
-    const config = await window.api.audioGetConfig()
+    const config = existingConfig ?? await window.api.audioGetConfig()
     this.sampleRate = config.outputSampleRate || 24000
     this.channels = config.channels || 1
     this.audioContext = new AudioContext({ sampleRate: this.sampleRate })
@@ -46,8 +46,8 @@ export class AudioPlayback {
     }
   }
 
-  async updateConfig(): Promise<void> {
-    const config = await window.api.audioGetConfig()
+  async updateConfig(existingConfig?: AudioSettings): Promise<void> {
+    const config = existingConfig ?? await window.api.audioGetConfig()
     this.sampleRate = config.outputSampleRate || 24000
     this.channels = config.channels || 1
   }
