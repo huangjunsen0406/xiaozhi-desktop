@@ -11,9 +11,15 @@ import { onDisplayModeChange, restoreCurrentModeWindow } from './windows/windowM
 let tray: Tray | null = null
 let lastLinuxBucket: 24 | 32 | null = null
 
-function resolveFallback(relative: string) {
+function resolveFallback(relative: string): string {
   const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
   return join(base, 'resources', 'tray', relative)
+}
+
+function loadTrayIcon(asset: unknown, fallbackName: string): Electron.NativeImage {
+  const fallback = resolveFallback(fallbackName)
+  const img = nativeImage.createFromPath((asset as string) || fallback)
+  return img.isEmpty() ? nativeImage.createFromPath(fallback) : img
 }
 
 function pickLinuxBucket(): 24 | 32 {
@@ -22,53 +28,32 @@ function pickLinuxBucket(): 24 | 32 {
 }
 
 function buildTrayImage(): Electron.NativeImage {
-  let img: Electron.NativeImage
-
   if (process.platform === 'darwin') {
-    const candidate = (macTpl2x as unknown as string) || resolveFallback('iconTemplate@2x.png')
-    img = nativeImage.createFromPath(candidate)
-    if (img.isEmpty())
-      img = nativeImage.createFromPath(resolveFallback('iconTemplate@2x.png'))
+    const img = loadTrayIcon(macTpl2x, 'iconTemplate@2x.png')
     img.setTemplateImage(true)
     return img
   }
-
   if (process.platform === 'win32') {
-    const candidate = (winIco as unknown as string) || resolveFallback('icon.ico')
-    img = nativeImage.createFromPath(candidate)
-    if (img.isEmpty())
-      img = nativeImage.createFromPath(resolveFallback('icon.ico'))
-    return img
+    return loadTrayIcon(winIco, 'icon.ico')
   }
 
   const bucket = pickLinuxBucket()
   lastLinuxBucket = bucket
-
-  const fromVite
-    = bucket === 32 ? (linux32 as unknown as string) : (linux24 as unknown as string)
-
-  const candidate = (fromVite as string) || resolveFallback(bucket === 32 ? 'icon-32.png' : 'icon-24.png')
-  img = nativeImage.createFromPath(candidate)
-  if (img.isEmpty()) {
-    img = nativeImage.createFromPath(resolveFallback(bucket === 32 ? 'icon-32.png' : 'icon-24.png'))
-  }
-  return img
+  return bucket === 32
+    ? loadTrayIcon(linux32, 'icon-32.png')
+    : loadTrayIcon(linux24, 'icon-24.png')
 }
 
 export function registerTray(): void {
   if (tray)
     return
 
-  const image = buildTrayImage()
-  tray = new Tray(image)
+  tray = new Tray(buildTrayImage())
   tray.setToolTip('小智')
-
   tray.setContextMenu(buildDisplayModeMenu(true))
 
   onDisplayModeChange(() => {
-    if (tray) {
-      tray.setContextMenu(buildDisplayModeMenu(true))
-    }
+    tray?.setContextMenu(buildDisplayModeMenu(true))
   })
 
   if (process.platform === 'darwin') {
@@ -84,21 +69,17 @@ export function registerTray(): void {
   }
 
   screen.on('display-metrics-changed', () => {
-    if (!tray)
+    if (!tray || process.platform !== 'linux')
       return
-    if (process.platform === 'linux') {
-      const bucket = pickLinuxBucket()
-      if (bucket !== lastLinuxBucket) {
-        lastLinuxBucket = bucket
-        tray.setImage(buildTrayImage())
-      }
+    const bucket = pickLinuxBucket()
+    if (bucket !== lastLinuxBucket) {
+      lastLinuxBucket = bucket
+      tray.setImage(buildTrayImage())
     }
   })
 
   nativeTheme.on('updated', () => {
-    if (!tray)
-      return
-    if (process.platform === 'darwin') {
+    if (tray && process.platform === 'darwin') {
       tray.setImage(buildTrayImage())
     }
   })
